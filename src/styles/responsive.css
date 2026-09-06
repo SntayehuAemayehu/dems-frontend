@@ -1,0 +1,139 @@
+/* src/styles/responsive.css */
+
+/* Mobile First Approach */
+@media (max-width: 640px) {
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in-out;
+  }
+
+  .sidebar-open {
+    transform: translateX(0);
+  }
+
+  .main-content {
+    padding-top: 60px;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .course-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .exam-header {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .modal-container {
+    width: calc(100% - 2rem);
+    margin: 1rem;
+  }
+
+  .table-container {
+    overflow-x: auto;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .form-actions button {
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* Tablet Styles */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .container {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+
+  .course-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+
+  .sidebar {
+    width: 240px;
+  }
+
+  .main-content {
+    margin-left: 240px;
+  }
+}
+
+/* Desktop Styles */
+@media (min-width: 1025px) {
+  .container {
+    max-width: 1280px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
+
+  .course-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+
+  .sidebar {
+    width: 280px;
+  }
+
+  .main-content {
+    margin-left: 280px;
+  }
+}
+
+/* Large Desktop Styles */
+@media (min-width: 1440px) {
+  .container {
+    max-width: 1440px;
+  }
+
+  .stat-grid {
+    gap: 2rem;
+  }
+
+  .course-grid {
+    gap: 2rem;
+  }
+}
+
+/* Touch Device Optimizations */
+@media (hover: none) and (pointer: coarse) {
+  button, 
+  .clickable {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  input, 
+  select, 
+  textarea {
+    font-size: 16px;
+  }
+}

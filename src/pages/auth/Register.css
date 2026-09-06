@@ -1,0 +1,53 @@
+/* src/pages/auth/Register.css */
+
+.register-container {
+  @apply max-w-md mx-auto bg-white rounded-xl shadow-lg p-8 animate-slide-up;
+}
+
+.register-header {
+  @apply text-center mb-6;
+}
+
+.register-title {
+  @apply text-2xl font-bold text-gray-900;
+}
+
+.register-subtitle {
+  @apply text-gray-600 mt-1;
+}
+
+.register-form {
+  @apply space-y-4;
+}
+
+.form-field {
+  @apply space-y-1;
+}
+
+.form-label {
+  @apply block text-sm font-medium text-gray-700;
+}
+
+.form-input {
+  @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500;
+}
+
+.form-select {
+  @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 bg-white;
+}
+
+.error-message {
+  @apply mt-1 text-sm text-red-600;
+}
+
+.register-button {
+  @apply w-full bg-primary-600 text-white py-2 rounded-md hover:bg-primary-700 transition disabled:opacity-50;
+}
+
+.login-link {
+  @apply text-center mt-4;
+}
+
+.login-link-text {
+  @apply text-sm text-primary-600 hover:text-primary-700;
+}

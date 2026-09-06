@@ -1,0 +1,88 @@
+/* src/pages/auth/Login.css */
+
+.login-container {
+  @apply max-w-md mx-auto bg-white rounded-xl shadow-lg p-8 animate-slide-up;
+}
+
+.login-header {
+  @apply text-center mb-6;
+}
+
+.login-title {
+  @apply text-2xl font-bold text-gray-900;
+}
+
+.login-subtitle {
+  @apply text-gray-600 mt-1;
+}
+
+.login-form {
+  @apply space-y-5;
+}
+
+.form-field {
+  @apply space-y-1;
+}
+
+.form-label {
+  @apply block text-sm font-medium text-gray-700;
+}
+
+.form-input {
+  @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500;
+}
+
+.login-button {
+  @apply w-full bg-primary-600 text-white py-2 rounded-md hover:bg-primary-700 transition disabled:opacity-50;
+}
+
+/* Forgot Password Link */
+.forgot-password-link {
+  @apply text-right mt-2;
+}
+
+.forgot-password-link a {
+  @apply text-sm text-primary-600 hover:text-primary-700 transition-colors;
+}
+
+/* Register Link */
+.register-link {
+  @apply text-center mt-6 pt-4 border-t border-gray-200;
+}
+
+.register-link-text {
+  @apply text-sm text-gray-600;
+}
+
+.register-link-text a {
+  @apply text-primary-600 hover:text-primary-700 font-medium transition-colors;
+}
+
+/* Forgot Password Screen */
+.forgot-password-container {
+  @apply max-w-md mx-auto bg-white rounded-xl shadow-lg p-8 animate-slide-up;
+}
+
+.forgot-password-header {
+  @apply text-center mb-6;
+}
+
+.forgot-password-title {
+  @apply text-2xl font-bold text-gray-900;
+}
+
+.forgot-password-subtitle {
+  @apply text-gray-600 mt-1;
+}
+
+.back-to-login {
+  @apply flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors mb-4;
+}
+
+.reset-sent-icon {
+  @apply w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4;
+}
+
+.reset-sent-email {
+  @apply font-semibold text-gray-900 text-center;
+}

@@ -1,0 +1,267 @@
+/* src/pages/LiveClasses.css */
+.live-classes-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.live-classes-header {
+  margin-bottom: 1.5rem;
+}
+
+.live-classes-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.live-classes-subtitle {
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+/* Stats */
+.live-stats {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+@media (min-width: 640px) {
+  .live-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.live-stat-card {
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  color: white;
+}
+
+.live-stat-card-blue {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+}
+
+.live-stat-card-green {
+  background: linear-gradient(135deg, #16a34a, #15803d);
+}
+
+.live-stat-icon {
+  height: 2rem;
+  width: 2rem;
+  opacity: 0.8;
+  margin-bottom: 0.5rem;
+}
+
+.live-stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.live-stat-label {
+  font-size: 0.875rem;
+  opacity: 0.8;
+}
+
+/* Course Grid */
+.live-course-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .live-course-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .live-course-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.live-course-card {
+  background-color: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  transition: all 0.3s;
+}
+
+.live-course-card:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.live-course-header {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  height: 7.5rem;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.live-course-icon {
+  height: 3rem;
+  width: 3rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.live-badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background-color: #dc2626;
+  color: white;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.live-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: white;
+  border-radius: 9999px;
+  animation: pulse 1.5s infinite;
+}
+
+.live-course-body {
+  padding: 1.25rem;
+}
+
+.live-course-code {
+  font-size: 0.75rem;
+  background-color: #eff6ff;
+  color: #2563eb;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.live-course-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+  margin-top: 0.5rem;
+}
+
+.live-course-description {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-top: 0.5rem;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.live-course-meta {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.live-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.live-join-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.625rem;
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s;
+  margin-top: 1rem;
+}
+
+.live-join-btn:hover {
+  background-color: #b91c1c;
+}
+
+/* Empty State */
+.live-empty-state {
+  background-color: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  padding: 3rem;
+  text-align: center;
+}
+
+.live-empty-icon {
+  height: 4rem;
+  width: 4rem;
+  margin: 0 auto 1rem;
+  color: #9ca3af;
+}
+
+.live-empty-title {
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: #111827;
+  margin-bottom: 0.25rem;
+}
+
+.live-empty-text {
+  color: #6b7280;
+}
+
+.live-empty-link {
+  display: inline-block;
+  margin-top: 1rem;
+  padding: 0.625rem 1.25rem;
+  background-color: #2563eb;
+  color: white;
+  border-radius: 0.5rem;
+  text-decoration: none;
+}
+
+/* Loading */
+.live-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 25rem;
+}
+
+.live-spinner {
+  animation: spin 1s linear infinite;
+  border-radius: 9999px;
+  height: 2.5rem;
+  width: 2.5rem;
+  border: 4px solid #e5e7eb;
+  border-top-color: #2563eb;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
