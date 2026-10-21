@@ -13,6 +13,17 @@ const api = axios.create({
     },
 });
 
+export const getMediaUrl = (mediaPath) => {
+    if (!mediaPath) return '';
+
+    try {
+        const apiOrigin = new URL(API_BASE_URL).origin;
+        return new URL(mediaPath, `${apiOrigin}/`).href;
+    } catch {
+        return mediaPath;
+    }
+};
+
 // ============================================================
 // REQUEST INTERCEPTOR - Add token to requests
 // ============================================================

@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
@@ -13,9 +11,10 @@ import {
 import { logout } from '../../store/slices/authSlice';
 import NotificationBell from '../common/NotificationBell';
 import { useDarkMode } from '../../context/DarkModeContext';
-import api from '../../api/api';
+import api, { getMediaUrl } from '../../api/api';
 //import LanguageSelector from '../i18n/LanguageSelector';
 //import CurrencySelector from '../Payment/CurrencySelector';
+
 const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [paymentAccess, setPaymentAccess] = useState(true);
@@ -410,16 +409,14 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
               </Link>
             ))}
           </nav>
-{/* Right Section */}
-<div style={{
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  flexShrink: 0,
-}}>
 
-  {/* ✅ ADD THESE: Language & Currency Selectors */}
-
+          {/* Right Section */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flexShrink: 0,
+          }}>
 
             {/* Payment Status - Only for authenticated students */}
             {isAuthenticated && user?.role === 'STUDENT' && (
@@ -453,8 +450,6 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
               </span>
             )}
 
-
-
             {/* Notification Bell - Only for authenticated users */}
             {isAuthenticated && <NotificationBell />}
 
@@ -480,41 +475,71 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
             </button>
 
             {/* Auth Buttons - Desktop */}
-
-            <div className="auth-buttons-desktop" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div className="auth-buttons-desktop" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {isAuthenticated ? (
-                <button
-                  onClick={handleLogout}
-                  style={{
-                    background: 'rgba(239,68,68,0.1)',
-                    color: isDarkMode ? '#fca5a5' : '#dc2626',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'all 0.3s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
-                  }}
-                >
-                  <LogOut size={15} />
-                  Logout
-                </button>
+                <>
+                  {/* USER AVATAR AND NAME */}
+                  <div 
+                    onClick={() => navigate('/profile')}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px', 
+                      cursor: 'pointer',
+                      padding: '4px 8px',
+                      borderRadius: '8px',
+                      transition: 'all 0.2s ease',
+                      background: isDarkMode ? 'rgba(255,255,255,0.03)' : 'transparent'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.08)' : '#f1f5f9'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.03)' : 'transparent'}
+                  >
+                    <div style={{
+                      width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+                      border: `2px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`
+                    }}>
+                      <img 
+                        src={getMediaUrl(user?.profile_picture) || 'https://via.placeholder.com/36x36?text=User'} 
+                        alt="Profile" 
+                        onError={(e) => { e.target.src = 'https://via.placeholder.com/36x36?text=User'; }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    </div>
+                    <span style={{ fontSize: '14px', fontWeight: 500, color: isDarkMode ? '#f1f5f9' : '#0f172a' }}>
+                      {user?.full_name?.split(' ')[0] || 'User'}
+                    </span>
+                  </div>
+
+                  {/* Logout Button */}
+                  <button
+                    onClick={handleLogout}
+                    style={{
+                      background: 'rgba(239,68,68,0.1)',
+                      color: isDarkMode ? '#fca5a5' : '#dc2626',
+                      border: 'none',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.3s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
+                    }}
+                  >
+                    <LogOut size={15} />
+                    Logout
+                  </button>
+                </>
               ) : (
                 <>
-
-
-
-
                   <Link
                     to="/login"
                     style={{

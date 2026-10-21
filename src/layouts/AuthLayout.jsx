@@ -7,6 +7,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { logout } from '../store/slices/authSlice';
+import { getMediaUrl } from '../api/api';
 import NotificationBell from '../components/common/NotificationBell';
 
 const MainLayout = () => {
@@ -289,7 +290,7 @@ const MainLayout = () => {
                 >
                   {user?.profile_picture ? (
                     <img
-                      src={user.profile_picture}
+                      src={getMediaUrl(user.profile_picture)}
                       alt="Profile"
                       style={{
                         height: '2rem',
