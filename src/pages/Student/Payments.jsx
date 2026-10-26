@@ -56,17 +56,50 @@ const Payments = () => {
   // ✅ Payment methods with dynamic details from backend
   const [paymentMethodsList, setPaymentMethodsList] = useState([]);
 
-  useEffect(() => {
-    dispatch(fetchPayments());
-    dispatch(fetchBalance());
-    fetchPaymentConfig();
-    fetchPaymentMethods();
-    fetchFeeAmount();
-    fetchBankAccounts(); // ✅ Fetch dynamic banks
-  }, [dispatch]);
-
-  // ✅ FETCH BANK ACCOUNTS FROM BACKEND
-// ✅ REPLACE the fetchBankAccounts function with:
+useEffect(() => {
+    // ✅ ORDER MATTERS: config FIRST, then banks, then rebuild methods
+    const loadEverything = async () => {
+        dispatch(fetchPayments());
+        dispatch(fetchBalance());
+        
+        // 1️⃣ Fetch admin config (has phone + bank info)
+        const config = await fetchPaymentConfig();
+        
+        // 2️⃣ Fetch bank accounts, then rebuild with BOTH config + banks
+        try {
+            setLoadingBanks(true);
+            const response = await api.get('/analytics/banks/');
+            let banks = [];
+            if (response.data?.results) banks = response.data.results;
+            else if (Array.isArray(response.data)) banks = response.data;
+            
+            console.log('🏦 Banks fetched:', banks.length);
+            setBankAccounts(banks);
+            
+            // ✅ 3️⃣ Rebuild methods with FRESH config + banks together
+            updatePaymentMethods(banks, config);
+        } catch (error) {
+            console.error('Failed to fetch banks:', error);
+            // Still rebuild with config only
+            updatePaymentMethods([], config);
+        } finally {
+            setLoadingBanks(false);
+        }
+        
+        // 4️⃣ Other stuff
+        fetchPaymentMethods();
+        fetchFeeAmount();
+    };
+    
+    loadEverything();
+}, [dispatch]);
+// ✅ SAFETY NET: whenever paymentConfig changes (e.g., after admin update + refresh),
+// rebuild the payment methods so Telebirr picks up the fresh number
+useEffect(() => {
+    if (paymentConfig && bankAccounts) {
+        updatePaymentMethods(bankAccounts, paymentConfig);
+    }
+}, [paymentConfig]);
 
 const fetchBankAccounts = async () => {
     setLoadingBanks(true);
@@ -123,16 +156,15 @@ const fetchBankAccounts = async () => {
     }
 };
 
-  // ✅ UPDATE PAYMENT METHODS WITH DYNAMIC BANKS
-// ✅ REPLACE the updatePaymentMethods function with:
-
-const updatePaymentMethods = (banks) => {
+const updatePaymentMethods = (banks, configOverride = null) => {
     const methods = [];
     
-    // ✅ 1. DYNAMIC BANK TRANSFER METHOD
+    // Use passed config or fall back to state
+    const config = configOverride || paymentConfig || {};
+    
+    // ✅ 1. BANK TRANSFER
     if (banks && banks.length > 0) {
         const activeBanks = banks.filter(b => b.is_active !== false);
-        
         methods.push({
             id: 'bank_transfer',
             name: 'Bank Transfer',
@@ -157,20 +189,10 @@ const updatePaymentMethods = (banks) => {
         });
     }
     
-    // ✅ 2. DYNAMIC TELEBIRR METHOD
-    // FETCH CONFIG TO GET THE LATEST PHONE NUMBER
-    const fetchTelebirrConfig = async () => {
-        try {
-            const response = await api.get('/analytics/payment-config/');
-            return response.data.payment_phone || '0918114545';
-        } catch (error) {
-            console.error('Failed to fetch Telebirr config:', error);
-            return '0918114545';
-        }
-    };
+    const telebirrNumber = config.payment_phone || '0918114545';
+    const telebirrAccount = config.account_name || 'DEMS University';
     
-    // ✅ USE THE CONFIG VALUE
-    const telebirrNumber = paymentConfig?.payment_phone || '0918114545';
+    console.log('📱 Telebirr using number:', telebirrNumber); // debug
     
     methods.push({
         id: 'telebirr',
@@ -181,7 +203,7 @@ const updatePaymentMethods = (banks) => {
         type: 'telebirr',
         details: {
             phone_number: telebirrNumber,
-            account_name: paymentConfig?.account_name || 'DEMS University',
+            account_name: telebirrAccount,
             service: 'Telebirr Merchant'
         },
         instructions: [
@@ -196,79 +218,72 @@ const updatePaymentMethods = (banks) => {
         ]
     });
     
-    // ✅ 3. CHAPA, STRIPE, SIMULATE METHODS (unchanged)
-    // ... rest of methods ...
-    
-
-    
-    // ✅ Chapa Method
+    // ✅ 3. Chapa (unchanged)
     methods.push({
-      id: 'chapa',
-      name: 'Chapa',
-      icon: Globe,
-      color: '#7c3aed',
-      bgColor: '#f5f3ff',
-      type: 'online',
-      details: {
-        website: 'https://chapa.co',
-        test_mode: true,
-        test_card: '4242 4242 4242 4242'
-      },
-      instructions: [
-        'Click the payment link below to proceed to Chapa',
-        'You will be redirected to Chapa\'s secure payment page',
-        'Choose your preferred payment method (Card, Telebirr, etc.)',
-        'Enter your payment details on the secure page',
-        'Complete the payment confirmation',
-        'You will be redirected back after successful payment',
-        'TEST MODE: Use 4242 4242 4242 4242 for testing'
-      ]
+        id: 'chapa',
+        name: 'Chapa',
+        icon: Globe,
+        color: '#7c3aed',
+        bgColor: '#f5f3ff',
+        type: 'online',
+        details: {
+            website: 'https://chapa.co',
+            test_mode: true,
+            test_card: '4242 4242 4242 4242'
+        },
+        instructions: [
+            'Click the payment link below to proceed to Chapa',
+            'You will be redirected to Chapa\'s secure payment page',
+            'Choose your preferred payment method (Card, Telebirr, etc.)',
+            'Enter your payment details on the secure page',
+            'Complete the payment confirmation',
+            'You will be redirected back after successful payment',
+            'TEST MODE: Use 4242 4242 4242 4242 for testing'
+        ]
     });
     
-    // ✅ Stripe Method
+    // ✅ 4. Stripe
     methods.push({
-      id: 'stripe',
-      name: 'Stripe',
-      icon: CardIcon,
-      color: '#059669',
-      bgColor: '#ecfdf5',
-      type: 'online',
-      details: {
-        test_mode: true,
-        test_card: '4242 4242 4242 4242',
-        test_expiry: '12/25',
-        test_cvc: '123'
-      },
-      instructions: [
-        'Click the payment link below to proceed to Stripe',
-        'You will be redirected to Stripe\'s secure payment page',
-        'Enter your card details on the secure Stripe page',
-        'Complete the payment using 3D Secure if required',
-        'You will receive a confirmation email',
-        'TEST MODE: Use 4242 4242 4242 4242 for testing'
-      ]
+        id: 'stripe',
+        name: 'Stripe',
+        icon: CardIcon,
+        color: '#059669',
+        bgColor: '#ecfdf5',
+        type: 'online',
+        details: {
+            test_mode: true,
+            test_card: '4242 4242 4242 4242',
+            test_expiry: '12/25',
+            test_cvc: '123'
+        },
+        instructions: [
+            'Click the payment link below to proceed to Stripe',
+            'You will be redirected to Stripe\'s secure payment page',
+            'Enter your card details on the secure Stripe page',
+            'Complete the payment using 3D Secure if required',
+            'You will receive a confirmation email',
+            'TEST MODE: Use 4242 4242 4242 4242 for testing'
+        ]
     });
     
-    // ✅ Simulate/Demo Method
+    // ✅ 5. Simulate
     methods.push({
-      id: 'simulate',
-      name: 'Demo Payment (1-Click)',
-      icon: Shield,
-      color: '#8b5cf6',
-      bgColor: '#f5f3ff',
-      type: 'demo',
-      details: {
-        test_mode: true,
-      },
-      instructions: [
-        '🧪 DEMO PAYMENT - No real money involved',
-        'Click "Complete Demo Payment" to instantly verify your payment.',
-        'This is for demonstration purposes only.'
-      ]
+        id: 'simulate',
+        name: 'Demo Payment (1-Click)',
+        icon: Shield,
+        color: '#8b5cf6',
+        bgColor: '#f5f3ff',
+        type: 'demo',
+        details: { test_mode: true },
+        instructions: [
+            '🧪 DEMO PAYMENT - No real money involved',
+            'Click "Complete Demo Payment" to instantly verify your payment.',
+            'This is for demonstration purposes only.'
+        ]
     });
     
     setPaymentMethodsList(methods);
-  };
+};
 
   // ✅ Get bank name by account ID
   const getBankNameById = (accountId) => {
@@ -306,17 +321,19 @@ const fetchPaymentConfig = async () => {
     setLoadingConfig(true);
     try {
         const response = await api.get('/analytics/payment-config/');
+        console.log('🔧 Fresh payment config from admin:', response.data);
         setPaymentConfig(response.data);
         
-        // ✅ UPDATE TELEBIRR PHONE NUMBER IN PAYMENT METHODS
-        if (response.data.payment_phone) {
-            // Update the payment methods list with the new phone number
-            // This will be used when rendering the method details
-            setPaymentConfig(response.data);
+        // ✅ CRITICAL: Rebuild payment methods with the fresh config
+        // This ensures Telebirr shows the LATEST admin-configured number
+        if (response.data) {
+            updatePaymentMethods(bankAccounts, response.data);
         }
         
+        return response.data;
     } catch (error) {
         console.error('Failed to fetch payment config:', error);
+        return null;
     } finally {
         setLoadingConfig(false);
     }

@@ -40,6 +40,73 @@ const BatchProcessor = ({
   const [failedCount, setFailedCount] = useState(0);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  // ============================================================
+  // ✅ Helper: resolve a special batch_type into what the backend
+  // expects. Currently only "all_pending_upload" needs this.
+  // ============================================================
+// ============================================================
+// ✅ Resolve batch target. For "send-notifications", ALWAYS
+// filter to students who STILL NEED to upload documents:
+//   - payment VERIFIED
+//   - documents_submitted = false
+//   - is_enrolled = false
+// ============================================================
+const resolveBatchTarget = async (type, value) => {
+  // Only applies to the notify processor
+  if (!endpoint.includes('send-notifications')) {
+    return { type, value };
+  }
+
+  // Fetch the full registrar student list
+  const res = await api.get('/auth/registrar/students/');
+  let students = res.data?.results || res.data || [];
+  if (!Array.isArray(students)) students = [];
+
+  // 🔒 Base filter: only students that still need documents
+  const needsUpload = students.filter(
+    (s) =>
+      s.payment_status === 'VERIFIED' &&
+      s.documents_submitted !== true &&
+      s.is_enrolled !== true
+  );
+
+  let filtered = [];
+
+  if (type === 'all_pending_upload') {
+    filtered = needsUpload;
+  } else if (type === 'department') {
+    filtered = needsUpload.filter(
+      (s) => (s.department || '').toLowerCase() === (value || '').toLowerCase()
+    );
+  } else if (type === 'ids') {
+    // value = "18,21,29"
+    const wanted = (value || '')
+      .split(',')
+      .map((x) => parseInt(x.trim(), 10))
+      .filter((n) => !isNaN(n));
+    filtered = needsUpload.filter((s) => wanted.includes(s.id));
+  } else if (type === 'role') {
+    filtered = needsUpload.filter(
+      (s) => (s.role || '').toUpperCase() === (value || '').toUpperCase()
+    );
+  } else if (type === 'all') {
+    filtered = needsUpload;
+  } else {
+    // Fallback: pass through as-is
+    return { type, value };
+  }
+
+  if (filtered.length === 0) {
+    return { type, value: '', empty: true, count: 0 };
+  }
+
+  return {
+    type: 'ids',
+    value: filtered.map((s) => s.id).join(','),
+    count: filtered.length,
+  };
+};
+
   const handlePreview = async () => {
     if (!batchType) {
       toast.error('Please select a batch type');
@@ -68,15 +135,27 @@ const BatchProcessor = ({
 
     setLoading(true);
     try {
+      // ✅ Translate "all_pending_upload" → "ids"
+      const resolved = await resolveBatchTarget(batchType, batchValue);
+
+      if (resolved.empty) {
+        toast.error('No students with pending document upload found');
+        setLoading(false);
+        return;
+      }
+
+      if (resolved.count) {
+        toast.success(`Found ${resolved.count} student(s) awaiting documents`);
+      }
+
       const payload = {
-        batch_type: batchType,
-        batch_value: batchValue,
+        batch_type: resolved.type,
+        batch_value: resolved.value,
         action: action,
         id_format: idFormat,
         confirm: false
       };
 
-      // Add notification fields if sending notifications
       if (endpoint.includes('send-notifications')) {
         if (!notificationTitle || !notificationMessage) {
           toast.error('Please enter notification title and message');
@@ -108,9 +187,18 @@ const BatchProcessor = ({
   const handleConfirm = async () => {
     setLoading(true);
     try {
+      // ✅ Translate "all_pending_upload" → "ids" (same as preview)
+      const resolved = await resolveBatchTarget(batchType, batchValue);
+
+      if (resolved.empty) {
+        toast.error('No students with pending document upload found');
+        setLoading(false);
+        return;
+      }
+
       const payload = {
-        batch_type: batchType,
-        batch_value: batchValue,
+        batch_type: resolved.type,
+        batch_value: resolved.value,
         action: action,
         id_format: idFormat,
         reason: reason,
@@ -124,10 +212,17 @@ const BatchProcessor = ({
 
       const response = await api.post(endpoint, payload);
 
-      setSuccessCount(response.data.processed || response.data.activated || response.data.verified || response.data.generated || response.data.sent || 0);
+      setSuccessCount(
+        response.data.processed ||
+        response.data.activated ||
+        response.data.verified ||
+        response.data.generated ||
+        response.data.sent ||
+        0
+      );
       setFailedCount(response.data.failed || 0);
       setShowSuccessModal(true);
-      
+
       toast.success(response.data.message);
       setShowPreview(false);
       setPreview(null);

@@ -1,5 +1,5 @@
 // frontend/src/pages/admin/AdminLogin.jsx
-// COMPLETE FIXED VERSION - PROPER REDIRECT AFTER LOGIN
+// COMPLETE FIXED VERSION
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -11,39 +11,20 @@ const AdminLogin = () => {
     const navigate = useNavigate();
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [formData, setFormData] = useState({
-        email: '',
-        password: '',
-    });
-    
-    // Use a ref to track if we've already redirected
+    const [formData, setFormData] = useState({ email: '', password: '' });
+
     const hasRedirected = useRef(false);
 
-    // Check if already logged in as admin
+    // ✅ FIXED: Only redirect if a valid ADMIN token exists
     useEffect(() => {
         const token = localStorage.getItem('access_token');
         const role = localStorage.getItem('user_role');
-        
-        // If already logged in as admin, redirect immediately
+
         if (token && role === 'ADMIN' && !hasRedirected.current) {
             hasRedirected.current = true;
-            navigate('/admin/dashboard');
-            return;
+            navigate('/admin/dashboard', { replace: true });
         }
-        
-        // If logged in as non-admin, redirect to their dashboard
-        if (token && role !== 'ADMIN' && !hasRedirected.current) {
-            hasRedirected.current = true;
-            const redirectMap = {
-                'STUDENT': '/dashboard',
-                'TEACHER': '/teacher/dashboard',
-                'FINANCE': '/finance/dashboard',
-                'REGISTRAR': '/registrar/dashboard',
-                'DEPT_HEAD': '/dept/dashboard',
-            };
-            navigate(redirectMap[role] || '/dashboard');
-            return;
-        }
+        // ✅ Do NOT auto-redirect non-admins — let them log in
     }, [navigate]);
 
     const handleChange = (e) => {
@@ -53,34 +34,36 @@ const AdminLogin = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        
+
         try {
-            // Use the admin-specific login endpoint
             const response = await api.post('/auth/admin-login/', formData);
-            
-            // Save tokens and user data
             const { access, refresh, user } = response.data;
-            
+
+            // ✅ Verify the returned user is actually an admin
+            if (user.role !== 'ADMIN') {
+                toast.error('❌ Access denied. Admin credentials required.');
+                setLoading(false);
+                return;
+            }
+
             localStorage.setItem('access_token', access);
             localStorage.setItem('refresh_token', refresh);
             localStorage.setItem('user', JSON.stringify(user));
             localStorage.setItem('user_role', user.role);
-            
+
             toast.success('✅ Admin login successful!');
-            
-            // ✅ CRITICAL: Set redirect flag and navigate
             hasRedirected.current = true;
-            
-            // Use window.location.href for a full page reload to ensure all state is reset
+
+            // Full page reload to clear stale Redux state
             window.location.href = '/admin/dashboard';
-            
+
         } catch (error) {
             console.error('Admin login error:', error);
-            
+
             if (error.response?.status === 403) {
                 toast.error('❌ Access denied. Admin credentials required.');
             } else if (error.response?.status === 401) {
-                toast.error('❌ Invalid credentials.');
+                toast.error('❌ Invalid email or password.');
             } else {
                 toast.error(error.response?.data?.error || 'Login failed');
             }
@@ -89,18 +72,12 @@ const AdminLogin = () => {
         }
     };
 
-    // If user is already logged in as admin, show nothing (will redirect)
+    // If already logged in as admin, show a small "redirecting" screen
     const token = localStorage.getItem('access_token');
     const role = localStorage.getItem('user_role');
     if (token && role === 'ADMIN') {
         return (
-            <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                minHeight: '100vh',
-                background: '#0f172a',
-            }}>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#0f172a' }}>
                 <div style={{ color: 'white', textAlign: 'center' }}>
                     <Shield size={48} style={{ margin: '0 auto 16px', color: '#3b82f6' }} />
                     <p>Already logged in as Admin. Redirecting...</p>
@@ -118,206 +95,95 @@ const AdminLogin = () => {
             padding: '24px',
             background: 'linear-gradient(135deg, #0f172a, #1e293b)',
         }}>
-            <style>{`
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(20px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                .admin-card {
-                    animation: fadeIn 0.5s ease-out;
-                }
-                @media (max-width: 480px) {
-                    .admin-card { padding: 24px !important; }
-                    .admin-title { font-size: 24px !important; }
-                }
-            `}</style>
-
-            <div className="admin-card" style={{
+            <div style={{
                 background: 'white',
                 borderRadius: '16px',
                 padding: '40px',
                 maxWidth: '440px',
                 width: '100%',
                 boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-                position: 'relative',
             }}>
-                {/* Back to main site */}
-                <Link
-                    to="/"
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        color: '#64748b',
-                        textDecoration: 'none',
-                        fontSize: '13px',
-                        marginBottom: '24px',
-                        transition: 'all 0.3s ease',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = '#0f172a'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = '#64748b'}
-                >
+                <Link to="/" style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    color: '#64748b', textDecoration: 'none', fontSize: '13px', marginBottom: '24px',
+                }}>
                     <ArrowLeft size={16} />
                     Back to Main Site
                 </Link>
 
-                {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: '32px' }}>
                     <div style={{
-                        width: '64px',
-                        height: '64px',
-                        borderRadius: '50%',
+                        width: '64px', height: '64px', borderRadius: '50%',
                         background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        margin: '0 auto 16px',
-                        color: 'white',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        margin: '0 auto 16px', color: 'white',
                     }}>
                         <Shield size={32} />
                     </div>
-                    <h1 className="admin-title" style={{
-                        fontSize: '28px',
-                        fontWeight: 700,
-                        color: '#0f172a',
-                        margin: '0 0 4px 0',
-                    }}>
+                    <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#0f172a', margin: '0 0 4px 0' }}>
                         Admin Portal
                     </h1>
-                    <p style={{
-                        color: '#64748b',
-                        fontSize: '14px',
-                        margin: 0,
-                    }}>
+                    <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
                         Restricted administrator access
                     </p>
                     <div style={{
-                        marginTop: '8px',
-                        display: 'inline-block',
-                        padding: '4px 12px',
-                        background: '#fef2f2',
-                        borderRadius: '12px',
-                        fontSize: '11px',
-                        color: '#dc2626',
-                        fontWeight: 500,
+                        marginTop: '8px', display: 'inline-block', padding: '4px 12px',
+                        background: '#fef2f2', borderRadius: '12px',
+                        fontSize: '11px', color: '#dc2626', fontWeight: 500,
                     }}>
                         ⚠️ Authorized Personnel Only
                     </div>
                 </div>
 
-                <form onSubmit={handleSubmit} style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '20px',
-                }}>
-                    <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px',
-                    }}>
-                        <label style={{
-                            fontSize: '14px',
-                            fontWeight: 500,
-                            color: '#334155',
-                        }}>
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>
                             Admin Email
                         </label>
                         <div style={{ position: 'relative' }}>
                             <Mail style={{
-                                position: 'absolute',
-                                left: '12px',
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                color: '#94a3b8',
+                                position: 'absolute', left: '12px', top: '50%',
+                                transform: 'translateY(-50%)', color: '#94a3b8',
                             }} size={20} />
                             <input
-                                type="email"
-                                name="email"
-                                value={formData.email}
-                                onChange={handleChange}
-                                placeholder="admin@dems.com"
+                                type="email" name="email" value={formData.email}
+                                onChange={handleChange} placeholder="admin@dems.com"
                                 style={{
-                                    width: '100%',
-                                    padding: '12px 12px 12px 44px',
-                                    border: '2px solid #e2e8f0',
-                                    borderRadius: '8px',
-                                    fontSize: '16px',
-                                    transition: 'all 0.3s ease',
-                                    background: 'white',
-                                }}
-                                onFocus={(e) => {
-                                    e.currentTarget.style.outline = 'none';
-                                    e.currentTarget.style.borderColor = '#3b82f6';
-                                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)';
-                                }}
-                                onBlur={(e) => {
-                                    e.currentTarget.style.borderColor = '#e2e8f0';
-                                    e.currentTarget.style.boxShadow = 'none';
+                                    width: '100%', padding: '12px 12px 12px 44px',
+                                    border: '2px solid #e2e8f0', borderRadius: '8px',
+                                    fontSize: '16px', background: 'white',
                                 }}
                                 required
                             />
                         </div>
                     </div>
 
-                    <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px',
-                    }}>
-                        <label style={{
-                            fontSize: '14px',
-                            fontWeight: 500,
-                            color: '#334155',
-                        }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>
                             Password
                         </label>
                         <div style={{ position: 'relative' }}>
                             <Lock style={{
-                                position: 'absolute',
-                                left: '12px',
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                color: '#94a3b8',
+                                position: 'absolute', left: '12px', top: '50%',
+                                transform: 'translateY(-50%)', color: '#94a3b8',
                             }} size={20} />
                             <input
                                 type={showPassword ? 'text' : 'password'}
-                                name="password"
-                                value={formData.password}
-                                onChange={handleChange}
-                                placeholder="••••••••"
+                                name="password" value={formData.password}
+                                onChange={handleChange} placeholder="••••••••"
                                 style={{
-                                    width: '100%',
-                                    padding: '12px 12px 12px 44px',
-                                    border: '2px solid #e2e8f0',
-                                    borderRadius: '8px',
-                                    fontSize: '16px',
-                                    transition: 'all 0.3s ease',
-                                    background: 'white',
-                                }}
-                                onFocus={(e) => {
-                                    e.currentTarget.style.outline = 'none';
-                                    e.currentTarget.style.borderColor = '#3b82f6';
-                                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)';
-                                }}
-                                onBlur={(e) => {
-                                    e.currentTarget.style.borderColor = '#e2e8f0';
-                                    e.currentTarget.style.boxShadow = 'none';
+                                    width: '100%', padding: '12px 12px 12px 44px',
+                                    border: '2px solid #e2e8f0', borderRadius: '8px',
+                                    fontSize: '16px', background: 'white',
                                 }}
                                 required
                             />
                             <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
+                                type="button" onClick={() => setShowPassword(!showPassword)}
                                 style={{
-                                    position: 'absolute',
-                                    right: '12px',
-                                    top: '50%',
-                                    transform: 'translateY(-50%)',
-                                    background: 'none',
-                                    border: 'none',
-                                    color: '#94a3b8',
-                                    cursor: 'pointer',
-                                    padding: '4px',
+                                    position: 'absolute', right: '12px', top: '50%',
+                                    transform: 'translateY(-50%)', background: 'none',
+                                    border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px',
                                 }}
                             >
                                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -325,56 +191,24 @@ const AdminLogin = () => {
                         </div>
                     </div>
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        style={{
-                            padding: '14px',
-                            background: loading ? '#94a3b8' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontSize: '16px',
-                            fontWeight: 600,
-                            cursor: loading ? 'not-allowed' : 'pointer',
-                            transition: 'all 0.3s ease',
-                            opacity: loading ? 0.7 : 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px',
-                            marginTop: '4px',
-                        }}
-                        onMouseEnter={(e) => {
-                            if (!loading) {
-                                e.currentTarget.style.transform = 'translateY(-2px)';
-                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(59,130,246,0.3)';
-                            }
-                        }}
-                        onMouseLeave={(e) => {
-                            if (!loading) {
-                                e.currentTarget.style.transform = 'none';
-                                e.currentTarget.style.boxShadow = 'none';
-                            }
-                        }}
-                    >
+                    <button type="submit" disabled={loading} style={{
+                        padding: '14px',
+                        background: loading ? '#94a3b8' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                        color: 'white', border: 'none', borderRadius: '8px',
+                        fontSize: '16px', fontWeight: 600,
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    }}>
                         <Shield size={18} />
                         {loading ? 'Authenticating...' : 'Access Admin Dashboard'}
                     </button>
                 </form>
 
                 <div style={{
-                    marginTop: '24px',
-                    paddingTop: '20px',
-                    borderTop: '1px solid #e2e8f0',
-                    textAlign: 'center',
+                    marginTop: '24px', paddingTop: '20px',
+                    borderTop: '1px solid #e2e8f0', textAlign: 'center',
                 }}>
-                    <p style={{
-                        color: '#94a3b8',
-                        fontSize: '12px',
-                        margin: 0,
-                        lineHeight: 1.5,
-                    }}>
+                    <p style={{ color: '#94a3b8', fontSize: '12px', margin: 0, lineHeight: 1.5 }}>
                         ⚠️ This portal is restricted to authorized administrators only.
                         <br />
                         All login attempts are logged and monitored.

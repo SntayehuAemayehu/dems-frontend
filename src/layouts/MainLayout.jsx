@@ -391,40 +391,7 @@ const MainLayout = () => {
               gap: '0.75rem',
             }}>
               {/* AI Assistant Badge - Desktop */}
-              <button
-                onClick={() => navigate('/support')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  background: isDarkMode ? 'rgba(59,130,246,0.15)' : '#eff6ff',
-                  border: `1px solid ${isDarkMode ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.2)'}`,
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  color: '#3b82f6',
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(59,130,246,0.25)' : '#dbeafe';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(59,130,246,0.15)' : '#eff6ff';
-                }}
-              >
-                <Sparkles size={14} />
-                <span style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  background: '#22c55e',
-                  display: 'inline-block',
-                  animation: 'pulse 2s infinite',
-                }} />
-                AI Help
-              </button>
+
 
               {/* Dark Mode Toggle */}
               <button

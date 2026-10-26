@@ -1996,12 +1996,27 @@ const handleBatchGenerateSchedules = async () => {
                       ) : (
                         filteredData.map((u) => (
                           <tr key={u.id} style={{ borderBottom: '1px solid #f1f5f9' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.background = 'none'}>
-                            <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                              <div>
-                                <span style={{ fontWeight: 500, color: '#0f172a', display: 'block' }}>{u.full_name}</span>
-                                <span style={{ fontSize: '12px', color: '#94a3b8' }}>ID: {u.id}</span>
-                              </div>
-                            </td>
+<td style={{ padding: '10px 12px', fontSize: '14px' }}>
+  <div>
+    <span style={{ fontWeight: 500, color: '#0f172a', display: 'block' }}>{u.full_name}</span>
+    
+    {u.role === 'STUDENT' ? (
+      u.student_id ? (
+        <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: 600 }}>
+          🎓 {u.student_id}
+        </span>
+      ) : (
+        <span style={{ fontSize: '12px', color: '#f59e0b', fontStyle: 'italic' }}>
+          ⏳ ID not generated (pending Registrar)
+        </span>
+      )
+    ) : (
+      <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+        {u.employee_id ? `🆔 ${u.employee_id}` : `PK: ${u.id}`}
+      </span>
+    )}
+  </div>
+</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px', color: '#475569' }}>{u.email}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>{getRoleBadge(u.role)}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px', color: '#475569' }}>{u.department || '—'}</td>
@@ -3306,85 +3321,6 @@ const handleBatchGenerateSchedules = async () => {
 
       {/* ============ ALL MODALS ============ */}
 
-      {/* CREATE USER MODAL */}
-      {showCreateUserModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowCreateUserModal(false)}>
-          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Create User</h2>
-              <button onClick={() => { setShowCreateUserModal(false); resetUserForm(); }} style={{ background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
-            </div>
-            <form onSubmit={handleCreateUser}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Email *</label>
-                <input type="email" required style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }}
-                  value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Full Name *</label>
-                <input type="text" required style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }}
-                  value={userForm.full_name} onChange={(e) => setUserForm({ ...userForm, full_name: e.target.value })} />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Phone</label>
-                <input type="text" style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }}
-                  value={userForm.phone} onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })} />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Password *</label>
-                <input type="password" required minLength="8" style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }}
-                  value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Confirm Password *</label>
-                <input type="password" required style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }}
-                  value={userForm.confirm_password} onChange={(e) => setUserForm({ ...userForm, confirm_password: e.target.value })} />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Role *</label>
-                <select required style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}
-                  value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
-                  <option value="STUDENT">Student</option>
-                  <option value="TEACHER">Teacher</option>
-                  <option value="ADMIN">Administrator</option>
-                  <option value="FINANCE">Finance Officer</option>
-                  <option value="REGISTRAR">Registrar</option>
-                  <option value="DEPT_HEAD">Department Head</option>
-                </select>
-              </div>
-              
-              {userForm.role === 'STUDENT' && (
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Department *</label>
-                  <select required style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}
-                    value={userForm.department} onChange={(e) => setUserForm({ ...userForm, department: e.target.value })}>
-                    <option value="">Select Department</option>
-                    {getDepartmentOptions()}
-                  </select>
-                </div>
-              )}
-              
-              {userForm.role === 'DEPT_HEAD' && (
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Head of Department *</label>
-                  <select required style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}
-                    value={userForm.headed_department} onChange={(e) => setUserForm({ ...userForm, headed_department: e.target.value })}>
-                    <option value="">Select Department</option>
-                    {getDepartmentOptions()}
-                  </select>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                <button type="button" onClick={() => { setShowCreateUserModal(false); resetUserForm(); }} style={{ flex: 1, padding: '12px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'none', color: '#374151', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                <button type="submit" disabled={actionLoading} style={{ flex: 1, padding: '12px', border: 'none', borderRadius: '8px', background: '#2563eb', color: 'white', fontWeight: 600, cursor: actionLoading ? 'not-allowed' : 'pointer', opacity: actionLoading ? 0.6 : 1 }}>
-                  {actionLoading ? 'Creating...' : 'Create User'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* EDIT USER MODAL */}
       {showEditUserModal && selectedItem && (

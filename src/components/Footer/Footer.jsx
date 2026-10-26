@@ -410,7 +410,7 @@ const Footer = () => {
                 color: textMuted,
                 fontSize: '12px',
               }}>
-                Made with <span style={{ color: '#ef4444' }}>❤️</span>
+                Made with <span style={{ color: '#ef4444' }}>❤️EST</span>
               </Text>
             </div>
           </div>

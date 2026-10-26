@@ -702,14 +702,14 @@ const viewStudentResults = async (studentId) => {
   // ============================================================
   // GET TEACHER OPTIONS
   // ============================================================
-  const getTeacherOptions = () => {
-    if (teachers.length === 0) {
-      return <option value="" disabled>No teachers available</option>;
-    }
-    return teachers.map(t => (
-      <option key={t.id} value={t.id}>{t.full_name}</option>
-    ));
-  };
+const getTeacherOptions = () => {
+  if (teachers.length === 0) {
+    return <option value="" disabled>No teachers available</option>;
+  }
+  return teachers.map(t => (
+    <option key={t.id} value={String(t.id)}>{t.full_name}</option>
+  ));
+};
 
   // ============================================================
   // GET COURSE OPTIONS
@@ -819,31 +819,31 @@ const viewStudentResults = async (studentId) => {
   // ============================================================
   // ASSIGN TEACHER TO COURSE
   // ============================================================
-  const handleAssignTeacher = async (courseId, teacherId) => {
-    if (!teacherId) {
-      toast.error('Please select a teacher');
-      return;
-    }
-    
-    setActionLoading(true);
-    try {
-      const response = await api.put(`/courses/${courseId}/`, {
-        instructor: parseInt(teacherId)
-      });
-      
-      console.log('✅ Teacher assigned:', response.data);
-      toast.success('Teacher assigned successfully!');
-      setShowAssignTeacherModal(false);
-      setAssignTeacherForm({ course_id: '', teacher_id: '' });
-      setSelectedCourse(null);
-      await fetchData();
-    } catch (error) {
-      console.error('❌ Failed to assign teacher:', error);
-      toast.error(error.response?.data?.error || 'Failed to assign teacher');
-    } finally {
-      setActionLoading(false);
-    }
-  };
+const handleAssignTeacher = async (courseId, teacherId) => {
+  if (!teacherId) {
+    toast.error('Please select a teacher');
+    return;
+  }
+
+  setActionLoading(true);
+  try {
+    const response = await api.patch(`/courses/${courseId}/`, {
+      instructor: parseInt(teacherId, 10),
+    });
+
+    console.log('✅ Teacher assigned:', response.data);
+    toast.success('Teacher assigned successfully!');
+    setShowAssignTeacherModal(false);
+    setAssignTeacherForm({ course_id: '', teacher_id: '' });
+    setSelectedCourse(null);
+    await fetchData();
+  } catch (error) {
+    console.error('❌ Failed to assign teacher:', error);
+    toast.error(error.response?.data?.error || 'Failed to assign teacher');
+  } finally {
+    setActionLoading(false);
+  }
+};
 
   // ============================================================
   // CREATE FINAL EXAM
@@ -2333,29 +2333,31 @@ const viewStudentResults = async (studentId) => {
                               {course.title}
                             </td>
                             <td style={{ padding: '12px 16px', fontSize: '14px', color: '#475569' }}>
-                              {course.instructor_name || 'Not Assigned'}
-                              {!course.instructor_name && (
-                                <button
-                                  onClick={() => {
-                                    setSelectedCourse(course);
-                                    setAssignTeacherForm({ course_id: course.id, teacher_id: '' });
-                                    setShowAssignTeacherModal(true);
-                                  }}
-                                  style={{
-                                    marginLeft: '8px',
-                                    padding: '2px 8px',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    background: '#dbeafe',
-                                    color: '#2563eb',
-                                    cursor: 'pointer',
-                                    fontSize: '11px',
-                                  }}
-                                >
-                                  Assign
-                                </button>
-                              )}
-                            </td>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+    <span>{course.instructor_name || 'Not Assigned'}</span>
+    <button
+      onClick={() => {
+        setSelectedCourse(course);
+        setAssignTeacherForm({
+          course_id: course.id,
+          teacher_id: course.instructor ? String(course.instructor) : '',
+        });
+        setShowAssignTeacherModal(true);
+      }}
+      style={{
+        padding: '2px 8px',
+        border: 'none',
+        borderRadius: '4px',
+        background: course.instructor_name ? '#f1f5f9' : '#dbeafe',
+        color: course.instructor_name ? '#475569' : '#2563eb',
+        cursor: 'pointer',
+        fontSize: '11px',
+      }}
+    >
+      {course.instructor_name ? 'Reassign' : 'Assign'}
+    </button>
+  </div>
+</td>
                             <td style={{ padding: '12px 16px', fontSize: '14px', color: '#475569' }}>
                               {course.enrolled_count || 0}/{course.capacity}
                             </td>

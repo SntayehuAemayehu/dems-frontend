@@ -264,97 +264,37 @@ const ProfilePage = () => {
   };
 
   // ============ CHANGE PASSWORD ============
-// frontend/src/pages/Student/Profile.jsx
-// Find handleChangePassword and REPLACE with this:
-
-const handleChangePassword = async (e) => {
+  const handleChangePassword = async (e) => {
     e.preventDefault();
     setSavingPassword(true);
     
-    // 1. Check if fields are empty
-    if (!passwordData.old_password) {
-        toast.error("Current password is required");
-        setSavingPassword(false);
-        return;
-    }
-    
-    if (!passwordData.new_password) {
-        toast.error("New password is required");
-        setSavingPassword(false);
-        return;
-    }
-    
-    if (!passwordData.confirm_password) {
-        toast.error("Confirm password is required");
-        setSavingPassword(false);
-        return;
-    }
-    
-    // 2. Check if passwords match
     if (passwordData.new_password !== passwordData.confirm_password) {
-        toast.error("New passwords do not match");
-        setSavingPassword(false);
-        return;
+      toast.error('Passwords do not match');
+      setSavingPassword(false);
+      return;
     }
-    
-    // 3. Check if new password is same as old
-    if (passwordData.old_password === passwordData.new_password) {
-        toast.error("New password cannot be the same as your current password");
-        setSavingPassword(false);
-        return;
-    }
-    
-    // 4. Validate password strength
-    const passwordErrors = [];
     
     if (passwordData.new_password.length < 8) {
-        passwordErrors.push("at least 8 characters");
-    }
-    
-    if (!/\d/.test(passwordData.new_password)) {
-        passwordErrors.push("at least one number");
-    }
-    
-    if (!/[A-Z]/.test(passwordData.new_password)) {
-        passwordErrors.push("at least one uppercase letter");
-    }
-    
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(passwordData.new_password)) {
-        passwordErrors.push("at least one special character");
-    }
-    
-    if (passwordErrors.length > 0) {
-        toast.error(`Password must contain ${passwordErrors.join(', ')}`);
-        setSavingPassword(false);
-        return;
-    }
-    
-    // 5. Check if too common
-    const commonPasswords = [
-        'password', 'password123', 'admin123', 'letmein',
-        'qwerty123', 'welcome123', 'abc12345', '12345678'
-    ];
-    if (commonPasswords.includes(passwordData.new_password.toLowerCase())) {
-        toast.error("Password is too common. Please choose a stronger password.");
-        setSavingPassword(false);
-        return;
+      toast.error('Password must be at least 8 characters');
+      setSavingPassword(false);
+      return;
     }
     
     try {
-        const response = await api.post('/auth/change-password/', passwordData);
-        toast.success(response.data.message || 'Password changed successfully!');
-        setShowPasswordModal(false);
-        setPasswordData({
-            old_password: '',
-            new_password: '',
-            confirm_password: '',
-        });
+      const response = await api.post('/auth/change-password/', passwordData);
+      toast.success(response.data.message || 'Password changed successfully!');
+      setShowPasswordModal(false);
+      setPasswordData({
+        old_password: '',
+        new_password: '',
+        confirm_password: '',
+      });
     } catch (error) {
-        toast.error(error.response?.data?.error || 'Failed to change password');
+      toast.error(error.response?.data?.error || 'Failed to change password');
     } finally {
-        setSavingPassword(false);
+      setSavingPassword(false);
     }
-};
+  };
 
   // ============ HANDLE FILE CHANGE ============
   const handleFileChange = (e) => {

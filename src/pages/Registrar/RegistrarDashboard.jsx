@@ -1003,7 +1003,48 @@ const RegistrarDashboard = () => {
         color="orange"
         bgColor="#fff7ed"
       />
-
+{/* ============ BATCH NOTIFY — UPLOAD DOCUMENTS ============ */}
+<BatchProcessor
+  endpoint="/analytics/batch/send-notifications/"
+  title="Batch Notify — Upload Documents"
+  description="Send 'Please upload your documents' notifications to multiple students at once"
+  icon={Bell}
+  color="purple"
+  bgColor="#f5f3ff"
+  defaultPayload={{
+    title: '📄 Document Upload Required',
+    message:
+      'Your payment has been verified. Please upload your Grade 8 Certificate, Grade 12 Certificate, and Transcript for verification.',
+    notification_type: 'SYSTEM_ALERT',
+    link: '/upload-documents',
+  }}
+  batchTypes={[
+    {
+      value: 'all_pending_upload',
+      label: 'All Awaiting Documents',
+      icon: '📄',
+      description:
+        'Notify every student whose payment is VERIFIED but has not uploaded documents yet',
+    },
+    {
+      value: 'department',
+      label: 'By Department',
+      icon: '🏛️',
+      description:
+        'Notify pending-upload students in a specific department',
+    },
+    {
+      value: 'ids',
+      label: 'By Student DB IDs',
+      icon: '📋',
+      description:
+        'Notify specific students by their database IDs (comma separated)',
+    },
+  ]}
+  onSuccess={() => {
+    fetchStudents();
+  }}
+/>
       {/* SEARCH AND FILTER */}
       <div style={{
         display: 'flex',
@@ -1312,34 +1353,20 @@ const RegistrarDashboard = () => {
                             Notify
                           </button>
                         )}
-
-                        {/* 2. VIEW DOCUMENTS - Only if documents are uploaded */}
-                        {student.documents_submitted && (
-                          <button
-                            onClick={() => {
-                              setSelectedStudent(student);
-                              setShowDocumentModal(true);
-                            }}
-                            style={{
-                              padding: '6px 10px',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              transition: 'all 0.3s ease',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '4px',
-                              background: '#eff6ff',
-                              color: '#3b82f6',
-                              fontSize: '12px',
-                            }}
-                            title="View Documents"
-                          >
-                            <Eye size={16} />
-                            View Docs
-                          </button>
-                        )}
+{/* 2. VIEW DOCUMENTS — show if ANY file exists */}
+{(student.grade_8_certificate ||
+  student.grade_12_certificate ||
+  student.transcript ||
+  student.other_documents ||
+  student.documents_submitted) && (
+  <button
+    onClick={() => { setSelectedStudent(student); setShowDocumentModal(true); }}
+    style={{ /* same styles */ }}
+  >
+    <Eye size={16} />
+    View Docs
+  </button>
+)}
 
                         {/* 3. VERIFY DOCUMENTS - Only if docs uploaded but not verified */}
                         {student.documents_submitted && !student.documents_verified && student.payment_status === 'VERIFIED' && (

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ultra-Secure Exam</title>
+    <style>
+        body { margin: 0; font-family: sans-serif; background: #f0f2f5; }
+        #blackout {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #000000; z-index: 999999; display: none;
+            flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center;
+        }
+        #blackout h1 { color: #ef4444; font-size: 40px; margin: 10px 0; }
+        #blackout h2 { color: #fca5a5; margin: 5px 0; }
+        .container { max-width: 800px; margin: 20px auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        video { width: 100%; max-width: 400px; border-radius: 8px; background: black; transform: scaleX(-1); }
+        button { padding: 12px 24px; font-size: 16px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 6px; margin-top: 10px; }
+        .stat { font-weight: bold; font-size: 18px; margin: 10px 0; color: #333; }
+    </style>
+</head>
+<body>
+
+    <!-- 🚨 PURE BLACK OVERLAY 🚨 -->
+    <div id="blackout">
+        <h1>🚫 VIOLATION DETECTED</h1>
+        <h2 id="reason">Multiple faces detected</h2>
+        <p>The exam is hidden until resolved.</p>
+    </div>
+
+    <div class="container">
+        <h2>Ultra-Secure Exam Mode</h2>
+        
+        <div id="start-screen">
+            <video id="video" autoplay playsinline muted></video>
+            <br>
+            <button onclick="startExam()">Start Secure Exam</button>
+        </div>
+
+        <div id="exam-screen" style="display: none;">
+            <h3>Exam in Progress</h3>
+            <div class="stat" id="motion-status">Movement: Low</div>
+            <div class="stat" id="noise-text">Noise Level: 0</div>
+            <p style="color: green; font-weight: bold;">✅ Identity verified</p>
+            <button onclick="submitExam()">Submit Exam</button>
+        </div>
+    </div>
+
+    <!-- Hidden canvas for pixel math -->
+    <canvas id="canvas" style="display: none;"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const blackout = document.getElementById('blackout');
+        const reasonText = document.getElementById('reason');
+        const startScreen = document.getElementById('start-screen');
+        const examScreen = document.getElementById('exam-screen');
+        const motionStatus = document.getElementById('motion-status');
+        const noiseText = document.getElementById('noise-text');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        let isExamActive = false;
+        let lastFrameData = null;
+        let audioContext;
+        let motionInterval;
+        let audioInterval;
+
+        async function startExam() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                video.srcObject = stream;
+                
+                startScreen.style.display = 'none';
+                examScreen.style.display = 'block';
+                isExamActive = true;
+
+                setTimeout(() => {
+                    startMotionDetection();
+                    startAudioDetection(stream);
+                }, 1500);
+
+            } catch (err) {
+                alert("Camera access denied! Please allow camera permissions.");
+            }
+        }
+
+        function startMotionDetection() {
+            canvas.width = 160;
+            canvas.height = 120;
+
+            motionInterval = setInterval(() => {
+                if (!isExamActive || video.readyState < 2) return;
+
+                ctx.drawImage(video, 0, 0, 160, 120);
+                const currentData = ctx.getImageData(0, 0, 160, 120).data;
+
+                if (lastFrameData) {
+                    let diff = 0;
+                    for (let i = 0; i < currentData.length; i += 4) {
+                        diff += Math.abs(currentData[i] - lastFrameData[i]);
+                    }
+
+                    // Threshold: 1,500,000 pixel difference
+                    if (diff > 1500000) {
+                        blackout.style.display = 'flex';
+                        reasonText.innerText = '🚫 Movement / Second person detected';
+                        motionStatus.innerText = 'Movement: HIGH 🚨';
+                        motionStatus.style.color = 'red';
+                    } else {
+                        blackout.style.display = 'none';
+                        motionStatus.innerText = 'Movement: Low ✅';
+                        motionStatus.style.color = 'green';
+                    }
+                }
+                lastFrameData = currentData;
+            }, 500);
+        }
+
+        function startAudioDetection(stream) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(stream);
+            const analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            source.connect(analyser);
+            
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            audioInterval = setInterval(() => {
+                if (!isExamActive) return;
+                
+                analyser.getByteFrequencyData(dataArray);
+                const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
+                
+                noiseText.innerText = `Noise Level: ${Math.round(avg)}`;
+
+                if (avg > 60) {
+                    blackout.style.display = 'flex';
+                    reasonText.innerText = '🚫 High background noise detected';
+                } else if (document.getElementById('motion-status').innerText.includes('Low')) {
+                    blackout.style.display = 'none';
+                }
+            }, 500);
+        }
+
+        function submitExam() {
+            isExamActive = false;
+            clearInterval(motionInterval);
+            clearInterval(audioInterval);
+            alert("Exam Submitted!");
+            window.location.reload();
+        }
+    </script>
+</body>
+</html>
