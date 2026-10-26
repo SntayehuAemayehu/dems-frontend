@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { Download, Video, FileText, Calendar, Users, BookOpen, ChevronLeft, Play } from 'lucide-react';
+import { Download, Video, FileText, Calendar, Users, BookOpen, ChevronLeft, Play, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchCourseDetail } from '../../store/slices/courseSlice';
 import api from '../../api';
@@ -25,7 +25,9 @@ const CourseDetail = () => {
   const fetchMaterials = async () => {
     try {
       const response = await api.get(`/courses/${id}/materials/`);
-      setMaterials(response.data);
+      let data = response.data;
+      if (data && data.results && Array.isArray(data.results)) data = data.results;
+      setMaterials(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch materials:', error);
     }
@@ -34,7 +36,9 @@ const CourseDetail = () => {
   const fetchAssignments = async () => {
     try {
       const response = await api.get(`/courses/${id}/assignments/`);
-      setAssignments(response.data);
+      let data = response.data;
+      if (data && data.results && Array.isArray(data.results)) data = data.results;
+      setAssignments(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch assignments:', error);
     }
@@ -132,10 +136,36 @@ const CourseDetail = () => {
                         <p className="material-description">{material.description}</p>
                       </div>
                     </div>
+                    
+                    {/* TEXT BUTTONS: OPEN & DOWNLOAD */}
                     {material.file && (
-                      <a href={material.file} download className="material-download">
-                        <Download size={20} />
-                      </a>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <a 
+                          href={material.file} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          style={{ 
+                            display: 'flex', alignItems: 'center', gap: '4px', 
+                            background: '#eff6ff', color: '#2563eb', 
+                            padding: '8px 16px', borderRadius: '8px', 
+                            textDecoration: 'none', fontSize: '14px', fontWeight: '500' 
+                          }}
+                        >
+                          <Eye size={16} /> Open
+                        </a>
+                        <a 
+                          href={material.file} 
+                          download 
+                          style={{ 
+                            display: 'flex', alignItems: 'center', gap: '4px', 
+                            background: '#f1f5f9', color: '#475569', 
+                            padding: '8px 16px', borderRadius: '8px', 
+                            textDecoration: 'none', fontSize: '14px', fontWeight: '500' 
+                          }}
+                        >
+                          <Download size={16} /> Download
+                        </a>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -162,10 +192,36 @@ const CourseDetail = () => {
                         </p>
                         <p className="assignment-marks">Total Marks: {assignment.total_marks}</p>
                       </div>
+
+                      {/* TEXT BUTTONS: OPEN & DOWNLOAD */}
                       {assignment.attachment && (
-                        <a href={assignment.attachment} download className="assignment-attachment">
-                          <Download size={20} />
-                        </a>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <a 
+                            href={assignment.attachment} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            style={{ 
+                              display: 'flex', alignItems: 'center', gap: '4px', 
+                              background: '#eff6ff', color: '#2563eb', 
+                              padding: '8px 16px', borderRadius: '8px', 
+                              textDecoration: 'none', fontSize: '14px', fontWeight: '500' 
+                            }}
+                          >
+                            <Eye size={16} /> Open
+                          </a>
+                          <a 
+                            href={assignment.attachment} 
+                            download 
+                            style={{ 
+                              display: 'flex', alignItems: 'center', gap: '4px', 
+                              background: '#f1f5f9', color: '#475569', 
+                              padding: '8px 16px', borderRadius: '8px', 
+                              textDecoration: 'none', fontSize: '14px', fontWeight: '500' 
+                            }}
+                          >
+                            <Download size={16} /> Download
+                          </a>
+                        </div>
                       )}
                     </div>
                   </div>

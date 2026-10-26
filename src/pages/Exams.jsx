@@ -1,12 +1,14 @@
 // src/pages/Exams.jsx
 import React, { useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { Link } from 'react-router-dom';
-import { Clock, Calendar, CheckCircle, AlertCircle } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Clock, Calendar, CheckCircle, AlertCircle, Eye } from 'lucide-react';
 import { fetchExams } from '../store/slices/examSlice';
 import './Exams.css'; 
+
 const Exams = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { exams, isLoading } = useSelector((state) => state.exams);
   const { user } = useSelector((state) => state.auth);
   
@@ -60,10 +62,16 @@ const Exams = () => {
             {ongoingExams.map((exam) => {
               const status = getExamStatus(exam);
               return (
-                <div key={exam.id} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
+                <div 
+                  key={exam.id} 
+                  onClick={() => navigate(`/exams/${exam.id}/details`)}
+                  className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+                >
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{exam.title}</h3>
+                      <h3 className="font-semibold text-gray-900 hover:text-green-600 transition-colors">
+                        {exam.title}
+                      </h3>
                       <p className="text-sm text-gray-500 mt-1">{exam.course_title}</p>
                       <div className="flex items-center mt-2 text-sm text-gray-500">
                         <Clock className="h-4 w-4 mr-1" />
@@ -76,9 +84,16 @@ const Exams = () => {
                       {status.label}
                     </span>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/exams/${exam.id}/details`); }}
+                      className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm transition-colors"
+                    >
+                      <Eye className="h-4 w-4 mr-1" /> View Details
+                    </button>
                     <Link
                       to={`/exams/${exam.id}/take`}
+                      onClick={(e) => e.stopPropagation()}
                       className="inline-block px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
                     >
                       Take Exam
@@ -99,10 +114,16 @@ const Exams = () => {
             {upcomingExams.map((exam) => {
               const status = getExamStatus(exam);
               return (
-                <div key={exam.id} className="bg-white rounded-xl shadow-md p-6">
+                <div 
+                  key={exam.id} 
+                  onClick={() => navigate(`/exams/${exam.id}/details`)}
+                  className="bg-white rounded-xl shadow-md p-6 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+                >
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{exam.title}</h3>
+                      <h3 className="font-semibold text-gray-900 hover:text-green-600 transition-colors">
+                        {exam.title}
+                      </h3>
                       <p className="text-sm text-gray-500 mt-1">{exam.course_title}</p>
                       <div className="flex items-center mt-2 text-sm text-gray-500">
                         <Clock className="h-4 w-4 mr-1" />
@@ -115,7 +136,13 @@ const Exams = () => {
                       {status.label}
                     </span>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/exams/${exam.id}/details`); }}
+                      className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm transition-colors"
+                    >
+                      <Eye className="h-4 w-4 mr-1" /> View Details
+                    </button>
                     <button
                       disabled
                       className="px-4 py-2 bg-gray-300 text-gray-500 rounded-lg text-sm cursor-not-allowed"
@@ -138,10 +165,16 @@ const Exams = () => {
             {pastExams.map((exam) => {
               const status = getExamStatus(exam);
               return (
-                <div key={exam.id} className="bg-white rounded-xl shadow-md p-6">
+                <div 
+                  key={exam.id} 
+                  onClick={() => navigate(`/exams/${exam.id}/details`)}
+                  className="bg-white rounded-xl shadow-md p-6 cursor-pointer transition-all duration-300 hover:shadow-lg"
+                >
                   <div className="flex justify-between items-center">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{exam.title}</h3>
+                      <h3 className="font-semibold text-gray-900 hover:text-green-600 transition-colors">
+                        {exam.title}
+                      </h3>
                       <p className="text-sm text-gray-500 mt-1">{exam.course_title}</p>
                       <div className="flex items-center mt-2 text-sm text-gray-500">
                         <Calendar className="h-4 w-4 mr-1" />

@@ -26,6 +26,7 @@ import CourseDetail from './pages/CourseDetail';
 import Exams from './pages/Student/Exams';
 import TakeExam from './pages/TakeExam';
 import ExamResults from './pages/Student/ExamResults';
+import ExamDetails from './pages/Student/ExamDetails'; 
 import Payments from './pages/Student/Payments';
 import Profile from './pages/Student/Profile';
 import LiveClasses from './pages/Student/LiveClasses';
@@ -157,6 +158,7 @@ const AppContent = () => {
               <Route path="/courses/:id" element={<ProtectedRouteWithPayment roles={['STUDENT']}><CourseDetail /></ProtectedRouteWithPayment>} />
               <Route path="/exams" element={<ProtectedRouteWithPayment roles={['STUDENT']}><Exams /></ProtectedRouteWithPayment>} />
               <Route path="/exams/:id/take" element={<ProtectedRouteWithPayment roles={['STUDENT']}><TakeExam /></ProtectedRouteWithPayment>} />
+              <Route path="/exams/:id/details" element={<ProtectedRouteWithPayment roles={['STUDENT']}><ExamDetails /></ProtectedRouteWithPayment>} />
               <Route path="/results" element={<ProtectedRoute roles={['STUDENT']}><ExamResults /></ProtectedRoute>} />
               <Route path="/payments" element={<ProtectedRoute roles={['STUDENT']}><Payments /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
