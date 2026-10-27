@@ -10,6 +10,7 @@ import {
   BarChart3, Sun, Moon, MessageCircle, Sparkles,Map, Trophy, Award, TrendingUp
 } from 'lucide-react';
 import { logout } from '../store/slices/authSlice';
+import { getMediaUrl } from '../api/api';
 import NotificationBell from '../components/common/NotificationBell';
 import { useDarkMode } from '../context/DarkModeContext';
 
@@ -435,7 +436,7 @@ const MainLayout = () => {
                 >
                   {user?.profile_picture ? (
                     <img
-                      src={user.profile_picture}
+                      src={getMediaUrl(user.profile_picture)}
                       alt="Profile"
                       style={{
                         height: '2rem',

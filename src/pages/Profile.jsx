@@ -2,7 +2,7 @@
 // COMPLETE - Profile page for ALL roles (Student, Teacher, Finance, etc.)
 
 import React, { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
   User, Mail, Phone, Calendar, MapPin, Camera,
@@ -12,9 +12,11 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
+import { getProfile } from '../../store/slices/authSlice';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   
   const [loading, setLoading] = useState(true);
@@ -137,7 +139,7 @@ const ProfilePage = () => {
         }
       });
       
-      const response = await api.put('/auth/profile/update/', formDataToSend, {
+      const response = await api.patch('/auth/profile/', formDataToSend, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -145,6 +147,7 @@ const ProfilePage = () => {
       
       console.log('✅ Profile updated:', response.data);
       toast.success('Profile updated successfully!');
+      dispatch(getProfile());
       fetchProfile();
       
     } catch (error) {

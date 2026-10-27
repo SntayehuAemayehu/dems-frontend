@@ -21,6 +21,7 @@ import PaymentStatusBanner from '../../components/PaymentStatusBanner';
 import GradeBadge from '../../components/Grade/GradeBadge';
 import AIInsights from '../../components/AI/AIInsights'
 import LanguageSelector from '../../components/i18n/LanguageSelector';
+
 // ============================================================
 // SIDEBAR NAVIGATION COMPONENT (UNTOUCHED)
 // ============================================================
@@ -331,24 +332,18 @@ const Dashboard = () => {
   }, []);
 
   // ============ CHECK ACCESS LOCK ============
-// frontend/src/pages/Student/Dashboard.jsx
-// REPLACE THE checkAccessLock FUNCTION
-
 const checkAccessLock = useCallback(async () => {
   try {
     const response = await api.get('/analytics/check-access/?service_type=COURSE_ENROLLMENT');
     console.log('✅ Access check response:', response.data);
     
-    // ✅ CRITICAL FIX: Check if the response indicates access
     if (response.data && response.data.has_access === true) {
       setIsLocked(false);
       setLockMessage('');
       return true;
     }
     
-    // ✅ If has_access is false, check if it's a lock
     if (response.data && response.data.has_access === false) {
-      // ✅ Check if the student is NEW (not enrolled) - shouldn't happen
       if (response.data.status === 'REGISTRATION_FLOW') {
         setIsLocked(false);
         return true;
@@ -366,11 +361,9 @@ const checkAccessLock = useCallback(async () => {
   } catch (error) {
     console.error('❌ Access check failed:', error);
     
-    // ✅ Check if error response indicates lock
     if (error.response && error.response.status === 403) {
       const data = error.response.data;
       
-      // ✅ If status is REGISTRATION_FLOW or not LOCKED, allow access
       if (data && (data.status === 'REGISTRATION_FLOW' || data.is_locked === false)) {
         setIsLocked(false);
         return true;
@@ -384,29 +377,21 @@ const checkAccessLock = useCallback(async () => {
       return false;
     }
     
-    // ✅ Default: Allow access if no lock detected
     setIsLocked(false);
     return true;
   }
 }, []);
 
   // ============ LOAD DASHBOARD DATA ============
-// frontend/src/pages/Student/Dashboard.jsx
-// UPDATE THE loadDashboardData FUNCTION
-
 const loadDashboardData = async () => {
   setRefreshing(true);
   try {
     console.log('🔄 Loading dashboard data...');
     
-    // ✅ Check access lock
     const hasAccess = await checkAccessLock();
     
-    // ✅ CRITICAL FIX: If no access, show lock message but DON'T redirect
-    // The checkAccessLock function already handles the lock state
     if (!hasAccess) {
       toast.error(`🔒 ${lockMessage}`);
-      // ✅ DON'T redirect - let the renderLockBanner handle it
       setRefreshing(false);
       return;
     }
@@ -430,7 +415,6 @@ const loadDashboardData = async () => {
   }
 };
       
-
   // ============ INITIAL LOAD ============
   useEffect(() => {
     loadDashboardData();
@@ -548,12 +532,11 @@ const loadDashboardData = async () => {
     { name: 'Enrolled Courses', value: enrolledCourses.length, icon: BookOpen, color: '#3b82f6' },
     { name: 'Upcoming Exams', value: upcomingExams.length, icon: Clock, color: '#f59e0b' },
     { name: 'Completed Exams', value: completedExams.length, icon: CheckCircle, color: '#22c55e' },
-    // ✅ ADDED: CGPA stat
     { name: 'CGPA', value: profile?.cgpa || '0.00', icon: Award, color: '#8b5cf6' },
-    
   ];
 
-  const activeLiveClasses = enrolledCourses.filter(c => c && c.is_active === true) || [];
+  // ✅ FIXED: Only filter for classes that are actually LIVE, not just active courses
+  const activeLiveClasses = enrolledCourses.filter(c => c && c.is_live === true) || [];
 
   const handleJoinLiveClass = (courseId) => {
     console.log('🔴 Joining live class from dashboard:', courseId);
@@ -561,15 +544,9 @@ const loadDashboardData = async () => {
   };
 
   // ============ RENDER LOCK BANNER ============
-
-// frontend/src/pages/Student/Dashboard.jsx
-// UPDATE THE renderLockBanner FUNCTION
-
 const renderLockBanner = () => {
-  // ✅ Only show lock banner if isLocked is true
   if (!isLocked) return null;
   
-  // ✅ Don't show lock banner for new students (check is_enrolled status)
   if (profile && !profile.is_enrolled) {
     return null;
   }
@@ -673,13 +650,7 @@ const renderLockBanner = () => {
       alignItems: 'flex-start',
     }}>
       
-      {/* ============================================================ */}
-      {/* FORCE OVERRIDE CSS FOR LAYOUT RESPONSIVENESS - ADDED ONLY THIS BLOCK */}
-      {/* ============================================================ */}
       <style>{`
-        /* ============================================================
-           CRITICAL LAYOUT OVERRIDES - DO NOT CHANGE ANY OTHER CODE
-           ============================================================ */
         .dashboard-wrapper {
           display: flex !important;
           flex-direction: row !important;
@@ -700,12 +671,10 @@ const renderLockBanner = () => {
         }
         .main-content-container {
           flex: 1 !important;
-          min-width: 0 !important; /* Prevents overflow */
+          min-width: 0 !important;
           width: 100% !important;
           box-sizing: border-box !important;
         }
-        
-        /* Fix for Header Overlap */
         .dashboard-header-wrapper {
           width: 100% !important;
           box-sizing: border-box !important;
@@ -725,8 +694,6 @@ const renderLockBanner = () => {
           gap: 8px !important;
           flex-wrap: wrap !important;
         }
-
-        /* Stats Grid Fix */
         .stats-grid-wrapper {
           display: grid !important;
           grid-template-columns: repeat(4, 1fr) !important;
@@ -734,8 +701,6 @@ const renderLockBanner = () => {
           margin-bottom: 24px !important;
           width: 100% !important;
         }
-
-        /* Notification Panel Overflow Fix */
         .notification-panel-fix {
           position: absolute !important;
           top: 100% !important;
@@ -749,10 +714,6 @@ const renderLockBanner = () => {
           padding: 16px !important;
           z-index: 1000 !important;
         }
-
-        /* ============================================================
-           MOBILE RESPONSIVENESS OVERRIDES
-           ============================================================ */
         @media (max-width: 1024px) {
           .dashboard-wrapper {
             flex-direction: column !important;
@@ -772,7 +733,6 @@ const renderLockBanner = () => {
             right: 2.5vw !important;
           }
         }
-        
         @media (max-width: 640px) {
           .dashboard-wrapper {
             padding: 12px !important;
@@ -791,14 +751,8 @@ const renderLockBanner = () => {
         }
       `}</style>
 
-      {/* ============================================================ */}
-      {/* WRAPPER CONTAINER WITH FORCED CLASS NAMES */}
-      {/* ============================================================ */}
       <div className="dashboard-wrapper">
         
-        {/* ============================================================ */}
-        {/* SIDEBAR - EXACTLY AS IN YOUR ORIGINAL CODE */}
-        {/* ============================================================ */}
         <div className="sidebar-container">
           <StudentSidebar
             activeTab={activeTab}
@@ -808,9 +762,6 @@ const renderLockBanner = () => {
           />
         </div>
 
-        {/* ============================================================ */}
-        {/* MAIN CONTENT - ALL ORIGINAL LOGIC PRESERVED */}
-        {/* ============================================================ */}
         <div className="main-content-container">
           
           {/* ============ HEADER WITH NOTIFICATIONS ============ */}

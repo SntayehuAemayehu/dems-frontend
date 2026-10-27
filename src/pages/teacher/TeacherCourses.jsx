@@ -20,22 +20,14 @@ const TeacherCourses = () => {
   const dispatch = useDispatch();
   const { courses = [], isLoading = false } = useSelector((state) => state.courses || { courses: [] });
   const { user } = useSelector((state) => state.auth || {});
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false); // For View Button
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [loading, setLoading] = useState(false);
   const [materials, setMaterials] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
-  const [courseData, setCourseData] = useState({
-    course_code: '',
-    title: '',
-    description: '',
-    credit_hours: 3,
-    semester: '1',
-    capacity: 30,
-  });
   const [materialData, setMaterialData] = useState({
     title: '',
     description: '',
@@ -72,39 +64,6 @@ const TeacherCourses = () => {
 
   // Filter courses created by this teacher
   const myCourses = Array.isArray(courses) ? courses.filter(c => c.instructor === user?.id) : [];
-
-  const handleCreateCourse = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const coursePayload = {
-        ...courseData,
-        instructor: user?.id,
-      };
-      
-      console.log('📝 Creating course with payload:', coursePayload);
-      
-      const response = await api.post('/courses/', coursePayload);
-      console.log('✅ Course created:', response.data);
-      
-      toast.success('Course created successfully!');
-      setShowCreateModal(false);
-      setCourseData({
-        course_code: '',
-        title: '',
-        description: '',
-        credit_hours: 3,
-        semester: '1',
-        capacity: 30,
-      });
-      await dispatch(fetchCourses());
-    } catch (error) {
-      console.error('❌ Failed to create course:', error);
-      toast.error(error.response?.data?.error || 'Failed to create course');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // ============ MATERIAL FUNCTIONS ============
   const handleUploadMaterial = async (e) => {
@@ -275,15 +234,6 @@ const TeacherCourses = () => {
     }
   };
 
-  const startLiveClass = async (courseId) => {
-    try {
-      await api.post(`/courses/${courseId}/start-live/`);
-      toast.success('Live class started! Students can now join.');
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to start live class');
-    }
-  };
-
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -373,6 +323,12 @@ const TeacherCourses = () => {
     setShowAssignmentModal(true);
   };
 
+  // NEW: Opens the View Course Modal
+  const openViewModal = (course) => {
+    setSelectedCourse(course);
+    setShowViewModal(true);
+  };
+
   const getMaterialIcon = (type) => {
     switch(type?.toUpperCase()) {
       case 'PDF': return <FileText size={16} />;
@@ -425,6 +381,7 @@ const TeacherCourses = () => {
         }
       `}</style>
 
+      {/* Header - Create Course Button Removed */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -444,29 +401,9 @@ const TeacherCourses = () => {
             color: '#64748b',
             margin: '4px 0 0 0',
           }}>
-            {myCourses.length} course{myCourses.length !== 1 ? 's' : ''} created
+            {myCourses.length} course{myCourses.length !== 1 ? 's' : ''} assigned to you
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 20px',
-            background: '#2563eb',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
-          onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
-        >
-          <Plus size={18} />
-          Create Course
-        </button>
       </div>
 
       {myCourses.length === 0 ? (
@@ -483,8 +420,8 @@ const TeacherCourses = () => {
             fontWeight: 500,
             color: '#111827',
             marginBottom: '8px',
-          }}>No courses created yet</h3>
-          <p style={{ color: '#6b7280' }}>Click the button above to create your first course.</p>
+          }}>No courses assigned yet</h3>
+          <p style={{ color: '#6b7280' }}>The administration has not assigned any courses to you yet.</p>
         </div>
       ) : (
         <div style={{
@@ -578,7 +515,7 @@ const TeacherCourses = () => {
                   </div>
                 </div>
                 
-                {/* Action Buttons */}
+                {/* Action Buttons - Live Button Removed, View Button Functional */}
                 <div style={{
                   display: 'flex',
                   gap: '8px',
@@ -586,8 +523,8 @@ const TeacherCourses = () => {
                   paddingTop: '16px',
                   borderTop: '1px solid #e5e7eb',
                 }} className="action-buttons">
-                  <Link
-                    to={`/courses/${course.id}`}
+                  <button
+                    onClick={() => openViewModal(course)}
                     style={{
                       flex: 1,
                       textAlign: 'center',
@@ -596,7 +533,8 @@ const TeacherCourses = () => {
                       color: '#374151',
                       borderRadius: '6px',
                       fontSize: '14px',
-                      textDecoration: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
                       transition: 'all 0.2s',
                       minWidth: '60px',
                     }}
@@ -605,7 +543,7 @@ const TeacherCourses = () => {
                   >
                     <Eye size={16} style={{ display: 'inline', marginRight: '4px' }} />
                     View
-                  </Link>
+                  </button>
                   
                   <button
                     onClick={() => openMaterialModal(course)}
@@ -650,28 +588,6 @@ const TeacherCourses = () => {
                     <Paperclip size={16} style={{ display: 'inline', marginRight: '4px' }} />
                     Assignments
                   </button>
-                  
-                  <button
-                    onClick={() => startLiveClass(course.id)}
-                    style={{
-                      flex: 1,
-                      textAlign: 'center',
-                      padding: '8px',
-                      background: '#22c55e',
-                      color: 'white',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      minWidth: '60px',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#16a34a'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = '#22c55e'}
-                  >
-                    <Video size={16} style={{ display: 'inline', marginRight: '4px' }} />
-                    Live
-                  </button>
                 </div>
               </div>
             </div>
@@ -679,8 +595,8 @@ const TeacherCourses = () => {
         </div>
       )}
 
-      {/* ============ CREATE COURSE MODAL ============ */}
-      {showCreateModal && (
+      {/* ============ VIEW COURSE DETAILS MODAL ============ */}
+      {showViewModal && selectedCourse && (
         <div style={{
           position: 'fixed',
           inset: 0,
@@ -689,12 +605,12 @@ const TeacherCourses = () => {
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1000,
-        }} onClick={() => setShowCreateModal(false)}>
+        }} onClick={() => setShowViewModal(false)}>
           <div style={{
             background: 'white',
             borderRadius: '12px',
             padding: '24px',
-            maxWidth: '500px',
+            maxWidth: '600px',
             width: '90%',
             maxHeight: '90vh',
             overflowY: 'auto',
@@ -703,15 +619,18 @@ const TeacherCourses = () => {
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: '16px',
+              marginBottom: '20px',
             }}>
               <h2 style={{
-                fontSize: '20px',
+                fontSize: '22px',
                 fontWeight: 'bold',
                 margin: 0,
-              }}>Create New Course</h2>
+                color: '#1e293b'
+              }}>
+                {selectedCourse.course_code} - {selectedCourse.title}
+              </h2>
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => setShowViewModal(false)}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -723,200 +642,68 @@ const TeacherCourses = () => {
                 <X size={24} />
               </button>
             </div>
-            <form onSubmit={handleCreateCourse}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{
-                  display: 'block',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  color: '#374151',
-                  marginBottom: '4px',
-                }}>Course Code *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g., CS101"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                  }}
-                  value={courseData.course_code}
-                  onChange={(e) => setCourseData({ ...courseData, course_code: e.target.value.toUpperCase() })}
-                />
+
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>Description</h3>
+              <p style={{ color: '#4b5563', fontSize: '15px', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+                {selectedCourse.description || 'No description provided for this course.'}
+              </p>
+            </div>
+
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: '1fr 1fr', 
+              gap: '16px',
+              background: '#f8fafc',
+              padding: '16px',
+              borderRadius: '8px',
+              marginBottom: '20px'
+            }}>
+              <div>
+                <span style={{ display: 'block', fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>Credit Hours</span>
+                <span style={{ fontWeight: 600, color: '#0f172a' }}>{selectedCourse.credit_hours} Hours</span>
               </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{
-                  display: 'block',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  color: '#374151',
-                  marginBottom: '4px',
-                }}>Course Title *</label>
-                <input
-                  type="text"
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                  }}
-                  value={courseData.title}
-                  onChange={(e) => setCourseData({ ...courseData, title: e.target.value })}
-                />
+              <div>
+                <span style={{ display: 'block', fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>Semester</span>
+                <span style={{ fontWeight: 600, color: '#0f172a' }}>Semester {selectedCourse.semester}</span>
               </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{
-                  display: 'block',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  color: '#374151',
-                  marginBottom: '4px',
-                }}>Description</label>
-                <textarea
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    minHeight: '80px',
-                    resize: 'vertical',
-                  }}
-                  value={courseData.description}
-                  onChange={(e) => setCourseData({ ...courseData, description: e.target.value })}
-                  placeholder="Course description..."
-                />
+              <div>
+                <span style={{ display: 'block', fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>Capacity</span>
+                <span style={{ fontWeight: 600, color: '#0f172a' }}>{selectedCourse.capacity} Students</span>
               </div>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '12px',
-                marginBottom: '16px',
-              }}>
-                <div>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    color: '#374151',
-                    marginBottom: '4px',
-                  }}>Credit Hours</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="6"
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                    }}
-                    value={courseData.credit_hours}
-                    onChange={(e) => setCourseData({ ...courseData, credit_hours: parseInt(e.target.value) })}
-                  />
-                </div>
-                <div>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    color: '#374151',
-                    marginBottom: '4px',
-                  }}>Capacity</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="200"
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                    }}
-                    value={courseData.capacity}
-                    onChange={(e) => setCourseData({ ...courseData, capacity: parseInt(e.target.value) })}
-                  />
-                </div>
+              <div>
+                <span style={{ display: 'block', fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>Enrolled</span>
+                <span style={{ fontWeight: 600, color: '#0f172a' }}>{selectedCourse.enrolled_count || 0} Students</span>
               </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{
-                  display: 'block',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  color: '#374151',
-                  marginBottom: '4px',
-                }}>Semester</label>
-                <select
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px',
-                    background: 'white',
-                  }}
-                  value={courseData.semester}
-                  onChange={(e) => setCourseData({ ...courseData, semester: e.target.value })}
-                >
-                  <option value="1">Semester 1</option>
-                  <option value="2">Semester 2</option>
-                  <option value="3">Semester 3</option>
-                  <option value="4">Semester 4</option>
-                  <option value="5">Semester 5</option>
-                  <option value="6">Semester 6</option>
-                  <option value="7">Semester 7</option>
-                  <option value="8">Semester 8</option>
-                </select>
+              <div>
+                <span style={{ display: 'block', fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>Status</span>
+                <span style={{ 
+                  fontWeight: 600, 
+                  color: selectedCourse.is_approved ? '#16a34a' : '#d97706' 
+                }}>
+                  {selectedCourse.is_approved ? 'Approved' : 'Pending Approval'}
+                </span>
               </div>
-              <div style={{
-                display: 'flex',
-                gap: '12px',
-                paddingTop: '16px',
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  style={{
-                    flex: 1,
-                    padding: '10px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    background: 'none',
-                    color: '#374151',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    flex: 1,
-                    padding: '10px',
-                    border: 'none',
-                    borderRadius: '6px',
-                    background: loading ? '#94a3b8' : '#2563eb',
-                    color: 'white',
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    opacity: loading ? 0.6 : 1,
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  {loading ? 'Creating...' : 'Create Course'}
-                </button>
-              </div>
-            </form>
+            </div>
+
+            <button
+              onClick={() => setShowViewModal(false)}
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: 'none',
+                borderRadius: '6px',
+                background: '#2563eb',
+                color: 'white',
+                cursor: 'pointer',
+                fontWeight: 500,
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
+              onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
