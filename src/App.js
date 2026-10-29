@@ -18,6 +18,7 @@ import Register from './pages/auth/Register';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import VerifyOTP from './pages/auth/VerifyOTP';
 import ResetPassword from './pages/auth/ResetPassword';
+import AdminLogin from './pages/admin/AdminLogin';
 
 // Student Pages
 import Dashboard from './pages/Student/Dashboard';
@@ -40,7 +41,7 @@ import LiveClass from './pages/LiveClass';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import TeacherCourses from './pages/teacher/TeacherCourses';
 import TeacherExams from './pages/teacher/TeacherExams';
-
+import Greading from './pages/teacher/Grading';
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 
@@ -52,7 +53,7 @@ import RegistrarDashboard from './pages/Registrar/RegistrarDashboard';
 
 // Department Head Pages
 import DeptDashboard from './pages/DepartmentHead/DeptDashboard';
-
+import EnrollFacePage from './pages/Student/EnrollFacePage'; 
 import ProtectedRoute from './components/common/ProtectedRoute';
 import AIInsights from './components/AI/AIInsights';
 import Leaderboard from './components/Gamification/Leaderboard';
@@ -65,6 +66,11 @@ import LanguageSelector from './components/i18n/LanguageSelector';
 import CurrencySelector from './components/Payment/CurrencySelector';
 // Inner component that uses dark mode context
 import SessionTimeout from './components/SessionTimeout';
+import Grading from './pages/teacher/Grading';
+import StartExam from './pages/Student/StartExam'; 
+import ExamPage from './pages/Student/ExamPage';
+
+
 const AppContent = () => {
   const { isDarkMode, toggleDarkMode } = useDarkMode();
 
@@ -113,6 +119,16 @@ const AppContent = () => {
                 </>
               }
             />
+            {/* ✅ ADDED ADMIN LOGIN ROUTE */}
+            <Route
+              path="/admin-login"
+              element={
+                <>
+                  <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
+                  <AdminLogin />
+                </>
+              }
+            />
             <Route
               path="/register"
               element={
@@ -157,8 +173,20 @@ const AppContent = () => {
               <Route path="/courses" element={<ProtectedRouteWithPayment roles={['STUDENT']}><Courses /></ProtectedRouteWithPayment>} />
               <Route path="/courses/:id" element={<ProtectedRouteWithPayment roles={['STUDENT']}><CourseDetail /></ProtectedRouteWithPayment>} />
               <Route path="/exams" element={<ProtectedRouteWithPayment roles={['STUDENT']}><Exams /></ProtectedRouteWithPayment>} />
-              <Route path="/exams/:id/take" element={<ProtectedRouteWithPayment roles={['STUDENT']}><TakeExam /></ProtectedRouteWithPayment>} />
-              <Route path="/exams/:id/details" element={<ProtectedRouteWithPayment roles={['STUDENT']}><ExamDetails /></ProtectedRouteWithPayment>} />
+              
+              {/* ✅ THE SECURE EXAM ROUTES */}
+              
+              {/* 1. View Exam Details (Read Only) */}
+              <Route path="/exams/:examId/details" element={<ProtectedRouteWithPayment roles={['STUDENT']}><ExamDetails /></ProtectedRouteWithPayment>} />
+              
+              {/* 2. SECURE START EXAM (Identity Verification Gatekeeper) */}
+              <Route path="/exams/:examId/start" element={<ProtectedRouteWithPayment roles={['STUDENT']}><StartExam /></ProtectedRouteWithPayment>} />
+
+              {/* 3. THE ACTUAL EXAM PAGE (Questions + AI Proctor) */}
+              {/* ✅ FIXED: Points to ExamPage instead of the old TakeExam */}
+              <Route path="/exams/:examId/take" element={<ProtectedRouteWithPayment roles={['STUDENT']}><ExamPage /></ProtectedRouteWithPayment>} />
+
+              {/* Results & Others */}
               <Route path="/results" element={<ProtectedRoute roles={['STUDENT']}><ExamResults /></ProtectedRoute>} />
               <Route path="/payments" element={<ProtectedRoute roles={['STUDENT']}><Payments /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
@@ -166,12 +194,14 @@ const AppContent = () => {
               <Route path="/upload-documents" element={<ProtectedRoute roles={['STUDENT']}><DocumentUpload /></ProtectedRoute>} />
               <Route path="/assignment-results" element={<ProtectedRoute roles={['STUDENT']}><AssignmentResults /></ProtectedRoute>} />
               <Route path="/live-class/:courseId" element={<ProtectedRouteWithPayment roles={['STUDENT', 'TEACHER']}><LiveClass /></ProtectedRouteWithPayment>} />
-
+              <Route path="/enroll-face" element={<ProtectedRoute roles={['STUDENT', 'TEACHER']}><EnrollFacePage /></ProtectedRoute>} />
+              
               {/* Teacher Routes */}
               <Route path="/teacher/dashboard" element={<ProtectedRoute roles={['TEACHER']}><TeacherDashboard /></ProtectedRoute>} />
               <Route path="/teacher/courses" element={<ProtectedRoute roles={['TEACHER']}><TeacherCourses /></ProtectedRoute>} />
               <Route path="/teacher/exams" element={<ProtectedRoute roles={['TEACHER']}><TeacherExams /></ProtectedRoute>} />
-
+              <Route path="/teacher/grade/:type/:id" element={<Grading />} />
+              
               {/* Admin Routes */}
               <Route path="/admin/dashboard" element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
               <Route path="/admin/proctoring-review" element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
@@ -184,23 +214,23 @@ const AppContent = () => {
 
               {/* Department Head Routes */}
               <Route path="/dept/dashboard" element={<ProtectedRoute roles={['DEPT_HEAD']}><DeptDashboard /></ProtectedRoute>} />
+
+              {/* AI & Gamification Routes */}
+              <Route path="/ai-insights" element={<ProtectedRoute roles={['STUDENT']}><AIInsights /></ProtectedRoute>} />
+              <Route path="/leaderboard" element={<ProtectedRoute roles={['STUDENT']}><Leaderboard /></ProtectedRoute>} />
+              <Route path="/learning-path" element={<ProtectedRoute roles={['STUDENT']}><AILearningPath /></ProtectedRoute>} />
+              <Route path="/gamification" element={<ProtectedRoute roles={['STUDENT']}><GamificationProfile /></ProtectedRoute>} />
+              <Route path="/certificates" element={<ProtectedRouteWithPayment roles={['STUDENT']}><CertificateViewer /></ProtectedRouteWithPayment>} />
+              <Route path="/predictions" element={<ProtectedRoute roles={['STUDENT']}><PerformancePrediction /></ProtectedRoute>} />
+              <Route path="/admin/analytics" element={<ProtectedRoute roles={['ADMIN']}><RealTimeDashboard /></ProtectedRoute>} />
             </Route>
 
+            {/* ✅ CATCH-ALL MUST BE THE VERY LAST ROUTE */}
             <Route path="*" element={<Navigate to="/" replace />} />
-  <Route path="/ai-insights" element={<ProtectedRoute roles={['STUDENT']}><AIInsights /></ProtectedRoute>} />
-  <Route path="/leaderboard" element={<ProtectedRoute roles={['STUDENT']}><Leaderboard /></ProtectedRoute>} />
-  <Route path="/learning-path" element={<ProtectedRoute roles={['STUDENT']}><AILearningPath /></ProtectedRoute>} />
-  <Route path="/gamification" element={<ProtectedRoute roles={['STUDENT']}><GamificationProfile /></ProtectedRoute>} />
-  <Route path="/certificates" element={<ProtectedRouteWithPayment roles={['STUDENT']}><CertificateViewer /></ProtectedRouteWithPayment>} />
-  <Route path="/predictions" element={<ProtectedRoute roles={['STUDENT']}><PerformancePrediction /></ProtectedRoute>} />
-  <Route path="/admin/analytics" element={<ProtectedRoute roles={['ADMIN']}><RealTimeDashboard /></ProtectedRoute>} />
 
           </Routes>
 
           {/* ============ REAL CHAT WIDGET ============ */}
-          {/* Available on ALL pages for ALL authenticated roles */}
-          {/* This is OUTSIDE <Routes> but INSIDE <Router> so it's always mounted */}
-          {/* It works even when system is locked because it's mounted independently */}
           <ChatWidget />
           </SessionTimeout>
         </Router>

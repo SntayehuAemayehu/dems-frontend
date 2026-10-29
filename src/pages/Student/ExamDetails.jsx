@@ -244,7 +244,8 @@ const ExamDetails = () => {
           </div>
         ) : (
           <button
-            onClick={() => navigate(`/exams/${exam.id}/take`)}
+            // ✅ FIX: Route to the secure StartExam gatekeeper instead of the old TakeExam
+            onClick={() => navigate(`/exams/${exam.id}/start`)}
             style={{
               display: 'flex',
               alignItems: 'center',

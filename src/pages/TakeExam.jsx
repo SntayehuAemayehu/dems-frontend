@@ -15,7 +15,7 @@ import { startExam, submitExam } from '../store/slices/examSlice';
 import api from '../api/api';
 import AIProctor from '../components/Proctoring/AIProctor';
 import { useVideoRecorder } from '../hooks/useVideoRecorder';
-import './TakeExam.css';
+// ✅ Note: We removed the import for './TakeExam.css' because all styles are now inside the <style> tag below.
 
 const TakeExam = () => {
   const { id } = useParams();
@@ -1042,6 +1042,93 @@ const TakeExam = () => {
   if (!examStarted) {
     return (
       <div className="start-exam-container">
+        {/* ✅ ADDED: The missing CSS for the Start Screen */}
+        <style>{`
+          .start-exam-container {
+            min-height: 100vh;
+            background: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+          }
+          .start-exam-card {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+          }
+          .start-exam-content {
+            text-align: center;
+          }
+          .start-exam-icon {
+            width: 64px;
+            height: 64px;
+            color: #f59e0b;
+            margin: 0 auto 16px;
+          }
+          .start-exam-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: #0f172a;
+          }
+          .instructions-list {
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            color: #475569;
+            margin-bottom: 24px;
+            padding-left: 0;
+            list-style: none;
+          }
+          .instruction-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+          }
+          .instruction-item::before {
+            content: '•';
+            color: #3b82f6;
+            font-weight: bold;
+            font-size: 18px;
+          }
+          .camera-preview {
+            margin-bottom: 24px;
+          }
+          .camera-label {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 8px;
+          }
+          .camera-video {
+            border-radius: 8px;
+            background: #0f172a;
+            margin: 0 auto;
+            max-width: 100%;
+          }
+          .start-exam-btn {
+            width: 100%;
+            padding: 14px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+          }
+          .start-exam-btn:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+          }
+        `}</style>
+
         <div className="start-exam-card">
           <div className="start-exam-content">
             <ShieldAlert className="start-exam-icon" />
@@ -1107,6 +1194,95 @@ const TakeExam = () => {
   return (
     <div className="exam-container">
       <style>{`
+        /* ============================================================
+           START EXAM SCREEN (Merged from TakeExam.css)
+           ============================================================ */
+        .start-exam-container {
+          min-height: 100vh;
+          background: #f1f5f9;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+        }
+        .start-exam-card {
+          background: white;
+          border-radius: 16px;
+          padding: 40px;
+          max-width: 480px;
+          width: 100%;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+        }
+        .start-exam-content {
+          text-align: center;
+        }
+        .start-exam-icon {
+          width: 64px;
+          height: 64px;
+          color: #f59e0b;
+          margin: 0 auto 16px;
+        }
+        .start-exam-title {
+          font-size: 24px;
+          font-weight: 700;
+          margin-bottom: 16px;
+          color: #0f172a;
+        }
+        .instructions-list {
+          text-align: left;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          color: #475569;
+          margin-bottom: 24px;
+          padding-left: 0;
+        }
+        .instruction-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 0;
+        }
+        .instruction-item::before {
+          content: '•';
+          color: #3b82f6;
+          font-weight: bold;
+          font-size: 18px;
+        }
+        .camera-preview {
+          margin-bottom: 24px;
+        }
+        .camera-label {
+          font-size: 14px;
+          color: #64748b;
+          margin-bottom: 8px;
+        }
+        .camera-video {
+          border-radius: 8px;
+          background: #0f172a;
+          margin: 0 auto;
+          max-width: 100%;
+        }
+        .start-exam-btn {
+          width: 100%;
+          padding: 14px;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 16px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+        }
+        .start-exam-btn:hover {
+          background: #2563eb;
+          transform: translateY(-2px);
+        }
+
+        /* ============================================================
+           EXAM TAKING SCREEN (Merged from TakeExam.css)
+           ============================================================ */
         .exam-header {
           position: fixed;
           top: 0;

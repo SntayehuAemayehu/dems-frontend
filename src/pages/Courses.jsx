@@ -5,7 +5,6 @@ import { Link } from 'react-router-dom';
 import { Search, Filter, BookOpen, Users, Clock } from 'lucide-react';
 import { fetchCourses, enrollCourse, fetchEnrollments } from '../store/slices/courseSlice';
 import toast from 'react-hot-toast';
-import './Courses.css';
 const Courses = () => {
   const dispatch = useDispatch();
   const { courses, enrollments, isLoading } = useSelector((state) => state.courses);

@@ -1,1072 +1,1000 @@
 // frontend/src/components/Chat/ChatWidget.jsx
-// COMPLETE FIXED - No infinite loading loop, fixed toast error
+// COMPLETE REAL CHAT — WhatsApp/Messenger-style
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSelector } from 'react-redux';
-import { 
-  MessageSquare, X, Send, Users, User, 
-  RefreshCw, ChevronLeft, Plus, Search,
-  UserPlus, Loader
+import {
+  MessageSquare, X, Send, Users, User, RefreshCw, ChevronLeft,
+  Plus, Search, UserPlus, Loader, Trash2, Pencil, Check, CheckCheck,
+  Paperclip, Image as ImageIcon, Smile, MoreVertical, ArrowDown,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
 
+// ---------- small helpers ----------
+const sameDay = (a, b) => {
+  const da = new Date(a), db = new Date(b);
+  return da.getFullYear() === db.getFullYear()
+    && da.getMonth() === db.getMonth()
+    && da.getDate() === db.getDate();
+};
+
+const dayLabel = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  if (sameDay(d, now)) return 'Today';
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (sameDay(d, y)) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatTime = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const formatRelative = (iso) => {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return 'Just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return new Date(iso).toLocaleDateString();
+};
+
+// =========================================================
+//  CHAT WIDGET
+// =========================================================
 const ChatWidget = () => {
-  const { user, isAuthenticated } = useSelector((state) => state.auth || {});
-  
+  const { user, isAuthenticated } = useSelector((s) => s.auth || {});
+
+  // ------- state -------
   const [isOpen, setIsOpen] = useState(false);
   const [rooms, setRooms] = useState([]);
   const [messages, setMessages] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [messageInput, setMessageInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingRooms, setLoadingRooms] = useState(false);
   const [sending, setSending] = useState(false);
   const [users, setUsers] = useState([]);
   const [showUserList, setShowUserList] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [messageSearch, setMessageSearch] = useState('');
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [statuses, setStatuses] = useState({});
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [typingUsers, setTypingUsers] = useState({}); // roomId -> {userId: name}
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-  const [userListError, setUserListError] = useState(null);
-  const [initialUsersLoaded, setInitialUsersLoaded] = useState(false); // ✅ PREVENT LOOP
-  
+  const [initialUsersLoaded, setInitialUsersLoaded] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [showScrollDown, setShowScrollDown] = useState(false);
+
+  // ------- refs -------
   const messagesEndRef = useRef(null);
+  const messagesScrollRef = useRef(null);
   const inputRef = useRef(null);
-  const isMounted = useRef(true);
+  const selectedRoomIdRef = useRef(null);
+  const pollingRef = useRef(null);
+  const lastMessageIdRef = useRef(null);
 
-  // ============ SCROLL TO BOTTOM ============
-  const scrollToBottom = useCallback(() => {
-    setTimeout(() => {
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-    }, 100);
-  }, []);
+  // keep selected room id in a ref for polling
+  useEffect(() => {
+    selectedRoomIdRef.current = selectedRoom?.id ?? null;
+  }, [selectedRoom]);
 
-  // ============ MARK MESSAGES AS READ ============
+  // =========================================================
+  //  API helpers
+  // =========================================================
   const markMessagesAsRead = useCallback(async (roomId) => {
-    if (!isAuthenticated || !user || !roomId) return;
-    
+    if (!isAuthenticated || !roomId) return;
     try {
       await api.post(`/chat/rooms/${roomId}/read/`);
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error('Failed to mark messages as read:', error);
+      setRooms((prev) =>
+        (prev || []).map((r) => (r.id === roomId ? { ...r, unread_count: 0 } : r))
+      );
+    } catch (e) {
+      /* silent */
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated]);
 
-  // ============ FETCH MESSAGES ============
-  const fetchMessages = useCallback(async (roomId) => {
-    if (!isAuthenticated || !user || !roomId) {
-      setMessages([]);
-      return;
-    }
-    
+  const fetchMessages = useCallback(async (roomId, { silent = false } = {}) => {
+    if (!isAuthenticated || !roomId) return;
+    if (!silent) setLoadingMessages(true);
     try {
-      setLoading(true);
-      const response = await api.get(`/chat/rooms/${roomId}/messages/`);
-      const messagesData = Array.isArray(response.data) ? response.data : [];
-      setMessages(messagesData);
+      const res = await api.get(`/chat/rooms/${roomId}/messages/`);
+      const list = Array.isArray(res.data) ? res.data : [];
+      // newest first from backend → reverse for top-to-bottom
+      const ordered = [...list].reverse();
+      setMessages(ordered);
+
+      const newest = ordered[ordered.length - 1];
+      if (newest && newest.id !== lastMessageIdRef.current) {
+        lastMessageIdRef.current = newest.id;
+        // only auto-scroll if user is near bottom
+        const el = messagesScrollRef.current;
+        const nearBottom = el
+          ? el.scrollHeight - el.scrollTop - el.clientHeight < 150
+          : true;
+        if (nearBottom || !silent) scrollToBottom();
+      }
       await markMessagesAsRead(roomId);
-      scrollToBottom();
-    } catch (error) {
-      console.error('Failed to fetch messages:', error);
-      setMessages([]);
+    } catch (e) {
+      if (!silent) setMessages([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoadingMessages(false);
     }
-  }, [isAuthenticated, user, markMessagesAsRead, scrollToBottom]);
-
-  // ============ FETCH CHAT ROOMS ============
+  }, [isAuthenticated, markMessagesAsRead]);
   const fetchRooms = useCallback(async () => {
-    if (!isAuthenticated || !user) {
-      setRooms([]);
-      return;
-    }
-    
+    if (!isAuthenticated || !user) return;
+    setLoadingRooms(true);
     try {
-      const response = await api.get('/chat/rooms/');
-      const roomsData = Array.isArray(response.data) ? response.data : [];
-      setRooms(roomsData);
-      
-      const unread = roomsData.reduce((total, room) => {
-        return total + (room.unread_count || 0);
-      }, 0);
-      setUnreadCount(unread);
-      
-      if (!selectedRoom && roomsData.length > 0) {
-        setSelectedRoom(roomsData[0]);
-        fetchMessages(roomsData[0].id);
-      }
-    } catch (error) {
-      console.error('Failed to fetch chat rooms:', error);
+      const res = await api.get('/chat/rooms/');
+      const list = Array.isArray(res.data) ? res.data : [];
+      setRooms(list);
+      const total = list.reduce((t, r) => t + (r.unread_count || 0), 0);
+      setUnreadCount(total);
+    } catch (e) {
+      console.error("Failed to fetch rooms", e);
       setRooms([]);
+    } finally {
+      setLoadingRooms(false); // ✅ Forces loader to stop
     }
-  }, [isAuthenticated, user, selectedRoom, fetchMessages]);
+  }, [isAuthenticated, user]); // ✅ Dependencies fixed
 
-  // ============ GET MOCK USERS ============
-  const getMockUsers = useCallback(() => {
-    const currentUserEmail = user?.email || '';
-    const currentUserId = user?.id || 0;
-    
-    const mockUsers = [
-      { id: 1, user: 1, full_name: 'Admin User', email: 'admin@dems.com', role: 'ADMIN', status: 'ONLINE' },
-      { id: 2, user: 2, full_name: 'Dr. Abebe Kebede', email: 'abebe@dems.com', role: 'TEACHER', status: 'ONLINE' },
-      { id: 3, user: 3, full_name: 'Betelehem Tesfaye', email: 'bete@dems.com', role: 'STUDENT', status: 'ONLINE' },
-      { id: 4, user: 4, full_name: 'Chala Desta', email: 'chala@dems.com', role: 'STUDENT', status: 'OFFLINE' },
-      { id: 5, user: 5, full_name: 'Finance Officer', email: 'finance@dems.com', role: 'FINANCE', status: 'ONLINE' },
-      { id: 6, user: 6, full_name: 'Registrar', email: 'registrar@dems.com', role: 'REGISTRAR', status: 'OFFLINE' },
-      { id: 7, user: 7, full_name: 'Dr. Selamawit Ayana', email: 'selamawit@dems.com', role: 'DEPT_HEAD', status: 'ONLINE' },
-      { id: 8, user: 8, full_name: 'Dr. Kidist Genet', email: 'kidist@dems.com', role: 'TEACHER', status: 'ONLINE' },
-      { id: 9, user: 9, full_name: 'Yosef Teshome', email: 'yosef@dems.com', role: 'STUDENT', status: 'OFFLINE' },
-      { id: 10, user: 10, full_name: 'Yeshalem Genet', email: 'yeshalem@dems.com', role: 'STUDENT', status: 'ONLINE' },
-    ];
-    
-    return mockUsers.filter(u => 
-      u.id !== currentUserId && 
-      u.email !== currentUserEmail
-    );
-  }, [user]);
-
-  // ============ FETCH ALL USERS - FIXED ============
   const fetchUsers = useCallback(async () => {
-    // ✅ PREVENT INFINITE LOOP: Skip if already loaded
-    if (initialUsersLoaded && users.length > 0) {
-      console.log('ℹ️ Users already loaded, skipping fetch');
-      return;
-    }
-    
-    if (!isAuthenticated || !user) {
-      setUsers([]);
-      setUserListError('Please login to see users');
-      return;
-    }
-    
+    if (!isAuthenticated || !user || initialUsersLoaded) return;
     setIsLoadingUsers(true);
-    setUserListError(null);
-    
     try {
-      console.log('📡 Fetching users for chat...');
-      
-      let usersData = [];
-      let apiSuccess = false;
-      
+      let data = [];
       try {
-        const response = await api.get('/chat/status/all/');
-        if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-          usersData = response.data;
-          apiSuccess = true;
-          console.log('✅ Users loaded from API:', usersData.length);
-        }
-      } catch (statusError) {
-        console.log('⚠️ Status endpoint failed:', statusError.response?.status);
+        const res = await api.get('/chat/status/all/');
+        data = Array.isArray(res.data) ? res.data : [];
+      } catch {
+        const res = await api.get('/auth/users/');
+        data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
       }
-      
-      if (!apiSuccess || usersData.length === 0) {
-        console.log('📋 Using mock users for testing...');
-        usersData = getMockUsers();
-        // ✅ FIXED: Use toast.success instead of toast.info
-        toast.success('📋 Demo mode - Sample users loaded', { duration: 3000 });
-      }
-      
-      const filteredUsers = usersData.filter(u => {
-        const userId = u.user || u.id;
-        const userEmail = u.email || '';
-        return userId !== user?.id && userEmail !== user?.email;
-      });
-      
-      setUsers(filteredUsers);
-      setInitialUsersLoaded(true); // ✅ Mark as loaded
-      console.log(`✅ Loaded ${filteredUsers.length} users for chat`);
-      
-    } catch (error) {
-      console.error('❌ Failed to fetch users:', error);
-      const mockUsers = getMockUsers();
-      setUsers(mockUsers);
-      setInitialUsersLoaded(true); // ✅ Mark as loaded even on error
-      toast.success('📋 Demo mode - Sample users loaded', { duration: 3000 });
+      const filtered = data.filter((u) => (u.user || u.id) !== user?.id);
+      setUsers(filtered);
+      setInitialUsersLoaded(true);
+    } catch (e) {
+      console.error(e);
     } finally {
       setIsLoadingUsers(false);
     }
-  }, [isAuthenticated, user, getMockUsers, users.length, initialUsersLoaded]);
+  }, [isAuthenticated, user, initialUsersLoaded]);
 
-  // ============ FETCH STATUSES ============
   const fetchStatuses = useCallback(async () => {
-    if (!isAuthenticated || !user) {
-      setStatuses({});
-      return;
-    }
-    
+    if (!isAuthenticated) return;
     try {
-      const response = await api.get('/chat/status/all/');
-      const statusMap = {};
-      const dataArray = Array.isArray(response.data) ? response.data : [];
-      dataArray.forEach(s => {
-        statusMap[s.user] = s;
+      const res = await api.get('/chat/status/all/');
+      const map = {};
+      (Array.isArray(res.data) ? res.data : []).forEach((s) => {
+        map[s.user] = s;
       });
-      setStatuses(statusMap);
-    } catch (error) {
-      console.error('Failed to fetch statuses:', error);
-      const defaultStatuses = {};
-      users.forEach(u => {
-        defaultStatuses[u.user || u.id] = { status: 'ONLINE' };
-      });
-      setStatuses(defaultStatuses);
+      setStatuses(map);
+    } catch {
+      // silent
     }
-  }, [isAuthenticated, user, users]);
+  }, [isAuthenticated]);
 
-  // ============ SEND MESSAGE ============
-  const sendMessage = useCallback(async () => {
-    if (!messageInput.trim() || !selectedRoom || !isAuthenticated) return;
-    
+
+  // =========================================================
+  //  Actions
+  // =========================================================
+  const scrollToBottom = useCallback((smooth = true) => {
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: smooth ? 'smooth' : 'auto',
+        block: 'end',
+      });
+    });
+  }, []);
+
+  const sendMessage = useCallback(async (overrideText) => {
+    const text = (overrideText ?? messageInput).trim();
+    if (!text || !selectedRoom || sending) return;
+
     setSending(true);
+
+    // optimistic
+    const tempId = `tmp-${Date.now()}`;
+    const optimistic = {
+      id: tempId,
+      sender: user.id,
+      sender_name: user.full_name,
+      content: text,
+      message_type: 'TEXT',
+      created_at: new Date().toISOString(),
+      is_read: false,
+      _optimistic: true,
+    };
+    setMessages((prev) => [...(prev || []), optimistic]);
+    setMessageInput('');
+    scrollToBottom();
+
     try {
-      const response = await api.post(`/chat/rooms/${selectedRoom.id}/messages/`, {
-        content: messageInput.trim(),
-        message_type: 'TEXT'
+      const res = await api.post(`/chat/rooms/${selectedRoom.id}/messages/`, {
+        content: text,
+        message_type: 'TEXT',
       });
-      
-      setMessages(prev => [response.data, ...(Array.isArray(prev) ? prev : [])]);
-      setMessageInput('');
-      scrollToBottom();
-      
-      setRooms(prev => {
-        const roomsArray = Array.isArray(prev) ? prev : [];
-        return roomsArray.map(room => 
-          room.id === selectedRoom.id 
-            ? { ...room, last_message: response.data, updated_at: new Date().toISOString() }
-            : room
+      setMessages((prev) =>
+        (prev || []).map((m) => (m.id === tempId ? res.data : m))
+      );
+      lastMessageIdRef.current = res.data.id;
+      // bump room order
+      setRooms((prev) => {
+        const list = Array.isArray(prev) ? prev : [];
+        const updated = list.map((r) =>
+          r.id === selectedRoom.id
+            ? { ...r, last_message: res.data, updated_at: res.data.created_at }
+            : r
         );
+        updated.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+        return updated;
       });
-    } catch (error) {
-      if (error.response?.status === 401) {
-        toast.error('Please login to send messages');
-      } else {
-        toast.error('Failed to send message');
-      }
+      // notify typing off
+      api.post(`/chat/rooms/${selectedRoom.id}/typing/`, { is_typing: false }).catch(() => {});
+    } catch (err) {
+      setMessages((prev) => (prev || []).filter((m) => m.id !== tempId));
+      toast.error(err.response?.data?.error || 'Failed to send message');
+      setMessageInput(text);
     } finally {
       setSending(false);
+      inputRef.current?.focus();
     }
-  }, [messageInput, selectedRoom, isAuthenticated, scrollToBottom]);
+  }, [messageInput, selectedRoom, sending, user, scrollToBottom]);
 
-  // ============ CREATE PRIVATE ROOM ============
+  const deleteMessage = useCallback(async (msg) => {
+    if (!msg || msg._optimistic) return;
+    if (!window.confirm('Delete this message for everyone?')) return;
+    try {
+      await api.delete(`/chat/messages/${msg.id}/`);
+      setMessages((prev) => (prev || []).filter((m) => m.id !== msg.id));
+      toast.success('Message deleted');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete message');
+    }
+  }, []);
+
+  const saveEdit = useCallback(async (msg, newContent) => {
+    const text = newContent.trim();
+    if (!text || text === msg.content) {
+      setEditingMessage(null);
+      return;
+    }
+    try {
+      const res = await api.patch(`/chat/messages/${msg.id}/`, { content: text });
+      setMessages((prev) =>
+        (prev || []).map((m) => (m.id === msg.id ? res.data : m))
+      );
+      setEditingMessage(null);
+      toast.success('Message updated');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to edit message');
+    }
+  }, []);
+
+  const sendTyping = useCallback(
+    debounceAsync(async (isTyping) => {
+      if (!selectedRoom) return;
+      try {
+        await api.post(`/chat/rooms/${selectedRoom.id}/typing/`, { is_typing: isTyping });
+      } catch { /* silent */ }
+    }, 400),
+    [selectedRoom]
+  );
+
   const createPrivateRoom = useCallback(async (userId) => {
     if (!isAuthenticated || !user) {
       toast.error('Please login to start a chat');
       return;
     }
-    
     try {
-      const response = await api.post('/chat/private-room/', { user_id: userId });
-      setRooms(prev => [response.data, ...(Array.isArray(prev) ? prev : [])]);
-      setSelectedRoom(response.data);
-      fetchMessages(response.data.id);
+      const res = await api.post('/chat/private-room/', { user_id: userId });
+      const room = res.data;
+      setRooms((prev) => {
+        const list = Array.isArray(prev) ? prev : [];
+        return list.some((r) => r.id === room.id) ? list : [room, ...list];
+      });
+      setSelectedRoom(room);
+      await fetchMessages(room.id);
       setShowUserList(false);
-      toast.success('Chat started!');
-    } catch (error) {
-      const userObj = users.find(u => (u.user || u.id) === userId);
-      const userName = userObj?.full_name || `User ${userId}`;
-      const mockRoom = {
-        id: Date.now(),
-        name: `Chat with ${userName}`,
-        room_type: 'PRIVATE',
-        participants: [user.id, userId],
-        participants_info: [{ id: userId, full_name: userName }],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      setRooms(prev => [mockRoom, ...(Array.isArray(prev) ? prev : [])]);
-      setSelectedRoom(mockRoom);
-      setMessages([]);
-      setShowUserList(false);
-      toast.success(`Chat started with ${userName}! (Demo mode)`);
+      setSearchTerm('');
+      toast.success('Chat opened');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to start chat');
     }
-  }, [isAuthenticated, user, fetchMessages, users]);
+  }, [isAuthenticated, user, fetchMessages]);
 
-  // ============ EFFECTS - FIXED ============
+  const uploadAttachment = useCallback(async (file) => {
+    if (!file || !selectedRoom) return;
+    const form = new FormData();
+    form.append('content', file.name);
+    form.append('message_type', file.type.startsWith('image/') ? 'IMAGE' : 'FILE');
+    form.append('file', file);
+    setSending(true);
+    try {
+      const res = await api.post(`/chat/rooms/${selectedRoom.id}/messages/`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setMessages((prev) => [...(prev || []), res.data]);
+      scrollToBottom();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to upload');
+    } finally {
+      setSending(false);
+    }
+  }, [selectedRoom, scrollToBottom]);
+
+  // =========================================================
+  //  Polling loop
+  // =========================================================
   useEffect(() => {
-    isMounted.current = true;
-    
-    if (isOpen && isAuthenticated && user) {
+    if (!isOpen || !isAuthenticated || !user) return;
+
+    fetchRooms();
+    fetchStatuses();
+    fetchUsers();
+
+    const tick = () => {
+      const rid = selectedRoomIdRef.current;
+      if (rid) fetchMessages(rid, { silent: true });
       fetchRooms();
       fetchStatuses();
-      // ✅ Only fetch users if not already loaded
-      if (!initialUsersLoaded) {
-        fetchUsers();
-      }
-    }
-    
-    const interval = setInterval(() => {
-      if (isOpen && selectedRoom && isAuthenticated) {
-        fetchMessages(selectedRoom.id);
-      }
-      if (isOpen && isAuthenticated) {
-        fetchRooms();
-      }
-    }, 15000);
-    
-    return () => {
-      isMounted.current = false;
-      clearInterval(interval);
     };
-  }, [isOpen, selectedRoom, isAuthenticated, user, fetchRooms, fetchMessages, fetchStatuses, fetchUsers, initialUsersLoaded]);
 
-  // ============ GET USER STATUS ============
-  const getUserStatus = (userId) => {
-    const status = statuses[userId];
-    if (!status) return 'ONLINE';
-    return status.status || 'ONLINE';
+    pollingRef.current = setInterval(tick, 3000);
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [isOpen, isAuthenticated, user]);
+
+  // typing indicator (fake — turn off after 3s)
+  useEffect(() => {
+    if (!selectedRoom) return;
+    const t = setInterval(() => {
+      setTypingUsers((prev) => {
+        const next = { ...prev };
+        const roomTyping = next[selectedRoom.id];
+        if (roomTyping) {
+          Object.keys(roomTyping).forEach((uid) => {
+            if (Date.now() - roomTyping[uid].ts > 4000) delete roomTyping[uid];
+          });
+          if (Object.keys(roomTyping).length === 0) delete next[selectedRoom.id];
+        }
+        return next;
+      });
+    }, 1500);
+    return () => clearInterval(t);
+  }, [selectedRoom]);
+
+  // track scroll position for "scroll to bottom" button
+  const onMessagesScroll = () => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollDown(dist > 250);
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'ONLINE': return '#22c55e';
-      case 'AWAY': return '#f59e0b';
-      case 'BUSY': return '#dc2626';
-      default: return '#94a3b8';
-    }
-  };
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'ONLINE': return 'Online';
-      case 'AWAY': return 'Away';
-      case 'BUSY': return 'Busy';
-      default: return 'Offline';
-    }
-  };
-
-  const formatTime = (dateStr) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now - date;
-    
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-    return date.toLocaleDateString();
-  };
-
-  const getFilteredUsers = () => {
-    const usersArray = Array.isArray(users) ? users : [];
-    const searchLower = searchTerm.toLowerCase();
-    return usersArray.filter(u => {
-      const name = u.full_name || '';
-      const email = u.email || '';
-      return name.toLowerCase().includes(searchLower) || 
-             email.toLowerCase().includes(searchLower);
+  // =========================================================
+  //  Derived data
+  // =========================================================
+  const filteredUsers = useMemo(() => {
+    const q = searchTerm.toLowerCase();
+    return (users || []).filter((u) => {
+      const name = (u.full_name || u.user?.full_name || '').toLowerCase();
+      const email = (u.email || u.user?.email || '').toLowerCase();
+      return !q || name.includes(q) || email.includes(q);
     });
-  };
+  }, [users, searchTerm]);
 
-  // ============ RENDER CHAT BUTTON ============
-  const renderChatButton = () => {
-    if (!isAuthenticated || !user) return null;
-    
+  const filteredMessages = useMemo(() => {
+    if (!messageSearch.trim()) return messages;
+    const q = messageSearch.toLowerCase();
+    return (messages || []).filter((m) => (m.content || '').toLowerCase().includes(q));
+  }, [messages, messageSearch]);
+
+  const roomTitle = useCallback((room) => {
+    if (!room) return 'Chat';
+    if (room.name) return room.name;
+    const others = (room.participants_info || []).filter((p) => p.id !== user?.id);
+    if (others.length) return others.map((p) => p.full_name).join(', ');
+    return room.room_type === 'PRIVATE' ? 'Private Chat' : 'Group Chat';
+  }, [user]);
+
+  const roomAvatar = useCallback((room) => {
+    const others = (room.participants_info || []).filter((p) => p.id !== user?.id);
+    const person = others[0];
+    return person?.full_name?.charAt(0)?.toUpperCase() || '#';
+  }, [user]);
+
+  const statusFor = useCallback((userId) => {
+    const s = statuses[userId];
+    return s?.status || 'OFFLINE';
+  }, [statuses]);
+
+  const statusColor = (s) => ({
+    ONLINE: '#22c55e',
+    AWAY: '#f59e0b',
+    BUSY: '#dc2626',
+    OFFLINE: '#94a3b8',
+  }[s] || '#94a3b8');
+
+  // =========================================================
+  //  Render
+  // =========================================================
+  // Floating button (closed state)
+  if (!isAuthenticated || !user) return null;
+
+  if (!isOpen) {
     return (
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setIsOpen(true)}
         style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          width: '60px',
-          height: '60px',
+          position: 'fixed', bottom: 24, right: 24, width: 62, height: 62,
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-          color: 'white',
-          border: 'none',
-          cursor: 'pointer',
-          boxShadow: '0 8px 24px rgba(37, 99, 235, 0.4)',
-          zIndex: 999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'all 0.3s ease',
+          color: '#fff', border: 'none', cursor: 'pointer',
+          boxShadow: '0 8px 24px rgba(37,99,235,0.4)',
+          zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'scale(1.1)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'scale(1)';
-        }}
+        title="Open chat"
       >
-        {isOpen ? (
-          <X size={28} />
-        ) : (
-          <>
-            <MessageSquare size={28} />
-            {unreadCount > 0 && (
-              <span style={{
-                position: 'absolute',
-                top: '-4px',
-                right: '-4px',
-                background: '#dc2626',
-                color: 'white',
-                fontSize: '12px',
-                fontWeight: 700,
-                minWidth: '20px',
-                height: '20px',
-                borderRadius: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '0 4px',
-              }}>
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            )}
-          </>
+        <MessageSquare size={28} />
+        {unreadCount > 0 && (
+          <span style={{
+            position: 'absolute', top: -4, right: -4,
+            background: '#dc2626', color: '#fff',
+            fontSize: 11, fontWeight: 700,
+            minWidth: 20, height: 20, padding: '0 5px',
+            borderRadius: 10, display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
         )}
       </button>
     );
-  };
-
-  // ============ RENDER CHAT PANEL ============
-  if (!isOpen) {
-    return renderChatButton();
   }
 
-  if (!isAuthenticated || !user) {
-    return null;
-  }
-
-  const roomsArray = Array.isArray(rooms) ? rooms : [];
-  const messagesArray = Array.isArray(messages) ? messages : [];
-  const filteredUsers = getFilteredUsers();
-
+  // ------- open panel -------
   return (
     <div style={{
-      position: 'fixed',
-      bottom: '100px',
-      right: '24px',
-      width: '420px',
-      maxHeight: '600px',
-      background: 'white',
-      borderRadius: '16px',
-      boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+      position: 'fixed', bottom: 24, right: 24,
+      width: 420, maxWidth: 'calc(100vw - 24px)',
+      height: 620, maxHeight: 'calc(100vh - 48px)',
+      background: '#fff', borderRadius: 16,
+      boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
       border: '1px solid #e2e8f0',
-      zIndex: 1000,
-      display: 'flex',
-      flexDirection: 'column',
+      zIndex: 1000, display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
-      animation: 'fadeInUp 0.3s ease-out',
     }}>
-      <style>{`
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .chat-messages::-webkit-scrollbar {
-          width: 4px;
-        }
-        .chat-messages::-webkit-scrollbar-track {
-          background: #f1f5f9;
-        }
-        .chat-messages::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-          border-radius: 4px;
-        }
-        .message-bubble {
-          animation: fadeInUp 0.2s ease-out;
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        .chat-instruction {
-          text-align: center;
-          padding: 8px 12px;
-          background: #eff6ff;
-          border-bottom: 1px solid #dbeafe;
-          font-size: 12px;
-          color: #2563eb;
-        }
-        .user-item:hover {
-          background: #f1f5f9 !important;
-          border-color: #dbeafe !important;
-        }
-      `}</style>
 
-      {/* Instruction Banner */}
-      {!selectedRoom && (
-        <div className="chat-instruction">
-          💬 Click <strong>"New"</strong> to find users and start a conversation
-        </div>
-      )}
-
-      {/* Header */}
+      {/* ============ HEADER ============ */}
       <div style={{
-        padding: '16px 20px',
         background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-        color: 'white',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        color: '#fff', padding: '14px 16px',
+        display: 'flex', alignItems: 'center', gap: 10,
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <MessageSquare size={20} />
-          <span style={{ fontWeight: 600 }}>
-            {selectedRoom ? selectedRoom.name || 'Chat' : 'Messages'}
-          </span>
-          {selectedRoom && (
-            <span style={{
-              fontSize: '11px',
-              background: 'rgba(255,255,255,0.2)',
-              padding: '2px 10px',
-              borderRadius: '12px',
-            }}>
-              {selectedRoom.participants?.length || 0} members
-            </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {selectedRoom && (
           <button
-            onClick={() => {
-              setShowUserList(!showUserList);
-              if (!showUserList && !initialUsersLoaded) {
-                fetchUsers();
-              }
-            }}
-            style={{
-              background: 'rgba(255,255,255,0.15)',
-              border: 'none',
-              color: 'white',
-              cursor: 'pointer',
-              padding: '4px 10px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
+            onClick={() => { setSelectedRoom(null); setMessageSearch(''); setShowMessageSearch(false); }}
+            style={iconBtnStyle('#fff')}
+            title="Back"
           >
-            <Plus size={16} />
-            {showUserList ? 'Cancel' : 'New'}
+            <ChevronLeft size={20} />
           </button>
-          <button
-            onClick={() => setIsOpen(false)}
-            style={{
-              background: 'rgba(255,255,255,0.15)',
-              border: 'none',
-              color: 'white',
-              cursor: 'pointer',
-              padding: '4px 8px',
-              borderRadius: '6px',
-            }}
-          >
-            <X size={18} />
-          </button>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {selectedRoom ? roomTitle(selectedRoom) : 'Messages'}
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.85 }}>
+            {selectedRoom
+              ? `${selectedRoom.participants?.length || 0} participant(s)`
+              : 'Chat with your contacts'}
+          </div>
         </div>
+
+        {selectedRoom && (
+          <button
+            onClick={() => setShowMessageSearch((v) => !v)}
+            style={iconBtnStyle('#fff')}
+            title="Search in conversation"
+          >
+            <Search size={18} />
+          </button>
+        )}
+        <button
+          onClick={() => setIsOpen(false)}
+          style={iconBtnStyle('#fff')}
+          title="Close"
+        >
+          <X size={20} />
+        </button>
       </div>
 
-      {/* User List (New Chat) */}
-      {showUserList && (
-        <div style={{
-          padding: '16px',
-          borderBottom: '1px solid #f1f5f9',
-          maxHeight: '250px',
-          overflowY: 'auto',
-          background: '#f8fafc',
-        }}>
-          <div style={{
-            display: 'flex',
-            gap: '8px',
-            marginBottom: '12px',
-            alignItems: 'center',
-          }}>
-            <Search size={18} style={{ color: '#94a3b8', flexShrink: 0 }} />
-            <input
-              type="text"
-              placeholder="Search users..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                flex: 1,
-                padding: '8px 12px',
-                border: '2px solid #e2e8f0',
-                borderRadius: '8px',
-                fontSize: '14px',
-                outline: 'none',
-              }}
-              onFocus={(e) => e.currentTarget.style.borderColor = '#2563eb'}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
-            />
-            <button
-              onClick={fetchUsers}
-              style={{
-                padding: '6px 10px',
-                background: '#2563eb',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-            >
-              <RefreshCw size={14} />
-              Refresh
-            </button>
-          </div>
-
-          {isLoadingUsers ? (
-            <div style={{ textAlign: 'center', padding: '30px 0', color: '#94a3b8' }}>
-              <Loader size={32} style={{ margin: '0 auto 8px', animation: 'spin 1s linear infinite' }} />
-              <p>Loading users...</p>
-            </div>
-          ) : userListError ? (
-            <div style={{ textAlign: 'center', padding: '20px 0', color: '#dc2626' }}>
-              <p>{userListError}</p>
-              <button
-                onClick={fetchUsers}
-                style={{
-                  marginTop: '8px',
-                  padding: '4px 16px',
-                  background: '#2563eb',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                Retry
-              </button>
-            </div>
-          ) : filteredUsers.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '30px 0', color: '#94a3b8' }}>
-              <UserPlus size={32} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
-              {searchTerm ? (
-                <p>No users found matching "{searchTerm}"</p>
-              ) : (
-                <>
-                  <p>No other users found</p>
-                  <p style={{ fontSize: '13px', marginTop: '4px' }}>
-                    {users.length === 0 ? 'Try refreshing the list' : 'All users are already in your chats'}
-                  </p>
-                </>
-              )}
-            </div>
-          ) : (
-            filteredUsers.map((u) => {
-              const status = getUserStatus(u.user || u.id);
-              const displayName = u.full_name || u.user?.full_name || 'Unknown User';
-              const displayEmail = u.email || u.user?.email || '';
-              
-              return (
-                <div
-                  key={u.id || u.user}
-                  className="user-item"
-                  onClick={() => createPrivateRoom(u.user || u.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    background: 'white',
-                    marginBottom: '4px',
-                    border: '1px solid transparent',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = '#f1f5f9';
-                    e.currentTarget.style.borderColor = '#dbeafe';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'white';
-                    e.currentTarget.style.borderColor = 'transparent';
-                  }}
-                >
-                  <div style={{ position: 'relative' }}>
-                    <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
-                      background: '#eff6ff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#2563eb',
-                      fontWeight: 600,
-                      fontSize: '14px',
-                    }}>
-                      {displayName.charAt(0).toUpperCase()}
-                    </div>
-                    <span style={{
-                      position: 'absolute',
-                      bottom: '0',
-                      right: '0',
-                      width: '10px',
-                      height: '10px',
-                      borderRadius: '50%',
-                      background: getStatusColor(status),
-                      border: '2px solid white',
-                    }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, fontSize: '14px', color: '#0f172a' }}>
-                      {displayName}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <span>{getStatusLabel(status)}</span>
-                      {displayEmail && (
-                        <>
-                          <span>•</span>
-                          <span style={{ fontSize: '11px' }}>{displayEmail}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      createPrivateRoom(u.user || u.id);
-                    }}
-                    style={{
-                      padding: '4px 14px',
-                      background: '#2563eb',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      fontWeight: 500,
-                      flexShrink: 0,
-                    }}
-                  >
-                    Chat
-                  </button>
-                </div>
-              );
-            })
-          )}
-          
-          {!isLoadingUsers && filteredUsers.length > 0 && (
-            <div style={{
-              marginTop: '8px',
-              padding: '6px',
-              textAlign: 'center',
-              fontSize: '11px',
-              color: '#94a3b8',
-              borderTop: '1px solid #f1f5f9',
-            }}>
-              {filteredUsers.length} user{filteredUsers.length > 1 ? 's' : ''} available
-            </div>
-          )}
+      {/* ============ MESSAGE SEARCH BAR ============ */}
+      {selectedRoom && showMessageSearch && (
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+          <input
+            autoFocus
+            value={messageSearch}
+            onChange={(e) => setMessageSearch(e.target.value)}
+            placeholder="Search messages..."
+            style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none' }}
+          />
         </div>
       )}
 
-      {/* Chat Rooms List */}
-      {!selectedRoom ? (
-        <div style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '8px',
-        }}>
-          {roomsArray.length === 0 ? (
-            <div style={{
-              textAlign: 'center',
-              padding: '60px 20px',
-              color: '#94a3b8',
-            }}>
-              <MessageSquare size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
-              <p style={{ fontSize: '16px', fontWeight: 500, color: '#64748b' }}>No conversations yet</p>
-              <p style={{ fontSize: '14px', marginTop: '4px' }}>Click <strong>"New"</strong> to start a chat</p>
-            </div>
-          ) : (
-            roomsArray.map((room) => (
-              <div
-                key={room.id}
-                onClick={() => {
-                  setSelectedRoom(room);
-                  fetchMessages(room.id);
-                }}
-                style={{
-                  padding: '12px',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  background: selectedRoom?.id === room.id ? '#eff6ff' : 'white',
-                  border: selectedRoom?.id === room.id ? '1px solid #dbeafe' : '1px solid transparent',
-                  marginBottom: '4px',
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedRoom?.id !== room.id) {
-                    e.currentTarget.style.background = '#f8fafc';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedRoom?.id !== room.id) {
-                    e.currentTarget.style.background = 'white';
-                  }
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '50%',
-                    background: '#f1f5f9',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#64748b',
-                  }}>
-                    {room.room_type === 'PRIVATE' ? (
-                      <User size={20} />
-                    ) : (
-                      <Users size={20} />
-                    )}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontWeight: 500,
-                      fontSize: '14px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {room.name || (room.participants_info?.map(p => p.full_name).join(', '))}
-                      </span>
-                      {room.unread_count > 0 && (
-                        <span style={{
-                          background: '#2563eb',
-                          color: 'white',
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          minWidth: '18px',
-                          height: '18px',
-                          borderRadius: '9px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '0 4px',
-                        }}>
-                          {room.unread_count}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{
-                      fontSize: '12px',
-                      color: '#94a3b8',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {room.last_message ? (
-                        <>
-                          <span style={{ fontWeight: 500 }}>{room.last_message.sender_name}:</span>
-                          {room.last_message.content}
-                        </>
-                      ) : (
-                        'No messages yet'
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      ) : (
-        <>
-          {/* Chat Room Header */}
-          <div style={{
-            padding: '12px 16px',
-            borderBottom: '1px solid #f1f5f9',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexShrink: 0,
-            background: '#f8fafc',
-          }}>
-            <button
-              onClick={() => setSelectedRoom(null)}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#64748b',
-                padding: '4px',
-              }}
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <div style={{ flex: 1, marginLeft: '8px' }}>
-              <div style={{ fontWeight: 500, fontSize: '14px' }}>
-                {selectedRoom.name || 'Chat'}
-              </div>
-              <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                {selectedRoom.participants?.length || 0} participants
-              </div>
+      {/* ============ USER PICKER ============ */}
+      {showUserList && !selectedRoom && (
+        <div style={{ padding: 12, borderBottom: '1px solid #e2e8f0', background: '#f8fafc', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: '#94a3b8' }} />
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search contacts..."
+                style={{ width: '100%', padding: '8px 10px 8px 30px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+              />
             </div>
             <button
-              onClick={() => {
-                setSelectedRoom(null);
-                fetchRooms();
-              }}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#64748b',
-                padding: '4px',
-              }}
+              onClick={fetchUsers}
+              style={{ padding: '0 10px', borderRadius: 8, border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer' }}
+              title="Refresh users"
             >
-              <RefreshCw size={18} />
+              <RefreshCw size={14} />
             </button>
           </div>
 
-          {/* Messages */}
-          <div className="chat-messages" style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '16px',
-            background: '#f8fafc',
-            display: 'flex',
-            flexDirection: 'column-reverse',
-            minHeight: '150px',
-          }}>
-            {loading ? (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                height: '100%',
-                color: '#94a3b8',
-              }}>
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  border: '2px solid #e2e8f0',
-                  borderTopColor: '#2563eb',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite',
-                }} />
+          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+            {isLoadingUsers ? (
+              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>
+                <Loader size={20} style={{ animation: 'spin 1s linear infinite' }} />
               </div>
-            ) : messagesArray.length === 0 ? (
-              <div style={{
-                textAlign: 'center',
-                padding: '40px 0',
-                color: '#94a3b8',
-              }}>
-                <MessageSquare size={32} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-                <p>No messages yet</p>
-                <p style={{ fontSize: '13px' }}>Type a message below to start the conversation!</p>
+            ) : filteredUsers.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 13 }}>
+                <UserPlus size={24} style={{ marginBottom: 6, opacity: 0.4 }} />
+                <div>No contacts found</div>
               </div>
             ) : (
-              messagesArray.map((msg) => {
-                const isMine = msg.sender === user?.id;
+              filteredUsers.map((u) => {
+                const uid = u.user || u.id;
+                const name = u.full_name || u.user?.full_name || 'Unknown';
+                const email = u.email || u.user?.email || '';
+                const status = statusFor(uid);
                 return (
                   <div
-                    key={msg.id}
-                    className="message-bubble"
+                    key={uid}
+                    onClick={() => createPrivateRoom(uid)}
                     style={{
-                      display: 'flex',
-                      justifyContent: isMine ? 'flex-end' : 'flex-start',
-                      marginBottom: '8px',
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+                      marginBottom: 4, background: '#fff',
                     }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#eff6ff'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
                   >
-                    <div style={{
-                      maxWidth: '80%',
-                      padding: '10px 14px',
-                      borderRadius: '12px',
-                      background: isMine ? 'linear-gradient(135deg, #2563eb, #7c3aed)' : 'white',
-                      color: isMine ? 'white' : '#0f172a',
-                      boxShadow: isMine ? 'none' : '0 1px 3px rgba(0,0,0,0.06)',
-                      border: isMine ? 'none' : '1px solid #f1f5f9',
-                    }}>
-                      {!isMine && (
-                        <div style={{
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          color: '#64748b',
-                          marginBottom: '4px',
-                        }}>
-                          {msg.sender_name}
-                        </div>
-                      )}
-                      <div style={{
-                        fontSize: '14px',
-                        wordBreak: 'break-word',
-                      }}>
-                        {msg.content}
+                    <div style={{ position: 'relative' }}>
+                      <Avatar text={name.charAt(0)} />
+                      <span style={{
+                        position: 'absolute', bottom: 0, right: 0,
+                        width: 10, height: 10, borderRadius: '50%',
+                        background: statusColor(status), border: '2px solid #fff',
+                      }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {name}
                       </div>
-                      <div style={{
-                        fontSize: '10px',
-                        opacity: 0.6,
-                        marginTop: '4px',
-                        textAlign: 'right',
-                      }}>
-                        {formatTime(msg.created_at)}
+                      <div style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {email}
                       </div>
                     </div>
                   </div>
                 );
               })
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ============ BODY ============ */}
+      {!selectedRoom ? (
+        // ---------- ROOM LIST ----------
+        <>
+          <div style={{ padding: '8px 12px', flexShrink: 0 }}>
+            <button
+              onClick={() => { setShowUserList((v) => !v); if (!initialUsersLoaded) fetchUsers(); }}
+              style={{
+                width: '100%', padding: '9px 12px',
+                background: showUserList ? '#e2e8f0' : '#eff6ff',
+                color: showUserList ? '#334155' : '#2563eb',
+                border: 'none', borderRadius: 8, cursor: 'pointer',
+                fontSize: 13, fontWeight: 600,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}
+            >
+              <Plus size={16} />
+              {showUserList ? 'Cancel' : 'New chat'}
+            </button>
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
+            {loadingRooms && rooms.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
+                <Loader size={24} style={{ animation: 'spin 1s linear infinite' }} />
+              </div>
+            ) : rooms.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '50px 20px', color: '#94a3b8' }}>
+                <MessageSquare size={44} style={{ opacity: 0.3, marginBottom: 8 }} />
+                <div style={{ fontWeight: 600, color: '#64748b' }}>No conversations yet</div>
+                <div style={{ fontSize: 13, marginTop: 4 }}>Click "New chat" to start</div>
+              </div>
+            ) : (
+              rooms.map((room) => {
+                const last = room.last_message;
+                const unread = room.unread_count || 0;
+                return (
+                  <div
+                    key={room.id}
+                    onClick={() => { setSelectedRoom(room); fetchMessages(room.id); }}
+                    style={{
+                      display: 'flex', gap: 10, padding: 10,
+                      borderRadius: 10, cursor: 'pointer', marginBottom: 2,
+                      background: '#fff', alignItems: 'center',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                  >
+                    <Avatar text={roomAvatar(room)} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {roomTitle(room)}
+                        </div>
+                        {last && (
+                          <div style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0, marginLeft: 8 }}>
+                            {formatRelative(last.created_at || room.updated_at)}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                        <div style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                          {last
+                            ? `${last.sender === user.id ? 'You: ' : `${last.sender_name}: `}${last.content}`
+                            : 'No messages yet'}
+                        </div>
+                        {unread > 0 && (
+                          <span style={{
+                            background: '#2563eb', color: '#fff',
+                            fontSize: 10, fontWeight: 700,
+                            minWidth: 18, height: 18, padding: '0 5px',
+                            borderRadius: 9, display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                            marginLeft: 8,
+                          }}>{unread}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </>
+      ) : (
+        // ---------- MESSAGE THREAD ----------
+        <>
+          <div
+            ref={messagesScrollRef}
+            onScroll={onMessagesScroll}
+            style={{
+              flex: 1, overflowY: 'auto', padding: '12px 14px',
+              background: '#f8fafc', position: 'relative',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            {loadingMessages ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
+                <Loader size={22} style={{ animation: 'spin 1s linear infinite' }} />
+              </div>
+            ) : filteredMessages.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
+                <MessageSquare size={36} style={{ opacity: 0.3, marginBottom: 8 }} />
+                <div>{messageSearch ? 'No matches' : 'No messages yet — say hi 👋'}</div>
+              </div>
+            ) : (
+              filteredMessages.map((msg, idx) => {
+                const prev = filteredMessages[idx - 1];
+                const showDay = !prev || !sameDay(prev.created_at, msg.created_at);
+                const isMine = msg.sender === user.id;
+                const isEditing = editingMessage?.id === msg.id;
+
+                return (
+                  <React.Fragment key={msg.id}>
+                    {showDay && (
+                      <div style={{
+                        textAlign: 'center', margin: '10px 0 6px',
+                        fontSize: 11, color: '#94a3b8', fontWeight: 600,
+                      }}>
+                        {dayLabel(msg.created_at)}
+                      </div>
+                    )}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: isMine ? 'flex-end' : 'flex-start',
+                      marginBottom: 6,
+                    }}>
+                      <div style={{
+                        maxWidth: '80%', display: 'flex', flexDirection: 'column',
+                        alignItems: isMine ? 'flex-end' : 'flex-start',
+                      }}>
+                        {!isMine && (
+                          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2, paddingLeft: 4 }}>
+                            {msg.sender_name}
+                          </div>
+                        )}
+                        <div style={{
+                          position: 'relative',
+                          background: isMine
+                            ? 'linear-gradient(135deg, #2563eb, #7c3aed)'
+                            : '#fff',
+                          color: isMine ? '#fff' : '#0f172a',
+                          padding: '8px 12px',
+                          borderRadius: 14,
+                          borderTopRightRadius: isMine ? 4 : 14,
+                          borderTopLeftRadius: isMine ? 14 : 4,
+                          border: isMine ? 'none' : '1px solid #e2e8f0',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                          fontSize: 14, lineHeight: 1.4,
+                          wordBreak: 'break-word',
+                          opacity: msg._optimistic ? 0.7 : 1,
+                        }}>
+                          {isEditing ? (
+                            <EditBox
+                              initial={msg.content}
+                              onCancel={() => setEditingMessage(null)}
+                              onSave={(t) => saveEdit(msg, t)}
+                            />
+                          ) : (
+                            <>
+                              {msg.message_type === 'IMAGE' && msg.file && (
+                                <img
+                                  src={msg.file}
+                                  alt="attachment"
+                                  style={{ maxWidth: '100%', borderRadius: 8, marginBottom: 4 }}
+                                />
+                              )}
+                              {msg.message_type === 'FILE' && msg.file && (
+                                <a
+                                  href={msg.file}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ color: 'inherit', textDecoration: 'underline' }}
+                                >
+                                  📎 {msg.content}
+                                </a>
+                              )}
+                              {msg.message_type === 'TEXT' && <span>{msg.content}</span>}
+                              <div style={{
+                                display: 'flex', alignItems: 'center',
+                                justifyContent: 'flex-end', gap: 4,
+                                fontSize: 10, marginTop: 3,
+                                opacity: isMine ? 0.85 : 0.6,
+                              }}>
+                                <span>{formatTime(msg.created_at)}</span>
+                                {isMine && (
+                                  <>
+                                    {msg.is_read
+                                      ? <CheckCheck size={12} />
+                                      : <Check size={12} />}
+                                  </>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {isMine && !msg._optimistic && !isEditing && (
+                          <div style={{
+                            display: 'flex', gap: 6, marginTop: 2,
+                            fontSize: 10, opacity: 0.7,
+                          }}>
+                            <button
+                              onClick={() => setEditingMessage(msg)}
+                              style={smallLinkBtn}
+                              title="Edit"
+                            >
+                              <Pencil size={11} /> Edit
+                            </button>
+                            <button
+                              onClick={() => deleteMessage(msg)}
+                              style={{ ...smallLinkBtn, color: '#dc2626' }}
+                              title="Delete"
+                            >
+                              <Trash2 size={11} /> Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </React.Fragment>
+                );
+              })
+            )}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Message Input */}
+          {/* typing indicator */}
+          {typingUsers[selectedRoom.id] && Object.keys(typingUsers[selectedRoom.id]).length > 0 && (
+            <div style={{ padding: '4px 16px', background: '#f8fafc', fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>
+              {Object.values(typingUsers[selectedRoom.id]).map((t) => t.name).join(', ')} typing…
+            </div>
+          )}
+
+          {/* scroll-down button */}
+          {showScrollDown && (
+            <button
+              onClick={() => scrollToBottom()}
+              style={{
+                position: 'absolute', bottom: 78, right: 24,
+                width: 34, height: 34, borderRadius: '50%',
+                background: '#fff', border: '1px solid #e2e8f0',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                cursor: 'pointer', zIndex: 10,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              title="Scroll to bottom"
+            >
+              <ArrowDown size={16} />
+            </button>
+          )}
+
+          {/* input */}
           <div style={{
-            padding: '12px 16px',
-            borderTop: '1px solid #f1f5f9',
-            display: 'flex',
-            gap: '8px',
-            background: 'white',
-            flexShrink: 0,
+            padding: 10, borderTop: '1px solid #e2e8f0',
+            display: 'flex', gap: 6, alignItems: 'center',
+            background: '#fff', flexShrink: 0,
           }}>
+            <label style={{ ...iconBtnStyle('#64748b'), cursor: 'pointer' }} title="Attach">
+              <Paperclip size={18} />
+              <input
+                type="file"
+                hidden
+                accept="image/*,.pdf,.doc,.docx,.zip"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) uploadAttachment(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+
             <input
               ref={inputRef}
               type="text"
               value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+              onChange={(e) => {
+                setMessageInput(e.target.value);
+                sendTyping(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
               placeholder="Type a message..."
-              disabled={sending || !isAuthenticated}
               style={{
-                flex: 1,
-                padding: '10px 14px',
-                border: '2px solid #e2e8f0',
-                borderRadius: '10px',
-                fontSize: '14px',
-                outline: 'none',
-                background: !isAuthenticated ? '#f1f5f9' : '#f8fafc',
-                transition: 'all 0.3s ease',
+                flex: 1, padding: '9px 12px',
+                border: '1px solid #e2e8f0', borderRadius: 20,
+                fontSize: 14, outline: 'none', background: '#f8fafc',
               }}
-              onFocus={(e) => e.currentTarget.style.borderColor = '#2563eb'}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
             />
+
             <button
-              onClick={sendMessage}
-              disabled={sending || !messageInput.trim() || !isAuthenticated}
+              onClick={() => sendMessage()}
+              disabled={sending || !messageInput.trim()}
               style={{
-                padding: '10px 18px',
-                background: (sending || !messageInput.trim() || !isAuthenticated) ? '#94a3b8' : 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '10px',
-                cursor: (sending || !messageInput.trim() || !isAuthenticated) ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.3s ease',
-                opacity: (sending || !messageInput.trim() || !isAuthenticated) ? 0.6 : 1,
+                width: 40, height: 40, borderRadius: '50%', border: 'none',
+                background: sending || !messageInput.trim()
+                  ? '#cbd5e1'
+                  : 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                color: '#fff',
+                cursor: sending || !messageInput.trim() ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
+              title="Send"
             >
-              <Send size={20} />
+              <Send size={16} />
             </button>
           </div>
         </>
       )}
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 };
+
+// =========================================================
+//  Small sub-components + inline styles
+// =========================================================
+const Avatar = ({ text = '#' }) => (
+  <div style={{
+    width: 38, height: 38, borderRadius: '50%',
+    background: 'linear-gradient(135deg, #dbeafe, #e9d5ff)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    color: '#6d28d9', fontWeight: 700, fontSize: 14, flexShrink: 0,
+  }}>
+    {text}
+  </div>
+);
+
+const EditBox = ({ initial, onSave, onCancel }) => {
+  const [val, setVal] = useState(initial);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 180 }}>
+      <input
+        autoFocus
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onSave(val);
+          if (e.key === 'Escape') onCancel();
+        }}
+        style={{
+          padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)',
+          background: 'rgba(255,255,255,0.15)', color: 'inherit',
+          fontSize: 14, outline: 'none',
+        }}
+      />
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', fontSize: 11 }}>
+        <button onClick={onCancel} style={smallLinkBtn}>Cancel</button>
+        <button onClick={() => onSave(val)} style={{ ...smallLinkBtn, fontWeight: 700 }}>Save</button>
+      </div>
+    </div>
+  );
+};
+
+const iconBtnStyle = (color) => ({
+  background: 'rgba(255,255,255,0.15)',
+  border: 'none', color, cursor: 'pointer',
+  padding: 6, borderRadius: 8,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+});
+
+const smallLinkBtn = {
+  background: 'transparent',
+  border: 'none',
+  padding: 0,
+  cursor: 'pointer',
+  color: 'inherit',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 3,
+  fontSize: 11,
+};
+
+// debounce helper for typing indicator
+function debounceAsync(fn, wait) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    return new Promise((res) => {
+      t = setTimeout(() => res(fn(...args)), wait);
+    });
+  };
+}
 
 export default ChatWidget;

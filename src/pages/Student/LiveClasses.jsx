@@ -14,7 +14,9 @@ const LiveClasses = () => {
 
   const fetchCourses = useCallback(async () => {
     try {
-      setLoading(true);
+      // Only show the loading spinner on the very first load, not on background polls
+      if (courses.length === 0) setLoading(true);
+      
       const response = await api.get('/courses/');
       let coursesData = [];
       
@@ -51,15 +53,23 @@ const LiveClasses = () => {
       setCourses(filteredCourses);
     } catch (error) {
       console.error('Failed to fetch courses:', error);
-      toast.error('Failed to load courses');
+      // Don't spam toasts on background polling errors
+      if (courses.length === 0) toast.error('Failed to load courses');
       setCourses([]);
     } finally {
       setLoading(false);
     }
-  }, [user?.role, user?.id]);
+  }, [user?.role, user?.id, courses.length]);
 
   useEffect(() => {
     fetchCourses();
+    
+    // ✅ NEW: Poll every 5 seconds to check if teacher went live
+    const interval = setInterval(() => {
+      fetchCourses();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [fetchCourses]);
 
   const handleJoinLiveClass = (courseId) => {

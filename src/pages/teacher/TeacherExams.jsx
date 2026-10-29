@@ -27,7 +27,7 @@ const TeacherExams = () => {
   // State for editing QUESTIONS
   const [editingQuestionId, setEditingQuestionId] = useState(null);
 
-  // NEW: State for Delete Confirmation Modal
+  // State for Delete Confirmation Modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteType, setDeleteType] = useState(''); // 'exam' or 'question'
   const [deleteId, setDeleteId] = useState(null);
@@ -51,6 +51,12 @@ const TeacherExams = () => {
     correct_answer: '',
     marks: 1,
   });
+
+  // Essay Grading State
+  const [showEssayGradingModal, setShowEssayGradingModal] = useState(false);
+  const [selectedAttempt, setSelectedAttempt] = useState(null);
+  const [essayAnswers, setEssayAnswers] = useState([]);
+  const [gradingLoading, setGradingLoading] = useState(false);
 
   useEffect(() => {
     fetchExams();
@@ -191,6 +197,7 @@ const TeacherExams = () => {
     setShowCreateModal(true);
   };
 
+  // ✅ FIX: Handle Question Save (Create & Update)
   const handleAddQuestion = async (e) => {
     e.preventDefault();
     if (!selectedExam) {
@@ -207,14 +214,20 @@ const TeacherExams = () => {
       };
       
       if (questionForm.type === 'MCQ') {
-        const options = Object.values(questionForm.options).filter(opt => opt && opt.trim() !== '');
-        if (options.length < 2) {
+        // ✅ Convert object {A: '', B: ''} to array ["", ""] for backend
+        const optionsArray = Object.values(questionForm.options).filter(opt => opt && opt.trim() !== '');
+        if (optionsArray.length < 2) {
           toast.error('Please provide at least 2 options');
           setLoading(false);
           return;
         }
-        questionData.options = options;
-        questionData.correct_answer = questionForm.correct_answer;
+        questionData.options = optionsArray;
+        
+        // ✅ Ensure correct answer matches the option text, not the letter (A, B, C, D)
+        const letterToIndex = { A: 0, B: 1, C: 2, D: 3 };
+        const selectedIndex = letterToIndex[questionForm.correct_answer];
+        questionData.correct_answer = optionsArray[selectedIndex] || questionForm.correct_answer;
+
       } else if (questionForm.type === 'TF') {
         if (!questionForm.correct_answer) {
           toast.error('Please select the correct answer (True/False)');
@@ -222,8 +235,10 @@ const TeacherExams = () => {
           return;
         }
         questionData.correct_answer = questionForm.correct_answer;
+        questionData.options = [];
       } else if (questionForm.type === 'SHORT') {
         questionData.correct_answer = '';
+        questionData.options = [];
       }
       
       if (editingQuestionId) {
@@ -254,6 +269,7 @@ const TeacherExams = () => {
   const handleEditQuestionClick = (question) => {
     setEditingQuestionId(question.id);
     
+    // ✅ FIX: Convert array back to object for the UI
     let optionsObj = { A: '', B: '', C: '', D: '' };
     if (question.options && Array.isArray(question.options)) {
       question.options.forEach((opt, index) => {
@@ -261,15 +277,22 @@ const TeacherExams = () => {
           optionsObj[['A', 'B', 'C', 'D'][index]] = opt;
         }
       });
-    } else if (question.options) {
-      optionsObj = { ...optionsObj, ...question.options };
+    }
+
+    // ✅ FIX: Map correct answer text back to letter (A, B, C, D)
+    let correctAnswerLetter = question.correct_answer || '';
+    if (question.type === 'MCQ' && Array.isArray(question.options)) {
+      const index = question.options.indexOf(question.correct_answer);
+      if (index !== -1) {
+        correctAnswerLetter = ['A', 'B', 'C', 'D'][index];
+      }
     }
 
     setQuestionForm({
       text: question.text,
       type: question.type,
       options: optionsObj,
-      correct_answer: question.correct_answer || '',
+      correct_answer: correctAnswerLetter,
       marks: question.marks,
     });
 
@@ -277,21 +300,18 @@ const TeacherExams = () => {
     if (modal) modal.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // NEW: Trigger delete modal for questions
   const triggerDeleteQuestion = (questionId) => {
     setDeleteType('question');
     setDeleteId(questionId);
     setShowDeleteModal(true);
   };
 
-  // NEW: Trigger delete modal for exams
   const triggerDeleteExam = (examId) => {
     setDeleteType('exam');
     setDeleteId(examId);
     setShowDeleteModal(true);
   };
 
-  // NEW: Confirm delete function
   const confirmDelete = async () => {
     setLoading(true);
     try {
@@ -323,12 +343,6 @@ const TeacherExams = () => {
       toast.error('Failed to update exam status');
     }
   };
-
-  // Essay Grading State and Functions
-  const [showEssayGradingModal, setShowEssayGradingModal] = useState(false);
-  const [selectedAttempt, setSelectedAttempt] = useState(null);
-  const [essayAnswers, setEssayAnswers] = useState([]);
-  const [gradingLoading, setGradingLoading] = useState(false);
 
   const viewEssayAnswers = async (attemptId) => {
     try {
@@ -770,11 +784,15 @@ const TeacherExams = () => {
                         <p style={{ fontSize: '14px', color: '#111827', marginTop: '4px', marginBottom: '4px' }}><strong>Q{idx + 1}:</strong> {q.text}</p>
                         {q.type === 'MCQ' && q.options && (
                           <div style={{ marginTop: '4px' }}>
-                            {Object.entries(q.options).map(([key, value]) => (
-                              <p key={key} style={{ fontSize: '13px', color: '#6b7280', margin: '2px 0 2px 16px' }}>
-                                <strong>{key}:</strong> {value} {q.correct_answer === key && <span style={{ color: '#16a34a' }}>✓</span>}
-                              </p>
-                            ))}
+                            {q.options.map((value, index) => {
+                              const key = ['A', 'B', 'C', 'D'][index] || index;
+                              const isCorrect = value === q.correct_answer;
+                              return (
+                                <p key={index} style={{ fontSize: '13px', color: isCorrect ? '#16a34a' : '#6b7280', margin: '2px 0 2px 16px', fontWeight: isCorrect ? 'bold' : 'normal' }}>
+                                  <strong>{key}:</strong> {value} {isCorrect && <span>✓</span>}
+                                </p>
+                              );
+                            })}
                           </div>
                         )}
                         {q.type === 'TF' && (

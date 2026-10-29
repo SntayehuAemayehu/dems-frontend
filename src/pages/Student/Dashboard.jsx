@@ -15,7 +15,6 @@ import toast from 'react-hot-toast';
 import { fetchCourses } from '../../store/slices/courseSlice';
 import { fetchExams } from '../../store/slices/examSlice';
 import api from '../../api/api';
-import './Dashboard.css';
 import '../../styles/dashboard-responsive.css';
 import PaymentStatusBanner from '../../components/PaymentStatusBanner';
 import GradeBadge from '../../components/Grade/GradeBadge';
