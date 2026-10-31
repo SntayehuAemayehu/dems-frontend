@@ -124,88 +124,104 @@ const AIProctor = ({
     // ============================================================
     // ✅ REAL-TIME DATA SYNC (Backend Heartbeat)
     // ============================================================
-    const sendRealTimeData = useCallback(async () => {
-        if (!attemptId || !isRunning || examLocked) return;
+const sendRealTimeData = useCallback(async () => {
+    if (!attemptId || !isRunning || examLocked) return;
 
-        try {
-            const calculatedTrustScore = Math.max(0, 100 - (suspiciousCount * 5) - (violations.length * 3));
-            setTrustScore(calculatedTrustScore);
+    try {
+        const signals = signalsBufferRef.current;
 
-            const signals = signalsBufferRef.current;
+        const data = {
+            network_latency: networkLatency,
+            mouse_movements: mouseMovements.length,
+            keystrokes: keystrokeData.length,
+            tab_switches: tabSwitchCount,
+            violations: violations.length,
+            is_fullscreen: document.fullscreenElement !== null,
+            face_detected: faceDetected,
+            multiple_faces: multipleFaces,
+            face_count: faceCount || (multipleFaces ? 2 : (faceDetected ? 1 : 0)),
+            gaze_direction: eyeStatus.gazeDirection || 'CENTER',
+            gaze_confidence: eyeStatus.confidence || 0,
+            gaze_x: eyeStatus.gazeX || 0,
+            gaze_y: eyeStatus.gazeY || 0,
+            head_tilt_x: headPosition.tiltX || 0,
+            head_tilt_y: headPosition.tiltY || 0,
+            eyes_closed: eyeStatus.status === 'CLOSED',
+            objects_detected: objectDetected || [],
+            face_match_confidence: faceMatchConfidence,
+            selfie_verified: selfieVerified,
+            signals: {
+                face_lost_count: signals.faceLostCount,
+                multiple_face_count: signals.multipleFaceCount,
+                gaze_away_count: signals.gazeAwayCount,
+                eyes_closed_count: signals.eyesClosedCount,
+                head_tilt_count: signals.headTiltCount,
+            },
+        };
 
-            const data = {
-                // ✅ REMOVED trust_score from client payload (server calculates its own)
-                network_latency: networkLatency,
-                mouse_movements: mouseMovements.length,
-                keystrokes: keystrokeData.length,
-                tab_switches: tabSwitchCount,
-                violations: violations.length,
-                is_fullscreen: document.fullscreenElement !== null,
-                face_detected: faceDetected,
-                multiple_faces: multipleFaces,
-                face_count: faceCount || (multipleFaces ? 2 : (faceDetected ? 1 : 0)),
-                gaze_direction: eyeStatus.gazeDirection || 'CENTER',
-                gaze_confidence: eyeStatus.confidence || 0,
-                gaze_x: eyeStatus.gazeX || 0,
-                gaze_y: eyeStatus.gazeY || 0,
-                head_tilt_x: headPosition.tiltX || 0,
-                head_tilt_y: headPosition.tiltY || 0,
-                eyes_closed: eyeStatus.status === 'CLOSED',
-                objects_detected: objectDetected || [],
-                face_match_confidence: faceMatchConfidence,
-                selfie_verified: selfieVerified,
-                signals: {
-                    face_lost_count: signals.faceLostCount,
-                    multiple_face_count: signals.multipleFaceCount,
-                    gaze_away_count: signals.gazeAwayCount,
-                    eyes_closed_count: signals.eyesClosedCount,
-                    head_tilt_count: signals.headTiltCount,
-                },
-            };
+        const response = await api.post(`/exams/attempt/${attemptId}/heartbeat/`, data);
 
-            const response = await api.post(`/exams/attempt/${attemptId}/heartbeat/`, data);
-
-            if (response.data && response.data.is_locked) {
-                setIsExamLocked(true);
-                setExamLocked(true);
-                setScreenLocked(true);
-                setLockReason(response.data.lock_reason || 'Suspicious activity detected');
-                toast.error(`🔒 Exam Locked: ${response.data.lock_reason || 'Suspicious activity detected'}`);
-                onViolation?.('EXAM_LOCKED', response.data.lock_reason || 'Exam locked due to suspicious activity');
-                return;
+        // ✅ THE FIX: Check if backend says LOCK or UNLOCK
+        if (response.data && response.data.is_locked) {
+            // Backend says LOCK
+            setIsExamLocked(true);
+            setExamLocked(true);
+            setScreenLocked(true);
+            setLockReason(response.data.lock_reason || 'Suspicious activity detected');
+            
+            // Only show toast if this is a new permanent lock
+            if (!response.data.requires_recheck) {
+                toast.error(`🔒 Exam Permanently Locked: ${response.data.lock_reason}`);
+                onViolation?.('EXAM_LOCKED', response.data.lock_reason || 'Exam locked');
             }
-
-            if (response.data && response.data.is_flagged) {
-                setIsFlagged(true);
-                toast.error(`🚨 ${response.data.flag_reason || 'Exam flagged for review'}`);
-                onViolation?.('BACKEND_FLAGGED', response.data.flag_reason || 'Flagged by AI');
-
-                if (!autoSubmitTriggered && onAutoSubmit) {
-                    setAutoSubmitTriggered(true);
-                    onAutoSubmit({
-                        reason: response.data.flag_reason || 'Backend flagged exam',
-                        type: 'BACKEND_FLAG',
-                    });
-                }
+            
+            // If it's a temporary lock (multiple faces), don't return — let it loop again
+            if (response.data.requires_recheck) {
+                return; // Stop here, but the next heartbeat will check again
             }
-
-            signalsBufferRef.current = {
-                faceLostCount: 0,
-                multipleFaceCount: 0,
-                gazeAwayCount: 0,
-                eyesClosedCount: 0,
-                headTiltCount: 0,
-            };
-        } catch (error) {
-            console.debug('Heartbeat error:', error.message);
+        } 
+        else if (response.data && response.data.is_locked === false) {
+            // ✅ Backend says UNLOCK (1 face is back)
+            if (screenLocked) {
+                setScreenLocked(false);
+                setIsExamLocked(false);
+                setExamLocked(false);
+                setLockReason('');
+                toast.success('✅ Screen unlocked. You can continue the exam.');
+            }
         }
-    }, [
-        attemptId, isRunning, suspiciousCount, violations.length, networkLatency,
-        mouseMovements.length, keystrokeData.length, tabSwitchCount, faceDetected,
-        multipleFaces, faceCount, eyeStatus, headPosition, objectDetected,
-        faceMatchConfidence, selfieVerified, onViolation, onAutoSubmit,
-        autoSubmitTriggered, examLocked
-    ]);
+
+        // Handle flagged (not locked, just flagged for review)
+        if (response.data && response.data.is_flagged && !response.data.is_locked) {
+            setIsFlagged(true);
+            if (!autoSubmitTriggered && onAutoSubmit) {
+                setAutoSubmitTriggered(true);
+                onAutoSubmit({
+                    reason: response.data.flag_reason || 'Backend flagged exam',
+                    type: 'BACKEND_FLAG',
+                });
+            }
+        }
+
+        // Reset signal buffer for next heartbeat
+        signalsBufferRef.current = {
+            faceLostCount: 0,
+            multipleFaceCount: 0,
+            gazeAwayCount: 0,
+            eyesClosedCount: 0,
+            headTiltCount: 0,
+        };
+
+    } catch (error) {
+        console.debug('Heartbeat error:', error.message);
+    }
+}, [
+    attemptId, isRunning, suspiciousCount, violations.length, networkLatency,
+    mouseMovements.length, keystrokeData.length, tabSwitchCount, faceDetected,
+    multipleFaces, faceCount, eyeStatus, headPosition, objectDetected,
+    faceMatchConfidence, selfieVerified, onViolation, onAutoSubmit,
+    autoSubmitTriggered, examLocked, screenLocked
+]);
 
     // ============================================================
     // ✅ SUSPICIOUS EVENT MANAGEMENT

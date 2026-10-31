@@ -1,8 +1,8 @@
 // frontend/src/pages/Student/ExamPage.jsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { Clock, AlertTriangle, CheckCircle, ShieldAlert } from 'lucide-react';
+import { Clock, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
 import AIProctor from '../../components/Proctoring/AIProctor';
@@ -13,284 +13,159 @@ const ExamPage = () => {
     const { user } = useSelector((state) => state.auth);
 
     const [attemptId, setAttemptId] = useState(null);
-    const [exam, setExam] = useState(null);
     const [questions, setQuestions] = useState([]);
     const [answers, setAnswers] = useState({});
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // Timer State
-    const [timeLeft, setTimeLeft] = useState(0); 
-    const timerRef = useRef(null);
-
     // Security States
     const [isLocked, setIsLocked] = useState(false);
     const [lockReason, setLockReason] = useState('');
-    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isPermanentLock, setIsPermanentLock] = useState(false);
+
+    // Timer
+    const [timeLeft, setTimeLeft] = useState(0);
+    const timerRef = useRef(null);
 
     // ============================================================
-    // 1. INITIALIZE EXAM
-    // ============================================================
-    useEffect(() => {
-        const startExam = async () => {
-            try {
-                setLoading(true);
-                const response = await api.post(`/exams/${examId}/start/`);
-                
-                setAttemptId(response.data.attempt_id);
-                setExam({ title: response.data.exam_title || 'Final Exam' }); 
-                setQuestions(response.data.questions);
-                
-                const durationSeconds = response.data.duration_minutes * 60;
-                setTimeLeft(durationSeconds);
-                
-            } catch (err) {
-                console.error("Failed to start exam:", err);
-                setError(err.response?.data?.error || "Could not start exam. You may have already taken it.");
-            } finally {
-                setLoading(false);
-            }
-        };
-        startExam();
-
-        return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-        };
-    }, [examId]);
-
-    // ============================================================
-    // 2. FULLSCREEN ENFORCEMENT & KEYBOARD DISABLE
+    // 1. START EXAM
     // ============================================================
     useEffect(() => {
-        if (!attemptId || isLocked) return;
-
-        const enterFullscreen = async () => {
+        const start = async () => {
             try {
-                if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
-                    await document.documentElement.requestFullscreen();
-                    setIsFullscreen(true);
+                const res = await api.post(`/exams/${examId}/start/`);
+                setAttemptId(res.data.attempt_id);
+                setQuestions(res.data.questions);
+                setTimeLeft(res.data.duration_minutes * 60);
+
+                // Force Fullscreen
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen().catch(() => {});
                 }
             } catch (err) {
-                console.warn("Fullscreen denied:", err);
-                toast.error("Please allow fullscreen for the exam.");
+                toast.error("Could not start exam");
+                navigate('/exams');
             }
         };
-
-        const handleFullscreenChange = () => {
-            const isFull = !!document.fullscreenElement;
-            setIsFullscreen(isFull);
-            if (!isFull && !isLocked) {
-                // If they exit fullscreen, lock the exam
-                setIsLocked(true);
-                setLockReason("You exited fullscreen mode. The exam has been locked.");
-                handleAutoSubmit("Exited fullscreen");
-            }
-        };
-
-        // Disable Keys (F12, Ctrl+C, Ctrl+V, Ctrl+P, PrintScreen)
-        const handleKeyDown = (e) => {
-            if (
-                e.key === 'F12' || 
-                (e.ctrlKey && ['c', 'v', 'p', 's', 'u', 'a'].includes(e.key.toLowerCase())) ||
-                (e.metaKey && ['c', 'v', 'p', 's', 'u', 'a'].includes(e.key.toLowerCase())) ||
-                e.key === 'PrintScreen'
-            ) {
-                e.preventDefault();
-                toast.error("This action is disabled during the exam.");
-            }
-        };
-
-        enterFullscreen();
-        document.addEventListener('fullscreenchange', handleFullscreenChange);
-        document.addEventListener('keydown', handleKeyDown);
-
+        start();
+        
         return () => {
-            document.removeEventListener('fullscreenchange', handleFullscreenChange);
-            document.removeEventListener('keydown', handleKeyDown);
-            if (document.fullscreenElement) {
-                document.exitFullscreen().catch(() => {});
-            }
+            if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
         };
-    }, [attemptId, isLocked]);
+    }, [examId, navigate]);
 
     // ============================================================
-    // 3. TIMER LOGIC
+    // 2. TIMER
     // ============================================================
     useEffect(() => {
         if (timeLeft <= 0 || !attemptId || isLocked) return;
-
         timerRef.current = setInterval(() => {
-            setTimeLeft((prev) => {
-                if (prev <= 1) {
-                    clearInterval(timerRef.current);
-                    handleAutoSubmit("Time is up!");
-                    return 0;
-                }
+            setTimeLeft(prev => {
+                if (prev <= 1) { clearInterval(timerRef.current); handleSubmit("Time up"); return 0; }
                 return prev - 1;
             });
         }, 1000);
-
         return () => clearInterval(timerRef.current);
     }, [timeLeft, attemptId, isLocked]);
 
-    const formatTime = (seconds) => {
-        const m = Math.floor(seconds / 60);
-        const s = seconds % 60;
-        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    const formatTime = (s) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+
+    // ============================================================
+    // 3. HANDLE BACKEND SECURITY
+    // ============================================================
+    const handleBackendSecurityUpdate = (responseData) => {
+        if (responseData.is_locked) {
+            setIsLocked(true);
+            setLockReason(responseData.lock_reason);
+            
+            // If backend says this is permanent, submit the exam
+            if (!responseData.requires_recheck) {
+                setIsPermanentLock(true);
+                handleSubmit("Exam Locked by Server");
+            }
+        } else {
+            // Backend says OK -> Unlock screen
+            setIsLocked(false);
+            setLockReason('');
+        }
     };
 
     // ============================================================
-    // 4. SECURITY VIOLATIONS & SUBMIT
+    // 4. SUBMIT
     // ============================================================
-    const handleViolation = useCallback((type, message) => {
-        console.warn(`Violation: ${type} - ${message}`);
-        
-        if (type === 'EXAM_LOCKED' || type === 'FACE_LOCK' || type === 'MULTIPLE_FACES') {
-            setIsLocked(true);
-            setLockReason(message);
-            handleAutoSubmit(`Exam Locked: ${message}`);
-        }
-    }, []);
-
-    const handleAutoSubmit = useCallback(async (reason) => {
-        if (isSubmitting || !attemptId) return;
-        setIsSubmitting(true);
-        
-        toast.error(`🚨 Auto-submitting exam: ${reason}`, { duration: 5000 });
-
+    const handleSubmit = async (reason) => {
+        if (!attemptId) return;
+        toast.error(`Submitting: ${reason}`);
         try {
             await api.post(`/exams/attempt/${attemptId}/submit/`, { answers });
-            setTimeout(() => navigate('/results'), 2000);
-        } catch (err) {
-            console.error("Auto submit failed:", err);
-        }
-    }, [attemptId, answers, navigate, isSubmitting]);
-
-    const handleManualSubmit = async () => {
-        if (!window.confirm("Are you sure you want to submit your exam? You cannot change your answers after this.")) return;
-        
-        setIsSubmitting(true);
-        try {
-            await api.post(`/exams/attempt/${attemptId}/submit/`, { answers });
-            toast.success("Exam submitted successfully!");
             if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
             navigate('/results');
         } catch (err) {
-            toast.error(err.response?.data?.error || "Failed to submit exam.");
-            setIsSubmitting(false);
+            console.error(err);
         }
-    };
-
-    const handleAnswerChange = (questionId, value) => {
-        setAnswers(prev => ({ ...prev, [questionId]: value }));
     };
 
     // ============================================================
     // RENDER
     // ============================================================
-    if (loading) return <div style={{ textAlign: 'center', padding: '50px' }}>Loading Exam...</div>;
-    if (error) return <div style={{ textAlign: 'center', padding: '50px', color: '#dc2626' }}>{error}</div>;
-
-    const currentQuestion = questions[currentIndex];
+    const q = questions[currentIndex];
 
     return (
-        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px', display: 'flex', gap: '24px' }}>
+        <div style={{ display: 'flex', height: '100vh', background: '#f1f5f9' }}>
             
-            {/* LEFT SIDE: QUESTIONS */}
-            <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>{exam?.title || 'Final Exam'}</h1>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: timeLeft < 300 ? '#fef2f2' : '#f8fafc', color: timeLeft < 300 ? '#dc2626' : '#0f172a', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', fontSize: '18px', border: `1px solid ${timeLeft < 300 ? '#fecaca' : '#e2e8f0'}` }}>
-                        <Clock size={20} /> {formatTime(timeLeft)}
+            {/* ✅ BLACK SCREEN LOCK OVERLAY */}
+            {isLocked && (
+                <div style={{ position: 'fixed', inset: 0, background: 'black', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', textAlign: 'center', padding: '20px' }}>
+                    <ShieldAlert size={100} color="#dc2626" />
+                    <h1 style={{ fontSize: '48px', margin: '20px 0' }}>EXAM LOCKED</h1>
+                    <p style={{ fontSize: '20px', color: '#94a3b8', maxWidth: '600px' }}>{lockReason}</p>
+                    {!isPermanentLock && (
+                        <p style={{ color: '#22c55e', marginTop: '20px', fontWeight: 'bold' }}>
+                            Waiting for conditions to return to normal...
+                        </p>
+                    )}
+                </div>
+            )}
+
+            {/* LEFT: QUESTIONS */}
+            <div style={{ flex: 1, padding: '40px', opacity: isLocked ? 0.1 : 1, pointerEvents: isLocked ? 'none' : 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px' }}>
+                    <h1 style={{ fontSize: '24px' }}>Question {currentIndex + 1} of {questions.length}</h1>
+                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: timeLeft < 300 ? '#dc2626' : '#0f172a' }}>
+                        <Clock size={20} style={{ display: 'inline', marginRight: '8px' }} />
+                        {formatTime(timeLeft)}
                     </div>
                 </div>
 
-                {/* Question Navigation Bar */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px', background: 'white', padding: '16px', borderRadius: '12px' }}>
-                    {questions.map((q, idx) => (
-                        <button key={q.id} onClick={() => setCurrentIndex(idx)} style={{ width: '40px', height: '40px', borderRadius: '8px', border: idx === currentIndex ? '2px solid #2563eb' : '1px solid #e2e8f0', background: answers[q.id] ? '#dcfce7' : (idx === currentIndex ? '#eff6ff' : 'white'), color: answers[q.id] ? '#16a34a' : (idx === currentIndex ? '#2563eb' : '#64748b'), fontWeight: 'bold', cursor: 'pointer' }}>
-                            {idx + 1}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Question Card */}
-                {currentQuestion && (
-                    <div style={{ background: 'white', padding: '32px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '24px', lineHeight: '1.6' }}>
-                            {currentIndex + 1}. {currentQuestion.text}
-                        </h3>
-                        
-                        {currentQuestion.type === 'MCQ' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                {currentQuestion.options.map((opt, i) => (
-                                    <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', background: answers[currentQuestion.id] === opt ? '#eff6ff' : 'transparent', borderColor: answers[currentQuestion.id] === opt ? '#2563eb' : '#e2e8f0' }}>
-                                        <input type="radio" name={`q_${currentQuestion.id}`} value={opt} checked={answers[currentQuestion.id] === opt} onChange={() => handleAnswerChange(currentQuestion.id, opt)} />
-                                        <span style={{ fontSize: '16px' }}>{opt}</span>
-                                    </label>
-                                ))}
+                {q && (
+                    <div style={{ background: 'white', padding: '30px', borderRadius: '12px' }}>
+                        <h2 style={{ fontSize: '18px', marginBottom: '20px' }}>{q.text}</h2>
+                        {q.type === 'MCQ' && q.options.map((opt, i) => (
+                            <div key={i} style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '10px' }}>
+                                <input type="radio" checked={answers[q.id] === opt} onChange={() => setAnswers({...answers, [q.id]: opt})} /> {opt}
                             </div>
-                        )}
-
-                        {currentQuestion.type === 'TF' && (
-                            <div style={{ display: 'flex', gap: '16px' }}>
-                                {['True', 'False'].map(opt => (
-                                    <label key={opt} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', background: answers[currentQuestion.id] === opt ? '#eff6ff' : 'transparent', borderColor: answers[currentQuestion.id] === opt ? '#2563eb' : '#e2e8f0' }}>
-                                        <input type="radio" name={`q_${currentQuestion.id}`} value={opt} checked={answers[currentQuestion.id] === opt} onChange={() => handleAnswerChange(currentQuestion.id, opt)} />
-                                        <span style={{ fontSize: '16px' }}>{opt}</span>
-                                    </label>
-                                ))}
-                            </div>
-                        )}
-
-                        {currentQuestion.type === 'SHORT' && (
-                            <textarea value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="Type your answer here..." style={{ width: '100%', minHeight: '150px', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', fontFamily: 'inherit', fontSize: '16px' }} />
-                        )}
+                        ))}
                     </div>
                 )}
 
-                {/* Navigation Buttons */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <button onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))} disabled={currentIndex === 0} style={{ padding: '12px 24px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: currentIndex === 0 ? 'not-allowed' : 'pointer', opacity: currentIndex === 0 ? 0.5 : 1 }}>
-                        Previous
-                    </button>
-                    
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
+                    <button onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))} disabled={currentIndex === 0}>Previous</button>
                     {currentIndex === questions.length - 1 ? (
-                        <button onClick={handleManualSubmit} disabled={isSubmitting} style={{ padding: '12px 32px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: isSubmitting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <CheckCircle size={20} /> {isSubmitting ? 'Submitting...' : 'Submit Exam'}
-                        </button>
+                        <button onClick={() => handleSubmit("User submitted")} style={{ background: '#16a34a', color: 'white', padding: '10px 20px' }}>Submit Exam</button>
                     ) : (
-                        <button onClick={() => setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1))} style={{ padding: '12px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                            Next
-                        </button>
+                        <button onClick={() => setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1))} style={{ background: '#2563eb', color: 'white', padding: '10px 20px' }}>Next</button>
                     )}
                 </div>
             </div>
 
-            {/* RIGHT SIDE: AI PROCTOR */}
-            <div style={{ width: '400px', flexShrink: 0 }}>
-                <div style={{ position: 'sticky', top: '24px' }}>
-                    <AIProctor 
-                        attemptId={attemptId}
-                        examId={examId}
-                        studentId={user?.id}
-                        onViolation={handleViolation}
-                        onAutoSubmit={({ reason }) => handleAutoSubmit(reason)}
-                    />
-                </div>
+            {/* RIGHT: AI PROCTOR */}
+            <div style={{ width: '450px', padding: '20px', background: '#0f172a' }}>
+                <AIProctor 
+                    attemptId={attemptId}
+                    examId={examId}
+                    studentId={user?.id}
+                    onBackendSecurityUpdate={handleBackendSecurityUpdate} // ✅ Connect to backend
+                />
             </div>
-
-            {/* FULL SCREEN LOCK OVERLAY */}
-            {isLocked && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', padding: '20px', textAlign: 'center' }}>
-                    <ShieldAlert size={80} color="#dc2626" />
-                    <h1 style={{ fontSize: '32px', marginTop: '20px' }}>EXAM LOCKED</h1>
-                    <p style={{ fontSize: '18px', color: '#94a3b8', maxWidth: '500px' }}>{lockReason}</p>
-                    <p style={{ fontSize: '14px', color: '#64748b', marginTop: '20px' }}>Your exam has been automatically submitted and flagged for review.</p>
-                </div>
-            )}
         </div>
     );
 };
