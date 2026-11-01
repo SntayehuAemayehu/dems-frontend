@@ -61,8 +61,23 @@ const handleSubmit = async (e) => {
       };
       
       navigate(redirectMap[role] || '/dashboard');
+
     } catch (error) {
-      toast.error(error || 'Login failed');
+      // ============================================================
+      // ✅ NEW: CATCH ADMIN LOGIN BLOCK & REDIRECT TO ADMIN PAGE
+      // ============================================================
+      // The Redux `unwrap()` might return a string error or an object depending on your slice.
+      // We check both just to be safe.
+      const errorMessage = error?.message || error;
+      
+      if (errorMessage?.includes('Administrators must use') || error?.is_admin) {
+          toast.error('Admins must use the Admin Login page. Redirecting...');
+          navigate('/admin-login'); // ✅ Redirects to the correct page
+          return;
+      }
+
+      // Normal error handling (e.g., wrong password)
+      toast.error(errorMessage || 'Login failed');
     }
   };
 
