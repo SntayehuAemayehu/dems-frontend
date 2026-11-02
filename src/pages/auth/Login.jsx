@@ -1,5 +1,6 @@
 // frontend/src/pages/auth/Login.jsx
 // COMPLETE FIXED - With OTP-based password reset flow
+// Background changed to pure white
 
 import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -27,23 +28,19 @@ const Login = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-const handleSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       const result = await dispatch(login(formData)).unwrap();
       
       // ✅ CHECK IF STUDENT IS LOCKED
       if (result?.status === 'LOCKED' || result?.is_locked === true) {
-        // Save tokens and user data
         if (result.access) localStorage.setItem('access_token', result.access);
         if (result.refresh) localStorage.setItem('refresh_token', result.refresh);
         if (result.user) localStorage.setItem('user', JSON.stringify(result.user));
         if (result.user?.role) localStorage.setItem('user_role', result.user.role);
         
-        // Show lock message
         toast.error(`🔒 ${result.message || 'Your account is locked. Please make payment.'}`);
-        
-        // Redirect to payments page
         navigate('/payments?locked=true');
         return;
       }
@@ -63,27 +60,19 @@ const handleSubmit = async (e) => {
       navigate(redirectMap[role] || '/dashboard');
 
     } catch (error) {
-      // ============================================================
-      // ✅ NEW: CATCH ADMIN LOGIN BLOCK & REDIRECT TO ADMIN PAGE
-      // ============================================================
-      // The Redux `unwrap()` might return a string error or an object depending on your slice.
-      // We check both just to be safe.
       const errorMessage = error?.message || error;
       
       if (errorMessage?.includes('Administrators must use') || error?.is_admin) {
           toast.error('Admins must use the Admin Login page. Redirecting...');
-          navigate('/admin-login'); // ✅ Redirects to the correct page
+          navigate('/admin-login');
           return;
       }
 
-      // Normal error handling (e.g., wrong password)
       toast.error(errorMessage || 'Login failed');
     }
   };
 
-  // ============= FORGOT PASSWORD HANDLERS =============
-  // ============= FORGOT PASSWORD HANDLERS =============
-const handleForgotPassword = async (e) => {
+  const handleForgotPassword = async (e) => {
     e.preventDefault();
     if (!resetEmail) {
         toast.error('Please enter your email address');
@@ -101,7 +90,6 @@ const handleForgotPassword = async (e) => {
         if (response.data.success) {
             setResetSent(true);
             
-            // Show OTP in toast (development only)
             if (response.data.development && response.data.otp) {
                 toast.success(`📧 Your OTP: ${response.data.otp}`);
                 toast.info(`🔑 Use this OTP to reset your password: ${response.data.otp}`, {
@@ -111,7 +99,6 @@ const handleForgotPassword = async (e) => {
                 toast.success('OTP sent to your email!');
             }
             
-            // Navigate to OTP verification page
             navigate('/verify-otp', { 
                 state: { 
                     email: resetEmail,
@@ -142,7 +129,7 @@ const handleForgotPassword = async (e) => {
     } finally {
         setResetLoading(false);
     }
-};
+  };
 
   const handleBackToLogin = () => {
     setShowForgotPassword(false);
@@ -159,7 +146,7 @@ const handleForgotPassword = async (e) => {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '24px',
-        background: 'linear-gradient(135deg, #eff6ff, #dbeafe, #ede9fe)',
+        background: '#ffffff', // ✅ WHITE BACKGROUND
       }}>
         <div style={{
           background: 'white',
@@ -441,7 +428,7 @@ const handleForgotPassword = async (e) => {
       alignItems: 'center',
       justifyContent: 'center',
       padding: '24px',
-      background: 'linear-gradient(135deg, #eff6ff, #dbeafe, #ede9fe)',
+      background: '#ffffff', // ✅ WHITE BACKGROUND
     }}>
       <div style={{
         background: 'white',
@@ -623,7 +610,6 @@ const handleForgotPassword = async (e) => {
             {isLoading ? 'Signing in...' : 'Sign In'}
           </button>
 
-          {/* ============= FORGOT PASSWORD LINK - BELOW THE SUBMIT BUTTON ============= */}
           <div style={{
             textAlign: 'center',
             marginTop: '8px',

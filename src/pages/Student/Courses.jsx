@@ -213,7 +213,7 @@ const Courses = () => {
             alignItems: 'center',
             gap: '8px',
           }}>
-            <Filter size={20} style={{ color: '#94a3b8' }} />
+            {/* <Filter size={20} style={{ color: '#94a3b8' }} />
             <select
               value={selectedSemester}
               onChange={(e) => setSelectedSemester(e.target.value)}
@@ -239,7 +239,7 @@ const Courses = () => {
               {semesters.map(sem => (
                 <option key={sem} value={sem}>Semester {sem}</option>
               ))}
-            </select>
+            </select> */}
           </div>
         </div>
       </div>
@@ -365,8 +365,6 @@ const Courses = () => {
                       color: '#64748b',
                       fontSize: '14px',
                     }}>
-                      <Users size={16} style={{ color: '#94a3b8' }} />
-                      <span>{course.enrolled_count || 0} / {course.capacity} students</span>
                     </div>
                     <div style={{
                       display: 'flex',
@@ -428,7 +426,7 @@ const Courses = () => {
                       View Details
                     </Link>
                     
-                    {user?.role === 'STUDENT' && (
+                    {/* {user?.role === 'STUDENT' && (
                       <>
                         {isEnrolled ? (
                           // If enrolled, show "View Materials" button
@@ -485,7 +483,7 @@ const Courses = () => {
                           </button>
                         )}
                       </>
-                    )}
+                    )} */}
                     
                     {user?.role === 'TEACHER' && (
                       <Link
@@ -516,9 +514,9 @@ const Courses = () => {
                     <div style={{
                       marginTop: '12px',
                       padding: '8px',
-                      background: '#f0fdf4',
+                      // background: '#f0fdf4',
                       borderRadius: '6px',
-                      border: '1px solid #bbf7d0',
+                      // border: '1px solid #bbf7d0',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -526,8 +524,8 @@ const Courses = () => {
                       fontSize: '13px',
                       color: '#16a34a',
                     }}>
-                      <CheckCircle size={16} />
-                      <span>You are enrolled in this course</span>
+                      {/* <CheckCircle size={16} /> */}
+                      {/* <span>You are enrolled in this course</span> */}
                     </div>
                   )}
                 </div>

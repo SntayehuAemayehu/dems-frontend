@@ -5,11 +5,10 @@ import {
   Clock, Calendar, FileText, CheckCircle, 
   ArrowLeft, Shield, AlertCircle, Award 
 } from 'lucide-react';
-import toast from 'react-hot-toast';
 import api from '../../api/api';
 
 const ExamDetails = () => {
-  const { id } = useParams();
+  const { examId } = useParams();
   const navigate = useNavigate();
   const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -17,13 +16,14 @@ const ExamDetails = () => {
 
   useEffect(() => {
     fetchExamDetails();
-  }, [id]);
+  }, [examId]);
 
   const fetchExamDetails = async () => {
     try {
       setLoading(true);
-      // Assuming your backend has an endpoint to get a single exam by ID
-      const response = await api.get(`/exams/${id}/`);
+      setError(null);
+      setExam(null);
+      const response = await api.get(`/exams/${examId}/`);
       setExam(response.data);
     } catch (err) {
       console.error('Failed to fetch exam details:', err);
@@ -244,8 +244,7 @@ const ExamDetails = () => {
           </div>
         ) : (
           <button
-            // ✅ FIX: Route to the secure StartExam gatekeeper instead of the old TakeExam
-            onClick={() => navigate(`/exams/${exam.id}/start`)}
+            onClick={() => navigate(`/exams/${exam.id}/take`)}
             style={{
               display: 'flex',
               alignItems: 'center',

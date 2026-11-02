@@ -2,15 +2,17 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Calendar, FileText, CheckCircle, Eye } from 'lucide-react';
+import { Clock, Calendar, FileText, CheckCircle, Eye, Loader } from 'lucide-react';
 import { fetchExams } from '../../store/slices/examSlice';
 import api from '../../api/api';
+import toast from 'react-hot-toast';
 
 const Exams = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { exams = [], isLoading = false } = useSelector((state) => state.exams || { exams: [] });
   const [localExams, setLocalExams] = useState([]);
+  const [checkingFace, setCheckingFace] = useState(false);
 
   useEffect(() => {
     fetchAllExams();
@@ -30,6 +32,39 @@ const Exams = () => {
       }
     }
   };
+
+  // ============================================================
+// ✅ IMPROVED: Check face enrollment before going to exam
+// ============================================================
+const handleTakeExam = async (examId) => {
+  setCheckingFace(true);
+  
+  try {
+    const res = await api.get('/auth/face-status/');
+    console.log('Face status response:', res.data); // ← check this in console
+
+    const isEnrolled = res.data?.face_enrolled === true;
+
+    if (isEnrolled) {
+      // Already enrolled → go to exam
+      navigate(`/exams/${examId}/start`);
+    } else {
+      // Not enrolled → go to face enrollment
+      toast.error('Please enroll your face before taking the exam');
+      // Save the examId so we can redirect back after enrollment
+      localStorage.setItem('pending_exam_id', examId);
+      navigate('/enroll-face');
+    }
+  } catch (err) {
+    console.error('Face status check failed:', err);
+    toast.error('Could not check face enrollment status');
+    // Safer fallback
+    localStorage.setItem('pending_exam_id', examId);
+    navigate('/enroll-face');
+  } finally {
+    setCheckingFace(false);
+  }
+};
 
   const displayExams = localExams.length > 0 ? localExams : (Array.isArray(exams) ? exams : []);
   const publishedExams = displayExams.filter(e => e.is_published === true);
@@ -132,12 +167,36 @@ const Exams = () => {
                       </span>
                     ) : (
                       <button
-                        onClick={(e) => { e.stopPropagation(); navigate(`/exams/${exam.id}/take`); }}
-                        style={{ display: 'inline-block', padding: '8px 16px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.3s ease' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = '#16a34a'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = '#22c55e'; }}
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          handleTakeExam(exam.id);   // ✅ NEW LOGIC
+                        }}
+                        disabled={checkingFace}
+                        style={{ 
+                          display: 'inline-block', 
+                          padding: '8px 16px', 
+                          background: checkingFace ? '#94a3b8' : '#22c55e', 
+                          color: 'white', 
+                          border: 'none', 
+                          borderRadius: '8px', 
+                          fontSize: '14px', 
+                          fontWeight: 500, 
+                          cursor: checkingFace ? 'not-allowed' : 'pointer', 
+                          transition: 'all 0.3s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                        onMouseEnter={(e) => { if (!checkingFace) e.currentTarget.style.background = '#16a34a'; }}
+                        onMouseLeave={(e) => { if (!checkingFace) e.currentTarget.style.background = '#22c55e'; }}
                       >
-                        Take Exam
+                        {checkingFace ? (
+                          <>
+                            <Loader size={16} className="spin" /> Checking...
+                          </>
+                        ) : (
+                          'Take Exam'
+                        )}
                       </button>
                     )}
                   </div>
@@ -233,6 +292,12 @@ const Exams = () => {
           </div>
         </div>
       )}
+
+      <style>{`
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+      `}</style>
     </div>
   );
 };

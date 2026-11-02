@@ -243,7 +243,7 @@ const CourseDetail = () => {
       </Link>
 
       {/* Course Header */}
-      <div style={{
+      {/* <div style={{
         background: 'linear-gradient(135deg, #2563eb, #1e40af)',
         borderRadius: '16px',
         padding: '32px',
@@ -310,7 +310,7 @@ const CourseDetail = () => {
                 <span>{assignments.length} Assignments</span>
               </div>
             </div>
-          </div>
+          </div> */}
           {user?.role === 'TEACHER' && (
             <Link
               to={`/live-class/${course.id}`}
@@ -339,10 +339,10 @@ const CourseDetail = () => {
               Start Live Class
             </Link>
           )}
-        </div>
-      </div>
+        {/* </div>
+      </div> */}
 
-      {/* Course Description */}
+      {/* Course Description
       <div style={{
         background: 'white',
         borderRadius: '12px',
@@ -359,7 +359,7 @@ const CourseDetail = () => {
           color: '#475569',
           lineHeight: '1.6',
         }}>{course.description || 'No description provided.'}</p>
-      </div>
+      </div> */}
 
       {/* Tabs */}
       <div style={{
@@ -541,8 +541,8 @@ const CourseDetail = () => {
                           onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
                           onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
                         >
-                          <Download size={16} />
-                          Download
+                          {/* <Download size={16} /> */}
+                          Open
                         </button>
                       ) : (
                         <span style={{
@@ -703,7 +703,7 @@ const CourseDetail = () => {
                               onMouseLeave={(e) => e.currentTarget.style.background = '#eff6ff'}
                             >
                               <FileText size={14} />
-                              View Attachment
+                              Open Assignment
                             </a>
                           )}
                           

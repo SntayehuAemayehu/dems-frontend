@@ -1,5 +1,6 @@
 // frontend/src/pages/auth/ForgotPassword.jsx
 // COMPLETE - Send OTP to email
+// Background changed to pure white
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -66,7 +67,7 @@ const ForgotPassword = () => {
       alignItems: 'center',
       justifyContent: 'center',
       padding: '24px',
-      background: 'linear-gradient(135deg, #eff6ff, #dbeafe, #ede9fe)',
+      background: '#ffffff', // ✅ WHITE BACKGROUND
     }}>
       <div style={{
         background: 'white',

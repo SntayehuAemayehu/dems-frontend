@@ -1,5 +1,6 @@
 // frontend/src/pages/auth/VerifyOTP.jsx
 // COMPLETE FIXED - With auto-fill OTP for development
+// Background changed to pure white
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -214,7 +215,7 @@ const VerifyOTP = () => {
       alignItems: 'center',
       justifyContent: 'center',
       padding: '24px',
-      background: 'linear-gradient(135deg, #eff6ff, #dbeafe, #ede9fe)',
+      background: '#ffffff', // ✅ WHITE BACKGROUND
     }}>
       <div style={{
         background: 'white',

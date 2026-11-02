@@ -2,7 +2,7 @@
 // COMPLETE - WITH REAL CHAT ENABLED FOR ALL ROLES
 
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { ConfigProvider, theme } from 'antd';
 import MainLayout from './layouts/MainLayout';
@@ -25,7 +25,7 @@ import Dashboard from './pages/Student/Dashboard';
 import Courses from './pages/Student/Courses';
 import CourseDetail from './pages/CourseDetail';
 import Exams from './pages/Student/Exams';
-import TakeExam from './pages/TakeExam';
+import TakeExam from './pages/Student/TakeExam';          // ✅ FIXED PATH
 import ExamResults from './pages/Student/ExamResults';
 import ExamDetails from './pages/Student/ExamDetails'; 
 import Payments from './pages/Student/Payments';
@@ -67,8 +67,15 @@ import CurrencySelector from './components/Payment/CurrencySelector';
 // Inner component that uses dark mode context
 import SessionTimeout from './components/SessionTimeout';
 import Grading from './pages/teacher/Grading';
-import StartExam from './pages/Student/StartExam'; 
-import ExamPage from './pages/Student/ExamPage';
+// import StartExam from './pages/Student/StartExam'; 
+// import ExamPage from './pages/Student/ExamPage';
+
+
+// ✅ Small helper component for the redirect (needed because examId is not in scope)
+const RedirectToStartExam = () => {
+  const { examId } = useParams();
+  return <Navigate to={`/exams/${examId}/start`} replace />;
+};
 
 
 const AppContent = () => {
@@ -180,12 +187,14 @@ const AppContent = () => {
               <Route path="/exams/:examId/details" element={<ProtectedRouteWithPayment roles={['STUDENT']}><ExamDetails /></ProtectedRouteWithPayment>} />
               
               {/* 2. SECURE START EXAM (Identity Verification Gatekeeper) */}
-              <Route path="/exams/:examId/start" element={<ProtectedRouteWithPayment roles={['STUDENT']}><StartExam /></ProtectedRouteWithPayment>} />
+              <Route path="/exams/:examId/start" element={<ProtectedRouteWithPayment roles={['STUDENT']}><TakeExam /></ProtectedRouteWithPayment>} />
 
-              {/* 3. THE ACTUAL EXAM PAGE (Questions + AI Proctor) */}
-              {/* ✅ FIXED: Points to ExamPage instead of the old TakeExam */}
-              <Route path="/exams/:examId/take" element={<ProtectedRouteWithPayment roles={['STUDENT']}><ExamPage /></ProtectedRouteWithPayment>} />
-
+              {/* 3. Redirect old /take route to the new /start route */}
+              <Route
+                path="/exams/:examId/take"
+                element={<RedirectToStartExam />}
+              />
+ 
               {/* Results & Others */}
               <Route path="/results" element={<ProtectedRoute roles={['STUDENT']}><ExamResults /></ProtectedRoute>} />
               <Route path="/payments" element={<ProtectedRoute roles={['STUDENT']}><Payments /></ProtectedRoute>} />

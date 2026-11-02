@@ -1,3 +1,4 @@
+// frontend/src/pages/Student/EnrollFacePage.jsx
 import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import FaceEnrollment from '../../components/Proctoring/FaceEnrollment';
@@ -9,10 +10,16 @@ export default function EnrollFacePage() {
 
   const goBack = () => {
     if (returnUrl) {
-      // ✅ Return to the exact exam URL the student came from
       navigate(decodeURIComponent(returnUrl), { replace: true });
     } else {
-      navigate('/dashboard', { replace: true });
+      // Fallback: check if we saved an exam id
+      const pendingExamId = localStorage.getItem('pending_exam_id');
+      if (pendingExamId) {
+        localStorage.removeItem('pending_exam_id');
+        navigate(`/exams/${pendingExamId}/start`, { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     }
   };
 
