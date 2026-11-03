@@ -11,11 +11,77 @@ const api = axios.create({
     },
 });
 
+export const getWebSocketUrl = (path, params = {}) => {
+    const apiUrl = new URL(API_BASE_URL, window.location.origin);
+    apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+    apiUrl.pathname = path.startsWith('/') ? path : `/${path}`;
+    apiUrl.search = '';
+
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+            apiUrl.searchParams.set(key, value);
+        }
+    });
+
+    return apiUrl.href;
+};
+
+export const getAllPages = async (url) => {
+    const apiBaseUrl = new URL(API_BASE_URL, window.location.origin);
+    const apiOrigin = apiBaseUrl.origin;
+    const apiBasePath = apiBaseUrl.pathname.replace(/\/+$/, '');
+    const apiBaseDirectory = `${apiOrigin}${apiBasePath}/`;
+    const results = [];
+    const visitedUrls = new Set();
+    let nextUrl = url;
+
+    while (nextUrl) {
+        const isAbsoluteUrl = /^[a-z][a-z\d+.-]*:/i.test(nextUrl) || nextUrl.startsWith('//');
+        let requestUrl;
+
+        if (isAbsoluteUrl) {
+            requestUrl = new URL(nextUrl, apiBaseUrl);
+        } else {
+            const endpoint = nextUrl.replace(/^\/+/, '');
+            const apiPathWithoutLeadingSlash = apiBasePath.replace(/^\/+/, '');
+            const relativeEndpoint = apiPathWithoutLeadingSlash &&
+                endpoint.startsWith(`${apiPathWithoutLeadingSlash}/`)
+                ? endpoint.slice(apiPathWithoutLeadingSlash.length + 1)
+                : endpoint;
+            requestUrl = new URL(relativeEndpoint, apiBaseDirectory);
+        }
+
+        if (requestUrl.origin !== apiOrigin) {
+            throw new Error('The API returned a pagination URL on another host.');
+        }
+        if (visitedUrls.has(requestUrl.href)) {
+            throw new Error('The API returned a pagination loop.');
+        }
+        visitedUrls.add(requestUrl.href);
+
+        const response = await api.get(requestUrl.href);
+        const data = response.data;
+
+        if (Array.isArray(data)) {
+            results.push(...data);
+            break;
+        }
+        if (!Array.isArray(data?.results)) {
+            throw new Error('The API returned an invalid list response.');
+        }
+
+        results.push(...data.results);
+        nextUrl = data.next;
+    }
+
+    return results;
+};
+
 export const getMediaUrl = (mediaPath) => {
     if (!mediaPath) return '';
 
     try {
-        const apiOrigin = new URL(API_BASE_URL).origin;
+        const apiOrigin = new URL(API_BASE_URL, window.location.origin).origin;
         return new URL(mediaPath, `${apiOrigin}/`).href;
     } catch {
         return mediaPath;

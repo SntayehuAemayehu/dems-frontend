@@ -1,20 +1,11 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import api from '../../api/api';
+import api, { getAllPages } from '../../api/api';
 
 export const fetchExams = createAsyncThunk(
   'exams/fetchExams',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await api.get('/exams/');
-      let exams = [];
-      if (response.data && response.data.results && Array.isArray(response.data.results)) {
-        exams = response.data.results;
-      } else if (Array.isArray(response.data)) {
-        exams = response.data;
-      } else if (response.data && typeof response.data === 'object') {
-        exams = [response.data];
-      }
-      return exams;
+      return await getAllPages('/exams/');
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch exams');
     }

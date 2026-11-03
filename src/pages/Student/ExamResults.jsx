@@ -1,551 +1,551 @@
 // frontend/src/pages/Student/ExamResults.jsx
+// SUM ONLY — no division, no weights
+// Course total = Quiz marks + Mid marks + Final marks + Assignment marks (raw sum)
+// Letter grade per course + bottom TOTAL row (sum across all courses)
+
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Award, TrendingUp, CheckCircle, XCircle, RefreshCw, FileText, Clock, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import {
+  Award, TrendingUp, CheckCircle, XCircle, RefreshCw, FileText,
+  Clock, AlertCircle, ClipboardList, BookOpen, MessageSquare, GraduationCap,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchResults } from '../../store/slices/examSlice';
 import api from '../../api/api';
-import { Link } from 'react-router-dom';
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+const normalize = (d) =>
+  Array.isArray(d) ? d
+    : Array.isArray(d?.results) ? d.results
+    : Array.isArray(d?.data) ? d.data
+    : [];
+
+// ============================================================
+// LETTER GRADE (raw sum scale)
+// ============================================================
+
+const letterGrade = (total) => {
+  const p = Number(total) || 0;
+  if (p >= 90) return { letter: 'A+', color: '#16a34a' };
+  if (p >= 85) return { letter: 'A',  color: '#16a34a' };
+  if (p >= 80) return { letter: 'A-', color: '#16a34a' };
+  if (p >= 75) return { letter: 'B+', color: '#2563eb' };
+  if (p >= 70) return { letter: 'B',  color: '#2563eb' };
+  if (p >= 65) return { letter: 'B-', color: '#2563eb' };
+  if (p >= 60) return { letter: 'C+', color: '#d97706' };
+  if (p >= 55) return { letter: 'C',  color: '#d97706' };
+  if (p >= 50) return { letter: 'C-', color: '#d97706' };
+  if (p >= 45) return { letter: 'D',  color: '#dc2626' };
+  return { letter: 'F', color: '#dc2626' };
+};
+
+// ============================================================
+// BUILD COURSE GRADES — SUM ONLY
+// Takes ONLY the marks returned by the API. No division, no weights.
+// ============================================================
+
+const buildCourseGrades = (exams, assigns) => {
+  const courses = {};
+
+  const ensure = (courseId, code, title) => {
+    const key = courseId != null ? `id:${courseId}` : `code:${code}`;
+    if (!courses[key]) {
+      courses[key] = {
+        course_id: courseId,
+        course_code: code,
+        course_title: title || '—',
+        quiz: 0,
+        mid: 0,
+        assignment: 0,
+        final: 0,
+        total: 0,
+      };
+    }
+    return courses[key];
+  };
+
+  // EXAMS — take r.score ONLY (raw marks from API)
+  exams.forEach((r) => {
+    const code  = r.course_code || r.exam?.course_code || r.exam?.course_title || r.course_title || 'Unknown';
+    const title = r.exam?.course_title || r.course_title || '—';
+    const courseId = r.course_id ?? r.exam?.course_id;
+    const c = ensure(courseId, code, title);
+
+    const obtained = Number(r.score ?? 0);
+    const type = (r.exam_type || r.exam?.exam_type || '').toUpperCase();
+
+    if (type === 'QUIZ') c.quiz += obtained;
+    else if (type === 'MID' || type === 'MIDTERM') c.mid += obtained;
+    else if (type === 'FINAL') c.final += obtained;
+
+    c.total += obtained;
+  });
+
+  // ASSIGNMENTS — take a.marks_obtained ONLY
+  assigns.forEach((a) => {
+    const code  = a.course_code || a.course_title || 'Unknown';
+    const title = a.course_title || '—';
+    const c = ensure(a.course_id, code, title);
+
+    const obtained = Number(a.marks_obtained ?? 0);
+    c.assignment += obtained;
+    c.total += obtained;
+  });
+
+  // Attach letter grade (based on SUM)
+  return Object.values(courses).map((c) => {
+    const g = letterGrade(c.total);
+    return { ...c, letter: g.letter, color: g.color };
+  });
+};
+
+// ============================================================
+// UI PIECES
+// ============================================================
+
+const StatusBadge = ({ type, text }) => (
+  <span className={`rs rs-${type}`}>
+    {type === 'passed' && <CheckCircle size={14} />}
+    {type === 'failed' && <XCircle size={14} />}
+    {type === 'pending' && <Clock size={14} />}
+    {type === 'satisfactory' && <TrendingUp size={14} />}
+    {type === 'inactive' && <FileText size={14} />}
+    {text}
+  </span>
+);
+
+const Table = ({ headers, children, footer }) => (
+  <div className="rc">
+    <div className="rw">
+      <table className="rt">
+        <thead><tr>{headers.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+    {footer && <div className="rf">{footer}</div>}
+  </div>
+);
+
+const Summary = ({ cards }) => (
+  <div className="rsum">
+    {cards.map((c, i) => (
+      <div key={i} className={`sc sc-${c.color}`}>
+        <div>
+          <p className="scl">{c.label}</p>
+          <p className="scv">{c.value}</p>
+        </div>
+        {c.icon}
+      </div>
+    ))}
+  </div>
+);
+
+// ============================================================
+// MAIN COMPONENT
+// ============================================================
+
 const ExamResults = () => {
   const dispatch = useDispatch();
-  const { results = [], isLoading = false } = useSelector((state) => state.exams || { results: [], isLoading: false });
-  const { user } = useSelector((state) => state.auth || {});
-  const [localResults, setLocalResults] = useState([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
+  const { results = [] } = useSelector((s) => s.exams || {});
+  const { user } = useSelector((s) => s.auth || {});
 
-  useEffect(() => {
-    fetchAllResults();
-  }, []);
+  const [tab, setTab] = useState('grades');
+  const [exams, setExams] = useState([]);
+  const [assigns, setAssigns] = useState([]);
+  const [loading, setLoading] = useState({ grades: true, exams: true, assignments: true });
+  const [refreshing, setRefreshing] = useState({ grades: false, exams: false, assignments: false });
+  const [error, setError] = useState({ grades: null, exams: null, assignments: null });
 
-  const fetchAllResults = async () => {
-    setRefreshing(true);
-    setError(null);
+  // ---------- Fetchers ----------
+  const loadExams = async () => {
+    setRefreshing((r) => ({ ...r, exams: true }));
+    setError((e) => ({ ...e, exams: null }));
     try {
-      console.log('📊 Fetching exam results for student...');
-      
-      // Try Redux first
-      const result = await dispatch(fetchResults()).unwrap();
-      console.log('📊 Redux results:', result);
-      
-      if (Array.isArray(result) && result.length > 0) {
-        setLocalResults(result);
-        toast.success(`Loaded ${result.length} exam results`);
-      } else {
-        // Try direct API call
-        console.log('📊 No results from Redux, trying direct API...');
-        try {
-          const response = await api.get('/exams/results/');
-          console.log('📊 Direct API results:', response.data);
-          
-          let data = response.data;
-          if (data && data.results && Array.isArray(data.results)) {
-            data = data.results;
-          } else if (!Array.isArray(data)) {
-            data = [];
-          }
-          
-          if (data.length > 0) {
-            setLocalResults(data);
-            toast.success(`Loaded ${data.length} exam results`);
-          } else {
-            setLocalResults([]);
-            toast.info('No exam results found');
-          }
-        } catch (apiError) {
-          console.error('Direct API call failed:', apiError);
-          setError('Failed to load results from server');
-          setLocalResults([]);
-        }
+      const res = await dispatch(fetchResults()).unwrap();
+      let data = normalize(res);
+      if (!data.length) {
+        const r = await api.get('/exams/results/');
+        data = normalize(r.data);
       }
-    } catch (error) {
-      console.error('Failed to fetch results:', error);
-      setError(error?.message || 'Failed to load exam results');
-      setLocalResults([]);
-      toast.error('Failed to load exam results');
+      setExams(data);
+      if (data.length) toast.success(`Loaded ${data.length} exam results`);
+    } catch (err) {
+      try {
+        const r = await api.get('/exams/results/');
+        const data = normalize(r.data);
+        setExams(data);
+      } catch (e) {
+        setError((x) => ({ ...x, exams: e?.response?.data?.detail || e?.message || 'Failed to load exam results' }));
+        setExams([]);
+      }
     } finally {
-      setRefreshing(false);
+      setLoading((l) => ({ ...l, exams: false, grades: false }));
+      setRefreshing((r) => ({ ...r, exams: false }));
     }
   };
 
-  // Use localResults if available, otherwise use results from Redux
-  const displayResults = localResults.length > 0 ? localResults : (Array.isArray(results) ? results : []);
-
-  const calculateAverageScore = () => {
-    if (!displayResults.length) return 0;
-    const total = displayResults.reduce((sum, r) => sum + (parseFloat(r.percentage) || 0), 0);
-    return (total / displayResults.length).toFixed(2);
-  };
-
-  const getPassCount = () => {
-    return displayResults.filter(r => r.passed === true).length || 0;
-  };
-
-  const getStatusBadge = (passed) => {
-    if (passed) {
-      return (
-        <span style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '4px',
-          padding: '4px 12px',
-          borderRadius: '20px',
-          fontSize: '12px',
-          fontWeight: 500,
-          background: '#dcfce7',
-          color: '#16a34a',
-        }}>
-          <CheckCircle size={14} />
-          Passed
-        </span>
-      );
-    } else {
-      return (
-        <span style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '4px',
-          padding: '4px 12px',
-          borderRadius: '20px',
-          fontSize: '12px',
-          fontWeight: 500,
-          background: '#fee2e2',
-          color: '#dc2626',
-        }}>
-          <XCircle size={14} />
-          Failed
-        </span>
-      );
+  const loadAssignments = async () => {
+    setRefreshing((r) => ({ ...r, assignments: true }));
+    setError((e) => ({ ...e, assignments: null }));
+    try {
+      const r = await api.get('/courses/student/assignments/results/');
+      const data = normalize(r.data);
+      setAssigns(data);
+      if (data.length) toast.success(`Loaded ${data.length} assignment results`);
+    } catch (e) {
+      setError((x) => ({ ...x, assignments: e?.response?.data?.detail || e?.message || 'Failed to load assignment results' }));
+      setAssigns([]);
+      toast.error('Failed to load assignment results');
+    } finally {
+      setLoading((l) => ({ ...l, assignments: false, grades: false }));
+      setRefreshing((r) => ({ ...r, assignments: false }));
     }
   };
 
-  if (isLoading || refreshing) {
+  useEffect(() => { loadExams(); loadAssignments(); }, []);
+
+  const refresh = () => {
+    if (tab === 'exams') loadExams();
+    else if (tab === 'assignments') loadAssignments();
+    else { loadExams(); loadAssignments(); }
+  };
+
+  // ---------- Derived ----------
+  const courseGrades = buildCourseGrades(exams, assigns);
+
+  // Bottom TOTAL = sum across all courses (marks only)
+  const grandTotal = courseGrades.reduce((s, c) => s + c.total, 0);
+  const grandGrade = letterGrade(grandTotal);
+
+  const examAvg = exams.length
+    ? (exams.reduce((s, r) => s + (parseFloat(r.percentage) || 0), 0) / exams.length).toFixed(2)
+    : '0.00';
+  const examPassed = exams.filter((r) => r.passed === true).length;
+  const examFailed = exams.filter((r) => r.passed === false).length;
+
+  const gradedA = assigns.filter((a) => a.marks_obtained != null).length;
+  const pendingA = assigns.filter((a) => a.marks_obtained == null).length;
+  const submittedA = assigns.filter((a) => a.submitted_at).length;
+  const assignAvg = (() => {
+    const g = assigns.filter((a) => a.marks_obtained != null && Number(a.total_marks) > 0);
+    if (!g.length) return '0.00';
+    return (g.reduce((s, a) => s + (Number(a.marks_obtained) / Number(a.total_marks)) * 100, 0) / g.length).toFixed(2);
+  })();
+
+  // ---------- Badges ----------
+  const examBadge = (passed) =>
+    passed === true
+      ? <StatusBadge type="passed" text="Passed" />
+      : <StatusBadge type="failed" text="Failed" />;
+
+  const assignBadge = (a) => {
+    if (a.marks_obtained != null) {
+      const p = Number(a.total_marks) > 0 ? (Number(a.marks_obtained) / Number(a.total_marks)) * 100 : 0;
+      if (p >= 70) return <StatusBadge type="passed" text="Passed" />;
+      if (p >= 50) return <StatusBadge type="satisfactory" text="Satisfactory" />;
+      return <StatusBadge type="failed" text="Needs Improvement" />;
+    }
+    if (a.submitted_at) return <StatusBadge type="pending" text="Pending Grade" />;
+    return <StatusBadge type="inactive" text="Not Submitted" />;
+  };
+
+  // ---------- Loading ----------
+  const isLoading = loading[tab];
+  const isRefreshing = refreshing[tab];
+  const err = error[tab];
+
+  if (isLoading) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '400px',
-        flexDirection: 'column',
-        gap: '16px',
-      }}>
-        <div style={{
-          width: '48px',
-          height: '48px',
-          border: '4px solid #e2e8f0',
-          borderTopColor: '#2563eb',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-        }} />
-        <p style={{ color: '#64748b' }}>Loading your exam results...</p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div className="rload">
+        <div className="rspin" />
+        <p>Loading your results...</p>
+        <style>{`@keyframes rspin{to{transform:rotate(360deg)}}.rload{display:flex;justify-content:center;align-items:center;min-height:400px;flex-direction:column;gap:16px}.rspin{width:48px;height:48px;border:4px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;animation:rspin 1s linear infinite}`}</style>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px' }}>
-        <div style={{
-          background: '#fef2f2',
-          borderRadius: '12px',
-          padding: '24px',
-          textAlign: 'center',
-          border: '1px solid #fecaca',
-        }}>
-          <AlertCircle size={48} style={{ color: '#dc2626', margin: '0 auto 16px' }} />
-          <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#dc2626', marginBottom: '8px' }}>
-            Error Loading Results
-          </h3>
-          <p style={{ color: '#64748b' }}>{error}</p>
-          <button
-            onClick={fetchAllResults}
-            style={{
-              marginTop: '16px',
-              padding: '10px 24px',
-              background: '#2563eb',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 500,
-              transition: 'all 0.3s ease',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
-            onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
-          >
-            <RefreshCw size={16} style={{ display: 'inline', marginRight: '8px' }} />
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+  // ============================================================
+  // RENDER
+  // ============================================================
   return (
-    <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px' }}>
+    <div className="page">
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 768px) {
-          .results-summary {
-            grid-template-columns: 1fr !important;
-          }
-          .results-table-wrapper {
-            overflow-x: auto;
-          }
-          .results-table th, .results-table td {
-            padding: 8px 12px !important;
-            font-size: 12px !important;
-          }
-        }
+        .page{max-width:1280px;margin:0 auto;padding:24px;color:#0f172a}
+        .hd{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;margin-bottom:24px}
+        .ttl{font-size:28px;font-weight:700;margin:0;display:flex;align-items:center;gap:12px}
+        .sub{color:#64748b;margin:6px 0 0;font-size:14px}
+        .rbtn{display:flex;align-items:center;gap:8px;padding:10px 18px;background:#f1f5f9;border:none;border-radius:8px;color:#475569;cursor:pointer;font-size:14px;font-weight:500;transition:.3s}
+        .rbtn:hover{background:#e2e8f0}.rbtn:disabled{opacity:.6;cursor:not-allowed}.spin{animation:rspin 1s linear infinite}
+        .tabs{display:flex;gap:12px;margin-bottom:24px;background:#fff;padding:8px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid #e2e8f0}
+        .tab{flex:1;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 20px;border:none;border-radius:8px;background:transparent;color:#64748b;font-size:15px;font-weight:600;cursor:pointer;transition:.25s}
+        .tab:hover{background:#f1f5f9;color:#2563eb}.tab.active{background:#2563eb;color:#fff;box-shadow:0 3px 8px rgba(37,99,235,.2)}
+        .cnt{padding:3px 9px;border-radius:20px;background:rgba(255,255,255,.2);font-size:12px}.tab:not(.active) .cnt{background:#e2e8f0;color:#475569}
+        .rsum{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+        .sc{border-radius:12px;padding:24px;color:#fff;display:flex;justify-content:space-between;align-items:center;min-height:110px}
+        .sc-blue{background:linear-gradient(135deg,#3b82f6,#2563eb)}.sc-green{background:linear-gradient(135deg,#22c55e,#16a34a)}
+        .sc-purple{background:linear-gradient(135deg,#8b5cf6,#7c3aed)}.sc-orange{background:linear-gradient(135deg,#f59e0b,#d97706)}
+        .scl{font-size:14px;opacity:.9;margin:0}.scv{font-size:30px;font-weight:700;margin:6px 0 0}.sci{opacity:.5}
+        .rc{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.1);overflow:hidden;border:1px solid #e2e8f0}
+        .rw{width:100%;overflow-x:auto}.rt{width:100%;border-collapse:collapse;min-width:1000px}
+        .rt thead{background:#f8fafc}.rt th{padding:14px 16px;text-align:left;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+        .rt td{padding:14px 16px;font-size:14px;border-bottom:1px solid #f1f5f9;color:#475569;vertical-align:middle}
+        .rt tbody tr{transition:background .2s}.rt tbody tr:hover{background:#f8fafc}.rt tbody tr:last-child td{border-bottom:none}
+        .rt tr.total-row{background:#eff6ff;border-top:2px solid #2563eb}
+        .rt tr.total-row td{font-weight:800;color:#0f172a;font-size:14px;border-bottom:none}
+        .rs{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap}
+        .rs-passed{background:#dcfce7;color:#16a34a}.rs-failed{background:#fee2e2;color:#dc2626}
+        .rs-pending{background:#fef3c7;color:#d97706}.rs-satisfactory{background:#dbeafe;color:#2563eb}.rs-inactive{background:#f1f5f9;color:#64748b}
+        .rf{padding:14px 16px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;font-size:13px;color:#64748b}
+        .empty{background:#fff;border-radius:12px;padding:60px 24px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.1);border:1px solid #e2e8f0}
+        .empty h3{font-size:19px;font-weight:600;color:#0f172a;margin:0 0 8px}.empty p{color:#64748b;font-size:14px;margin:0}
+        .elink{display:inline-flex;align-items:center;gap:8px;margin-top:20px;padding:11px 24px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;transition:.3s}
+        .elink:hover{background:#1d4ed8}
+        .err{background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:30px;text-align:center}
+        .err h3{color:#dc2626;margin:12px 0 8px}.err p{color:#64748b;font-size:14px}
+        .err button{margin-top:12px;padding:10px 22px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+        .fb{display:block;max-width:220px;color:#2563eb;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+        .sp{display:block;margin-top:4px;font-size:12px;font-weight:500}
+        .grade-chip{display:inline-block;padding:5px 12px;border-radius:20px;font-weight:800;font-size:13px;letter-spacing:.3px}
+        .gpa-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px}
+        .gpa-box{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+        .gpa-label{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin:0 0 6px}
+        .gpa-value{font-size:28px;font-weight:800;margin:0}
+        @media(max-width:768px){.page{padding:16px}.ttl{font-size:23px}.rsum,.gpa-row{grid-template-columns:1fr}.tabs{gap:6px;padding:5px}.tab{padding:12px 8px;font-size:12px;gap:6px}.tab svg{width:16px;height:16px}.sc{padding:20px}.scv{font-size:26px}.rt th,.rt td{padding:10px 12px;font-size:12px}.rf{font-size:12px}}
+        @media(max-width:400px){.tab{flex-direction:column;font-size:11px}.tab .cnt{display:none}}
       `}</style>
 
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '24px',
-        flexWrap: 'wrap',
-        gap: '12px',
-      }}>
+      {/* HEADER */}
+      <div className="hd">
         <div>
-          <h1 style={{
-            fontSize: '28px',
-            fontWeight: 700,
-            color: '#0f172a',
-            margin: 0,
-          }}>Exam Results</h1>
-          <p style={{
-            color: '#64748b',
-            margin: '4px 0 0 0',
-          }}>
-            {displayResults.length > 0 
-              ? `Showing ${displayResults.length} exam result${displayResults.length > 1 ? 's' : ''}`
-              : 'Complete exams to see your results here'}
-          </p>
+          <h1 className="ttl"><GraduationCap size={30} color="#2563eb" /> My Results</h1>
+          <p className="sub">Course total = Quiz + Mid + Final + Assignment marks (raw sum, no division).</p>
         </div>
-        <button
-          onClick={fetchAllResults}
-          disabled={refreshing}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '8px 16px',
-            background: '#f1f5f9',
-            border: 'none',
-            borderRadius: '8px',
-            color: '#475569',
-            cursor: refreshing ? 'not-allowed' : 'pointer',
-            transition: 'all 0.3s ease',
-            opacity: refreshing ? 0.6 : 1,
-          }}
-          onMouseEnter={(e) => {
-            if (!refreshing) e.currentTarget.style.background = '#e2e8f0';
-          }}
-          onMouseLeave={(e) => {
-            if (!refreshing) e.currentTarget.style.background = '#f1f5f9';
-          }}
-        >
-          <RefreshCw size={18} className={refreshing ? 'spinning' : ''} />
-          Refresh
+        <button className="rbtn" onClick={refresh} disabled={isRefreshing}>
+          <RefreshCw size={18} className={isRefreshing ? 'spin' : ''} /> Refresh
         </button>
       </div>
 
-      {/* Summary Cards - Only show if there are results */}
-      {displayResults.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: '16px',
-          marginBottom: '24px',
-        }} className="results-summary">
-          <div style={{
-            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-            borderRadius: '12px',
-            padding: '24px',
-            color: 'white',
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}>
-              <div>
-                <p style={{
-                  fontSize: '14px',
-                  opacity: 0.9,
-                  margin: 0,
-                }}>Average Score</p>
-                <p style={{
-                  fontSize: '32px',
-                  fontWeight: 700,
-                  margin: '4px 0 0 0',
-                }}>{calculateAverageScore()}%</p>
-              </div>
-              <TrendingUp size={40} style={{ opacity: 0.5 }} />
-            </div>
-          </div>
-          
-          <div style={{
-            background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-            borderRadius: '12px',
-            padding: '24px',
-            color: 'white',
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}>
-              <div>
-                <p style={{
-                  fontSize: '14px',
-                  opacity: 0.9,
-                  margin: 0,
-                }}>Exams Passed</p>
-                <p style={{
-                  fontSize: '32px',
-                  fontWeight: 700,
-                  margin: '4px 0 0 0',
-                }}>{getPassCount()} / {displayResults.length}</p>
-              </div>
-              <Award size={40} style={{ opacity: 0.5 }} />
-            </div>
-          </div>
-          
-          <div style={{
-            background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-            borderRadius: '12px',
-            padding: '24px',
-            color: 'white',
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}>
-              <div>
-                <p style={{
-                  fontSize: '14px',
-                  opacity: 0.9,
-                  margin: 0,
-                }}>Total Exams</p>
-                <p style={{
-                  fontSize: '32px',
-                  fontWeight: 700,
-                  margin: '4px 0 0 0',
-                }}>{displayResults.length}</p>
-              </div>
-              <FileText size={40} style={{ opacity: 0.5 }} />
-            </div>
-          </div>
+      {/* TABS */}
+      <div className="tabs">
+        <button className={`tab ${tab === 'grades' ? 'active' : ''}`} onClick={() => setTab('grades')}>
+          <GraduationCap size={20} /><span>Final Grades</span><span className="cnt">{courseGrades.length}</span>
+        </button>
+        <button className={`tab ${tab === 'exams' ? 'active' : ''}`} onClick={() => setTab('exams')}>
+          <Award size={20} /><span>Exams</span><span className="cnt">{exams.length}</span>
+        </button>
+        <button className={`tab ${tab === 'assignments' ? 'active' : ''}`} onClick={() => setTab('assignments')}>
+          <ClipboardList size={20} /><span>Assignments</span><span className="cnt">{assigns.length}</span>
+        </button>
+      </div>
+
+      {/* ERROR */}
+      {err && (
+        <div className="err">
+          <AlertCircle size={48} color="#dc2626" />
+          <h3>Error Loading Results</h3>
+          <p>{err}</p>
+          <button onClick={refresh}><RefreshCw size={16} /> Try Again</button>
         </div>
       )}
 
-      {/* Results Table */}
-      {displayResults.length === 0 ? (
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '48px',
-          textAlign: 'center',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-        }}>
-          <Award size={64} style={{
-            color: '#94a3b8',
-            marginBottom: '16px',
-          }} />
-          <h3 style={{
-            fontSize: '18px',
-            fontWeight: 500,
-            color: '#0f172a',
-            margin: '0 0 8px 0',
-          }}>No results available</h3>
-          <p style={{
-            color: '#64748b',
-            margin: 0,
-          }}>Complete exams to see your results here.</p>
-          <div style={{ marginTop: '16px' }}>
-            <Link
-              to="/exams"
-              style={{
-                display: 'inline-block',
-                padding: '10px 24px',
-                background: '#2563eb',
-                color: 'white',
-                borderRadius: '8px',
-                textDecoration: 'none',
-                fontSize: '14px',
-                fontWeight: 500,
-                transition: 'all 0.3s ease',
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
-              onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
-            >
-              Go to Exams
-            </Link>
-          </div>
-        </div>
-      ) : (
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          overflow: 'hidden',
-        }}>
-          <div style={{ overflowX: 'auto' }} className="results-table-wrapper">
-            <table style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-            }} className="results-table">
-              <thead style={{ background: '#f8fafc' }}>
-                <tr>
-                  <th style={{
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#64748b',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}>Exam Title</th>
-                  <th style={{
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#64748b',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}>Course</th>
-                  <th style={{
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#64748b',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}>Score</th>
-                  <th style={{
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#64748b',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}>Percentage</th>
-                  <th style={{
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#64748b',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}>Status</th>
-                  <th style={{
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#64748b',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {displayResults.map((result, index) => (
-                  <tr 
-                    key={result.id || index} 
-                    style={{
-                      borderBottom: '1px solid #f1f5f9',
-                      transition: 'all 0.3s ease',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                  >
-                    <td style={{
-                      padding: '12px 16px',
-                      fontSize: '14px',
-                      fontWeight: 500,
-                      color: '#0f172a',
-                    }}>
-                      {result.exam_title || result.exam?.title || 'Unknown Exam'}
+      {/* ================= FINAL GRADES TAB ================= */}
+      {tab === 'grades' && !err && (
+        <>
+          {courseGrades.length > 0 && (
+            <>
+              <div className="gpa-row">
+                <div className="gpa-box">
+                  <p className="gpa-label">Total Marks (All Courses)</p>
+                  <p className="gpa-value" style={{ color: grandGrade.color }}>{grandTotal}</p>
+                </div>
+                <div className="gpa-box">
+                  <p className="gpa-label">Overall Letter Grade</p>
+                  <p className="gpa-value" style={{ color: grandGrade.color }}>{grandGrade.letter}</p>
+                </div>
+                <div className="gpa-box">
+                  <p className="gpa-label">Courses</p>
+                  <p className="gpa-value">{courseGrades.length}</p>
+                </div>
+              </div>
+
+              <Table
+                headers={['Course', 'Quiz', 'Mid', 'Assignment', 'Final', 'Total (Sum)', 'Letter Grade']}
+                footer={
+                  <>
+                    <span>Course total = Quiz + Mid + Assignment + Final marks (sum only)</span>
+                    <span>Grand Total: {grandTotal} • Grade: {grandGrade.letter}</span>
+                  </>
+                }
+              >
+                {courseGrades.map((c) => (
+                  <tr key={c.course_id ?? c.course_code}>
+                    <td style={{ fontWeight: 600, color: '#0f172a' }}>
+                      {c.course_title}
+                      <span style={{ display: 'block', fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>{c.course_code}</span>
                     </td>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontSize: '14px',
-                      color: '#475569',
-                    }}>
-                      {result.exam?.course_title || result.course_title || result.exam?.course?.title || '—'}
-                    </td>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      color: '#0f172a',
-                    }}>
-                      {result.score || 0} / {result.exam?.total_marks || result.total_marks || 0}
-                    </td>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      color: '#0f172a',
-                    }}>
-                      {result.percentage || 0}%
-                    </td>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontSize: '14px',
-                    }}>
-                      {getStatusBadge(result.passed)}
-                    </td>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontSize: '14px',
-                      color: '#64748b',
-                    }}>
-                      {result.created_at ? new Date(result.created_at).toLocaleDateString() : 
-                       result.submitted_at ? new Date(result.submitted_at).toLocaleDateString() : 
-                       '—'}
+                    <td>{c.quiz}</td>
+                    <td>{c.mid}</td>
+                    <td>{c.assignment}</td>
+                    <td>{c.final}</td>
+                    <td style={{ fontWeight: 700, color: '#0f172a' }}>{c.total}</td>
+                    <td>
+                      <span className="grade-chip" style={{ background: `${c.color}20`, color: c.color }}>
+                        {c.letter}
+                      </span>
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-          
-          {/* Results count footer */}
-          <div style={{
-            padding: '12px 16px',
-            background: '#f8fafc',
-            borderTop: '1px solid #e2e8f0',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontSize: '13px',
-            color: '#64748b',
-          }}>
-            <span>Showing {displayResults.length} result{displayResults.length > 1 ? 's' : ''}</span>
-            <span>
-              Passed: {getPassCount()} | Failed: {displayResults.length - getPassCount()}
-            </span>
-          </div>
-        </div>
+
+                {/* ============ BOTTOM TOTAL ROW ============ */}
+                <tr className="total-row">
+                  <td>TOTAL (All Courses)</td>
+                  <td>{courseGrades.reduce((s, c) => s + c.quiz, 0)}</td>
+                  <td>{courseGrades.reduce((s, c) => s + c.mid, 0)}</td>
+                  <td>{courseGrades.reduce((s, c) => s + c.assignment, 0)}</td>
+                  <td>{courseGrades.reduce((s, c) => s + c.final, 0)}</td>
+                  <td>{grandTotal}</td>
+                  <td>
+                    <span className="grade-chip" style={{ background: `${grandGrade.color}25`, color: grandGrade.color }}>
+                      {grandGrade.letter}
+                    </span>
+                  </td>
+                </tr>
+              </Table>
+            </>
+          )}
+
+          {courseGrades.length === 0 && (
+            <div className="empty">
+              <GraduationCap size={64} color="#94a3b8" style={{ margin: '0 auto 18px' }} />
+              <h3>No Final Grades Yet</h3>
+              <p>Complete quizzes, mid, assignments and final exams to see your course grades.</p>
+              <Link to="/exams" className="elink"><BookOpen size={18} /> Go to Exams</Link>
+            </div>
+          )}
+        </>
       )}
-      
-      <style>{`
-        .spinning {
-          animation: spin 1s linear infinite;
-        }
-      `}</style>
+
+      {/* ================= EXAMS TAB ================= */}
+      {tab === 'exams' && !err && (
+        <>
+          {exams.length > 0 && (
+            <Summary cards={[
+              { color: 'blue', label: 'Average Score', value: `${examAvg}%`, icon: <TrendingUp size={40} className="sci" /> },
+              { color: 'green', label: 'Exams Passed', value: `${examPassed} / ${exams.length}`, icon: <CheckCircle size={40} className="sci" /> },
+              { color: 'purple', label: 'Total Exams', value: exams.length, icon: <FileText size={40} className="sci" /> },
+            ]} />
+          )}
+
+          {exams.length === 0 ? (
+            <div className="empty">
+              <Award size={64} color="#94a3b8" style={{ margin: '0 auto 18px' }} />
+              <h3>No Exam Results Available</h3>
+              <p>Complete your exams to see your examination results here.</p>
+              <Link to="/exams" className="elink"><BookOpen size={18} /> Go to Exams</Link>
+            </div>
+          ) : (
+            <Table
+              headers={['Exam Title', 'Course', 'Type', 'Score', 'Percentage', 'Status', 'Date']}
+              footer={
+                <>
+                  <span>Showing {exams.length} exam results</span>
+                  <span>Passed: {examPassed} | Failed: {examFailed}</span>
+                </>
+              }
+            >
+              {exams.map((r, i) => {
+                const total = r.exam?.total_marks ?? r.total_marks ?? 0;
+                const score = r.score ?? 0;
+                const percentage = r.percentage ?? 0;
+                const examType = r.exam?.exam_type || r.exam_type || '—';
+                return (
+                  <tr key={r.id || i}>
+                    <td style={{ fontWeight: 600, color: '#0f172a' }}>
+                      {r.exam_title || r.exam?.title || 'Unknown Exam'}
+                    </td>
+                    <td>{r.exam?.course_title || r.course_title || r.exam?.course?.title || '—'}</td>
+                    <td>{examType}</td>
+                    <td style={{ fontWeight: 600, color: '#0f172a' }}>{score} / {total}</td>
+                    <td style={{ fontWeight: 600, color: '#0f172a' }}>{percentage}%</td>
+                    <td>{examBadge(r.passed)}</td>
+                    <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : '—'}</td>
+                  </tr>
+                );
+              })}
+            </Table>
+          )}
+        </>
+      )}
+
+      {/* ================= ASSIGNMENTS TAB ================= */}
+      {tab === 'assignments' && !err && (
+        <>
+          {assigns.length > 0 && (
+            <Summary cards={[
+              { color: 'blue', label: 'Average Assignment Score', value: `${assignAvg}%`, icon: <TrendingUp size={40} className="sci" /> },
+              { color: 'green', label: 'Graded Assignments', value: gradedA, icon: <CheckCircle size={40} className="sci" /> },
+              { color: 'orange', label: 'Pending Grades', value: pendingA, icon: <Clock size={40} className="sci" /> },
+            ]} />
+          )}
+
+          {assigns.length === 0 ? (
+            <div className="empty">
+              <ClipboardList size={64} color="#94a3b8" style={{ margin: '0 auto 18px' }} />
+              <h3>No Assignment Results Available</h3>
+              <p>Submit your assignments to see your grades and teacher feedback here.</p>
+              <Link to="/courses" className="elink"><BookOpen size={18} /> Browse Courses</Link>
+            </div>
+          ) : (
+            <Table
+              headers={['Assignment', 'Course', 'Marks', 'Status', 'Submitted', 'Feedback']}
+              footer={
+                <>
+                  <span>Showing {assigns.length} assignments</span>
+                  <span>Submitted: {submittedA} | Graded: {gradedA} | Pending: {pendingA}</span>
+                </>
+              }
+            >
+              {assigns.map((a, i) => {
+                const total = Number(a.total_marks);
+                const obtained = Number(a.marks_obtained);
+                const hasGrade = a.marks_obtained != null;
+                const p = hasGrade && total > 0 ? (obtained / total) * 100 : null;
+                return (
+                  <tr key={a.id || i}>
+                    <td style={{ fontWeight: 600, color: '#0f172a' }}>{a.title || 'Unknown Assignment'}</td>
+                    <td>{a.course_title || '—'}</td>
+                    <td style={{ fontWeight: 600, color: '#0f172a' }}>
+                      {hasGrade ? (
+                        <>
+                          {a.marks_obtained} / {a.total_marks}
+                          <span className="sp" style={{ color: p >= 70 ? '#16a34a' : p >= 50 ? '#d97706' : '#dc2626' }}>
+                            {p.toFixed(2)}%
+                          </span>
+                        </>
+                      ) : (
+                        <span style={{ color: '#94a3b8' }}>Not graded</span>
+                      )}
+                    </td>
+                    <td>{assignBadge(a)}</td>
+                    <td>{a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : '—'}</td>
+                    <td>
+                      {a.feedback ? (
+                        <span className="fb"><MessageSquare size={13} style={{ display: 'inline', marginRight: 5 }} />{a.feedback}</span>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontSize: 13 }}>No feedback</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </Table>
+          )}
+        </>
+      )}
     </div>
   );
 };

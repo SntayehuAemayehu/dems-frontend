@@ -3,12 +3,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import {
   Plus, FileText, Clock, Calendar, Eye, Trash2, CheckCircle, XCircle,
-  X, Edit, AlertTriangle, MoreVertical, ArrowLeft, BookOpen, Search, RefreshCw
+  X, Edit, AlertTriangle, MoreVertical, ArrowLeft, BookOpen, Search, RefreshCw, Camera
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../api/api';
+import api, { getMediaUrl, getWebSocketUrl } from '../../api/api';
 
 const TeacherExams = () => {
+  const [liveStreams, setLiveStreams] = useState({}); // { studentId: MediaStream }
+  const liveWsRef = useRef(null);
+  const livePcsRef = useRef({}); // peer connections
   const { user } = useSelector((state) => state.auth || {});
   const [exams, setExams] = useState([]);
   const [courses, setCourses] = useState([]);
@@ -27,6 +30,14 @@ const TeacherExams = () => {
   const [showEssayGradingModal, setShowEssayGradingModal] = useState(false);
   const [showGradeModal, setShowGradeModal] = useState(false);
   const [showLiveMonitoring, setShowLiveMonitoring] = useState(false);
+  const [showProctoringImages, setShowProctoringImages] = useState(false);
+  const [proctoringImages, setProctoringImages] = useState([]);
+  const [proctoringStudents, setProctoringStudents] = useState([]);
+  const [selectedProctoringStudent, setSelectedProctoringStudent] = useState(null);
+  const [proctoringImagesType, setProctoringImagesType] = useState('QUIZ');
+  const [proctoringImagesLoading, setProctoringImagesLoading] = useState(false);
+  const [proctoringImagesError, setProctoringImagesError] = useState('');
+  const [proctoringImagesCourse, setProctoringImagesCourse] = useState(null);
 
   const [selectedExam, setSelectedExam] = useState(null);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -38,6 +49,8 @@ const TeacherExams = () => {
   const [liveStudents, setLiveStudents] = useState([]);
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveExam, setLiveExam] = useState(null);
+  const liveWsExamIdRef = useRef(null);
+  const liveIceCandidatesRef = useRef({});
 
   const [isEditing, setIsEditing] = useState(false);
   const [editExamId, setEditExamId] = useState(null);
@@ -50,12 +63,12 @@ const TeacherExams = () => {
 
   const [openMenuId, setOpenMenuId] = useState(null);
   const menuRef = useRef(null);
-  const liveRefreshRef = useRef(null);
 
   const [formData, setFormData] = useState({
     course: '', title: '', description: '', duration_minutes: 60,
     start_time: '', end_time: '', total_marks: 100,
-    is_published: false, proctoring_enabled: true,
+    is_published: true, proctoring_enabled: true,
+    exam_type: 'MID',
   });
 
   const [questionForm, setQuestionForm] = useState({
@@ -77,18 +90,6 @@ const TeacherExams = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  // Auto-refresh live monitoring every 6 seconds
-  useEffect(() => {
-    if (showLiveMonitoring && liveExam) {
-      liveRefreshRef.current = setInterval(() => {
-        openLiveMonitoring(liveExam, true); // silent refresh
-      }, 6000);
-    }
-    return () => {
-      if (liveRefreshRef.current) clearInterval(liveRefreshRef.current);
-    };
-  }, [showLiveMonitoring, liveExam]);
 
   const fetchExams = async () => {
     try {
@@ -156,6 +157,7 @@ const TeacherExams = () => {
       setLiveLoading(true);
       setOpenMenuId(null);
     }
+
     try {
       const res = await api.get(`/exams/${exam.id}/live-monitoring/`);
       setLiveStudents(res.data.students || []);
@@ -166,13 +168,200 @@ const TeacherExams = () => {
     } finally {
       if (!silent) setLiveLoading(false);
     }
+
+    // Only connect WebSocket if not already connected
+    if (
+      !liveWsRef.current ||
+      liveWsExamIdRef.current !== exam.id ||
+      liveWsRef.current.readyState !== WebSocket.OPEN
+    ) {
+      connectLiveWebSocket(exam.id);
+    }
   };
+
+  const connectLiveWebSocket = (examId) => {
+  // Already open → do nothing
+  if (
+    liveWsRef.current &&
+    liveWsExamIdRef.current === examId &&
+    liveWsRef.current.readyState === WebSocket.OPEN
+  ) {
+    return;
+  }
+
+  // Already connecting → do nothing
+  if (
+    liveWsRef.current &&
+    liveWsExamIdRef.current === examId &&
+    liveWsRef.current.readyState === WebSocket.CONNECTING
+  ) {
+    return;
+  }
+
+  // Close old one cleanly
+  if (liveWsRef.current) {
+    try {
+      liveWsRef.current.onclose = null; // prevent old onclose from running
+      liveWsRef.current.close();
+    } catch (e) {}
+  }
+  Object.values(livePcsRef.current).forEach((pc) => pc.close());
+  livePcsRef.current = {};
+  liveIceCandidatesRef.current = {};
+  setLiveStreams({});
+
+  const token = localStorage.getItem('access_token');
+  if (!token) return;
+
+  const wsUrl = getWebSocketUrl(`/ws/exam-proctor/${examId}/`, { token });
+
+  const ws = new WebSocket(wsUrl);
+  liveWsRef.current = ws;
+  liveWsExamIdRef.current = examId;
+
+  ws.onopen = () => {
+    console.log('📡 Teacher connected to exam proctor room');
+  };
+
+  ws.onmessage = async (event) => {
+    try {
+      const data = JSON.parse(event.data);
+
+      if (data.type === 'offer' && data.sender_id) {
+        await handleStudentOffer(data);
+      }
+
+      if (data.type === 'ice_candidate' && data.candidate && data.sender_id) {
+        const pc = livePcsRef.current[data.sender_id];
+        if (pc) {
+          if (pc.remoteDescription) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (e) {
+              console.warn('ICE error:', e);
+            }
+          } else {
+            const candidates = liveIceCandidatesRef.current[data.sender_id] || [];
+            candidates.push(data.candidate);
+            liveIceCandidatesRef.current[data.sender_id] = candidates;
+          }
+        }
+      }
+
+      if (data.type === 'user_leave' && data.user_id) {
+        livePcsRef.current[data.user_id]?.close();
+        delete livePcsRef.current[data.user_id];
+        delete liveIceCandidatesRef.current[data.user_id];
+        setLiveStreams((prev) => {
+          const next = { ...prev };
+          delete next[data.user_id];
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error('Teacher WS message error:', err);
+    }
+  };
+
+  ws.onclose = () => {
+    console.log('Teacher proctor WebSocket closed');
+    // Only clear the ref if this is still the current socket
+    if (liveWsRef.current === ws) {
+      liveWsRef.current = null;
+      liveWsExamIdRef.current = null;
+    }
+  };
+
+  ws.onerror = (err) => {
+    console.error('Teacher WS error:', err);
+  };
+};
+
+  const handleStudentOffer = async (data) => {
+    const studentId = data.sender_id;
+    livePcsRef.current[studentId]?.close();
+    liveIceCandidatesRef.current[studentId] = [];
+
+    // Create peer connection for this student
+    const config = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ],
+    };
+
+    const pc = new RTCPeerConnection(config);
+    livePcsRef.current[studentId] = pc;
+
+    // When we receive the student's video track
+    pc.ontrack = (event) => {
+      if (event.streams && event.streams[0]) {
+        setLiveStreams((prev) => ({
+          ...prev,
+          [studentId]: event.streams[0],
+        }));
+      }
+    };
+
+    // Send ICE candidates back to student
+    pc.onicecandidate = (event) => {
+      if (event.candidate && liveWsRef.current?.readyState === WebSocket.OPEN) {
+        liveWsRef.current.send(
+          JSON.stringify({
+            type: 'ice_candidate',
+            candidate: event.candidate,
+            sender_id: user?.id,
+          })
+        );
+      }
+    };
+
+    // Set remote description and create answer
+    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const pendingCandidates = liveIceCandidatesRef.current[studentId];
+    liveIceCandidatesRef.current[studentId] = [];
+    for (const candidate of pendingCandidates) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.warn('ICE error:', error);
+      }
+    }
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    // Send answer back
+    liveWsRef.current.send(
+      JSON.stringify({
+        type: 'answer',
+        answer: answer,
+        sender: user?.full_name,
+        sender_role: user?.role,
+        sender_id: user?.id,
+      })
+    );
+  };
+
+  useEffect(() => () => {
+    Object.values(livePcsRef.current).forEach((pc) => pc.close());
+    livePcsRef.current = {};
+    if (liveWsRef.current) {
+      liveWsRef.current.onclose = null;
+      liveWsRef.current.close();
+      liveWsRef.current = null;
+    }
+  }, []);
 
   const handleCreateExam = async (e) => {
     e.preventDefault();
     setCreatingExam(true);
     try {
-      const payload = { ...formData, created_by: user?.id };
+      const TYPE_MAP = { Quiz: 'QUIZ', Mid: 'MID', Final: 'FINAL' };
+      const payload = {
+        ...formData,
+        exam_type: TYPE_MAP[formData.title] || 'MID',
+        created_by: user?.id,
+      };
       if (isEditing) {
         await api.patch(`/exams/${editExamId}/`, payload);
         toast.success('Exam updated successfully!');
@@ -197,7 +386,8 @@ const TeacherExams = () => {
       course: selectedCourse ? selectedCourse.id : '',
       title: '', description: '', duration_minutes: 60,
       start_time: '', end_time: '', total_marks: 100,
-      is_published: false, proctoring_enabled: true,
+      is_published: true, proctoring_enabled: true,
+      exam_type: 'MID',
     });
   };
 
@@ -220,6 +410,7 @@ const TeacherExams = () => {
       total_marks: exam.total_marks,
       is_published: exam.is_published,
       proctoring_enabled: exam.proctoring_enabled !== false,
+      exam_type: exam.exam_type || 'MID',
     });
     setShowCreateModal(true);
     setOpenMenuId(null);
@@ -387,6 +578,51 @@ const TeacherExams = () => {
     setOpenMenuId(null);
   };
 
+  const loadProctoringImages = async (course, examType, student = null) => {
+    setProctoringImagesCourse(course);
+    setProctoringImagesType(examType);
+    setProctoringImagesLoading(true);
+    setProctoringImagesError('');
+    setProctoringImages([]);
+    setProctoringStudents([]);
+    try {
+      const response = await api.get(`/exams/course/${course.id}/proctoring-images/`, {
+        params: {
+          exam_type: examType,
+          ...(student ? { student_id: student.id } : {}),
+        },
+      });
+      setProctoringImages(response.data.images || []);
+      setProctoringStudents(student ? [] : response.data.students || []);
+    } catch (error) {
+      console.error('Failed to load proctoring images:', error);
+      setProctoringImagesError(
+        error.response?.data?.error || 'Failed to load proctoring images.'
+      );
+    } finally {
+      setProctoringImagesLoading(false);
+    }
+  };
+
+  const openProctoringImages = (course) => {
+    setProctoringImagesCourse(course);
+    setProctoringImages([]);
+    setProctoringStudents([]);
+    setSelectedProctoringStudent(null);
+    setShowProctoringImages(true);
+    loadProctoringImages(course, 'QUIZ');
+  };
+
+  const selectProctoringStudent = (student) => {
+    setSelectedProctoringStudent(student);
+    loadProctoringImages(proctoringImagesCourse, proctoringImagesType, student);
+  };
+
+  const showProctoringStudents = () => {
+    setSelectedProctoringStudent(null);
+    loadProctoringImages(proctoringImagesCourse, proctoringImagesType);
+  };
+
   const toggleMenu = (examId) => setOpenMenuId((prev) => (prev === examId ? null : examId));
   const handleCourseClick = (course) => { setSelectedCourse(course); setViewLevel('exams'); };
   const handleBackToCourses = () => { setViewLevel('courses'); setSelectedCourse(null); };
@@ -509,16 +745,24 @@ const TeacherExams = () => {
               <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#0f172a', margin: 0 }}>{selectedCourse.title}</h1>
               <p style={{ color: '#64748b', margin: '4px 0 0 0' }}>{selectedCourse.course_code} • Manage exams for this course</p>
             </div>
-            <button
-              onClick={() => {
-                resetForm();
-                setFormData((prev) => ({ ...prev, course: selectedCourse.id }));
-                setShowCreateModal(true);
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 500, cursor: 'pointer' }}
-            >
-              <Plus size={18} /> Create Exam
-            </button>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={() => openProctoringImages(selectedCourse)}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: 500, cursor: 'pointer' }}
+              >
+                <Camera size={18} /> Proctoring Images
+              </button>
+              <button
+                onClick={() => {
+                  resetForm();
+                  setFormData((prev) => ({ ...prev, course: selectedCourse.id }));
+                  setShowCreateModal(true);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 500, cursor: 'pointer' }}
+              >
+                <Plus size={18} /> Create Exam
+              </button>
+            </div>
           </div>
 
           {filteredExams.length === 0 ? (
@@ -662,7 +906,6 @@ const TeacherExams = () => {
               <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
             </div>
             <form onSubmit={handleCreateExam}>
-              {/* ✅ TITLE DROPDOWN */}
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>Title</label>
                 <select
@@ -1011,25 +1254,170 @@ const TeacherExams = () => {
       )}
 
       {/* ==================== LIVE MONITORING MODAL ==================== */}
+      {showProctoringImages && proctoringImagesCourse && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2100, padding: 16 }}
+          onClick={() => setShowProctoringImages(false)}
+        >
+          <div
+            style={{ background: 'white', borderRadius: 16, padding: 24, width: 'min(1100px, 96vw)', maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 22 }}>Proctoring Images</h2>
+                <p style={{ margin: '4px 0 0', color: '#64748b' }}>
+                  {proctoringImagesCourse.title} • captured images by exam type
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close proctoring images"
+                onClick={() => setShowProctoringImages(false)}
+                style={{ background: 'none', border: 0, color: '#64748b', cursor: 'pointer' }}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid #e2e8f0', paddingBottom: 12 }}>
+              {[
+                ['QUIZ', 'Quiz'],
+                ['MID', 'Mid'],
+                ['FINAL', 'Final'],
+              ].map(([type, label]) => (
+                <button
+                  type="button"
+                  key={type}
+                  onClick={() => {
+                    setSelectedProctoringStudent(null);
+                    loadProctoringImages(proctoringImagesCourse, type);
+                  }}
+                  aria-pressed={proctoringImagesType === type}
+                  style={{
+                    padding: '9px 18px',
+                    border: 0,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    color: proctoringImagesType === type ? 'white' : '#475569',
+                    background: proctoringImagesType === type ? '#2563eb' : '#f1f5f9',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {proctoringImagesLoading ? (
+              <div style={{ padding: 48, textAlign: 'center', color: '#64748b' }}>Loading captured images...</div>
+            ) : proctoringImagesError ? (
+              <div role="alert" style={{ padding: 24, borderRadius: 8, background: '#fef2f2', color: '#b91c1c' }}>
+                {proctoringImagesError}
+              </div>
+            ) : selectedProctoringStudent ? (
+              <>
+                <button
+                  type="button"
+                  onClick={showProctoringStudents}
+                  style={{ marginBottom: 16, padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: 8, background: 'white', color: '#334155', cursor: 'pointer' }}
+                >
+                  <ArrowLeft size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                  All students
+                </button>
+                <h3 style={{ margin: '0 0 16px', color: '#0f172a' }}>
+                  {selectedProctoringStudent.name}
+                  {selectedProctoringStudent.student_id ? ` (${selectedProctoringStudent.student_id})` : ''}
+                </h3>
+                {proctoringImages.length === 0 ? (
+                  <div style={{ padding: 48, textAlign: 'center', color: '#64748b' }}>No images found for this student.</div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 }}>
+                    {proctoringImages.map((image) => (
+                      <article key={image.id} style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', background: '#f8fafc' }}>
+                        {image.image ? (
+                          <a href={getMediaUrl(image.image)} target="_blank" rel="noreferrer">
+                            <img
+                              src={getMediaUrl(image.image)}
+                              alt={`Proctor capture for ${image.student_name}`}
+                              loading="lazy"
+                              style={{ display: 'block', width: '100%', height: 190, objectFit: 'cover', background: '#0f172a' }}
+                            />
+                          </a>
+                        ) : (
+                          <div style={{ height: 190, display: 'grid', placeItems: 'center', color: '#94a3b8' }}>Image unavailable</div>
+                        )}
+                        <div style={{ padding: 12, fontSize: 13, color: '#475569' }}>
+                          <span>{image.exam_title}</span>
+                          <span style={{ display: 'block', marginTop: 4 }}>
+                            {image.capture_time ? new Date(image.capture_time).toLocaleString() : 'Capture time unavailable'}
+                          </span>
+                          {image.is_suspicious && (
+                            <span style={{ display: 'block', marginTop: 6, color: '#b91c1c', fontWeight: 600 }}>
+                              Flagged{image.suspicious_reason ? `: ${image.suspicious_reason}` : ''}
+                            </span>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : proctoringStudents.length === 0 ? (
+              <div style={{ padding: 48, textAlign: 'center', color: '#64748b' }}>
+                No images have been captured for {proctoringImagesType === 'MID' ? 'midterm' : proctoringImagesType.toLowerCase()} exams in this course.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12 }}>
+                {proctoringStudents.map((student) => (
+                  <button
+                    type="button"
+                    key={student.id}
+                    onClick={() => selectProctoringStudent(student)}
+                    style={{ textAlign: 'left', padding: 16, border: '1px solid #e2e8f0', borderRadius: 10, background: '#f8fafc', color: '#0f172a', cursor: 'pointer' }}
+                  >
+                    <strong style={{ display: 'block', fontSize: 15 }}>{student.name}</strong>
+                    {student.student_id && (
+                      <span style={{ display: 'block', marginTop: 4, color: '#64748b', fontSize: 13 }}>
+                        Student ID: {student.student_id}
+                      </span>
+                    )}
+                    <span style={{ display: 'block', marginTop: 8, color: '#475569', fontSize: 13 }}>
+                      {student.image_count} {student.image_count === 1 ? 'image' : 'images'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {showLiveMonitoring && liveExam && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.6)',
+            background: 'rgba(0,0,0,0.7)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 2000,
           }}
-          onClick={() => setShowLiveMonitoring(false)}
+          onClick={() => {
+            setShowLiveMonitoring(false);
+            Object.values(livePcsRef.current).forEach((pc) => pc.close());
+            livePcsRef.current = {};
+            if (liveWsRef.current) liveWsRef.current.close();
+            setLiveStreams({});
+          }}
         >
           <div
             style={{
               background: 'white',
               borderRadius: 16,
               padding: 24,
-              maxWidth: 1100,
+              maxWidth: 1200,
               width: '95%',
               maxHeight: '90vh',
               overflowY: 'auto',
@@ -1044,7 +1432,13 @@ const TeacherExams = () => {
                 </p>
               </div>
               <button
-                onClick={() => setShowLiveMonitoring(false)}
+                onClick={() => {
+                  setShowLiveMonitoring(false);
+                  Object.values(livePcsRef.current).forEach((pc) => pc.close());
+                  livePcsRef.current = {};
+                  if (liveWsRef.current) liveWsRef.current.close();
+                  setLiveStreams({});
+                }}
                 style={{ background: 'none', border: 'none', fontSize: 28, cursor: 'pointer', color: '#94a3b8' }}
               >
                 ×
@@ -1064,65 +1458,99 @@ const TeacherExams = () => {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
                   gap: 20,
                 }}
               >
-                {liveStudents.map((student) => (
-                  <div
-                    key={student.attempt_id}
-                    style={{
-                      border: '1px solid #e2e8f0',
-                      borderRadius: 12,
-                      overflow: 'hidden',
-                      background: '#f8fafc',
-                    }}
-                  >
-                    {/* Latest image */}
+                {liveStudents.map((student) => {
+                  const stream = liveStreams[student.user_id] || liveStreams[student.student_id];
+
+                  return (
                     <div
+                      key={student.attempt_id}
                       style={{
-                        height: 180,
-                        background: '#0f172a',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        background: '#f8fafc',
                       }}
                     >
-                      {student.latest_image ? (
-                        <img
-                          src={student.latest_image}
-                          alt={student.student_name}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <span style={{ color: '#94a3b8' }}>No image yet</span>
-                      )}
-                    </div>
+                      {/* Live Video */}
+                      <div
+                        style={{
+                          height: 200,
+                          background: '#0f172a',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          position: 'relative',
+                        }}
+                      >
+                        {stream ? (
+                          <video
+                            autoPlay
+                            playsInline
+                            muted
+                            ref={(el) => {
+                              if (el && stream) {
+                                el.srcObject = stream;
+                              }
+                            }}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                            }}
+                          />
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>Waiting for live video...</span>
+                        )}
 
-                    <div style={{ padding: 14 }}>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>{student.student_name}</div>
-                      <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>
-                        {student.student_id}
+                        {/* Live indicator */}
+                        {stream && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: 8,
+                              left: 8,
+                              background: 'rgba(220,38,38,0.9)',
+                              color: 'white',
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              fontSize: 11,
+                              fontWeight: 600,
+                            }}
+                          >
+                            ● LIVE
+                          </div>
+                        )}
                       </div>
 
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 12 }}>
-                        <span
-                          style={{
-                            background: student.face_verified ? '#dcfce7' : '#fee2e2',
-                            color: student.face_verified ? '#16a34a' : '#dc2626',
-                            padding: '2px 8px',
-                            borderRadius: 20,
-                          }}
-                        >
-                          {student.face_verified ? 'Verified' : 'Not Verified'}
-                        </span>
-                        <span style={{ background: '#e0e7ff', color: '#4338ca', padding: '2px 8px', borderRadius: 20 }}>
-                          Violations: {student.violations_count || 0}
-                        </span>
+                      <div style={{ padding: 14 }}>
+                        <div style={{ fontWeight: 600, fontSize: 15 }}>{student.student_name}</div>
+                        <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>
+                          {student.student_id}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 12 }}>
+                          <span
+                            style={{
+                              background: student.face_verified ? '#dcfce7' : '#fee2e2',
+                              color: student.face_verified ? '#16a34a' : '#dc2626',
+                              padding: '2px 8px',
+                              borderRadius: 20,
+                            }}
+                          >
+                            {student.face_verified ? 'Verified' : 'Not Verified'}
+                          </span>
+                          <span style={{ background: '#e0e7ff', color: '#4338ca', padding: '2px 8px', borderRadius: 20 }}>
+                            Violations: {student.violations_count || 0}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -1145,7 +1573,13 @@ const TeacherExams = () => {
                 <RefreshCw size={16} /> Refresh
               </button>
               <button
-                onClick={() => setShowLiveMonitoring(false)}
+                onClick={() => {
+                  setShowLiveMonitoring(false);
+                  Object.values(livePcsRef.current).forEach((pc) => pc.close());
+                  livePcsRef.current = {};
+                  if (liveWsRef.current) liveWsRef.current.close();
+                  setLiveStreams({});
+                }}
                 style={{
                   padding: '8px 16px',
                   border: '1px solid #d1d5db',

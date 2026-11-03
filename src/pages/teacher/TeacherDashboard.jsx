@@ -17,7 +17,7 @@ import {
   ClipboardList, PenSquare, Save, X, Edit3, Star
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../api/api';
+import api, { getAllPages } from '../../api/api';
 import '../../styles/dashboard-responsive.css';
 // ============================================================
 // ✅ ADDED: Import GradeBadge component
@@ -95,13 +95,7 @@ const TeacherDashboard = () => {
       console.log('🔄 Fetching teacher dashboard data...');
       
       // Fetch courses taught by this teacher
-      const coursesRes = await api.get('/courses/');
-      let coursesData = [];
-      if (coursesRes.data && coursesRes.data.results) {
-        coursesData = coursesRes.data.results;
-      } else if (Array.isArray(coursesRes.data)) {
-        coursesData = coursesRes.data;
-      }
+      const coursesData = await getAllPages('/courses/');
       
       // Filter courses where this user is the instructor
       const teacherCourses = coursesData.filter(c => c.instructor === user?.id);

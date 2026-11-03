@@ -3,7 +3,8 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { FilesetResolver, FaceLandmarker } from '@mediapipe/tasks-vision';
 import { AlertCircle, RefreshCw, Camera } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../api/api';
+import api, { getWebSocketUrl } from '../../api/api';
+import { useSelector } from 'react-redux';
 
 const AIProctor = ({
   attemptId,
@@ -13,6 +14,8 @@ const AIProctor = ({
   onAutoSubmit,
   onStatusUpdate,
 }) => {
+  const { user } = useSelector((state) => state.auth || {});
+
   // ==================== REFS ====================
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -26,6 +29,14 @@ const AIProctor = ({
   const faceLostFramesRef = useRef(0);
   const lastMultipleFaceTime = useRef(0);
 
+  // WebRTC refs
+  const wsRef = useRef(null);
+  const pcRef = useRef(null);
+  const pendingIceCandidatesRef = useRef([]);
+  const createPeerConnectionRef = useRef(null);
+  const createOfferRef = useRef(null);
+  const liveStreamStartTimeoutRef = useRef(null);
+
   // ==================== STATE ====================
   const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState(null);
@@ -35,6 +46,7 @@ const AIProctor = ({
   const [faceCount, setFaceCount] = useState(0);
   const [fps, setFps] = useState(0);
   const [usingMediaPipe, setUsingMediaPipe] = useState(false);
+  const [liveConnected, setLiveConnected] = useState(false);
 
   // ==================== SEND IMAGE ====================
   const sendImage = useCallback(
@@ -66,6 +78,137 @@ const AIProctor = ({
     },
     [attemptId, faceDetected, multipleFaces, faceCount]
   );
+
+  // ==================== WEBRTC - CONNECT TO TEACHER ====================
+  const startLiveStream = useCallback(async () => {
+    if (!examId || !streamRef.current) return;
+
+    try {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+
+      const wsUrl = getWebSocketUrl(`/ws/exam-proctor/${examId}/`, { token });
+
+      wsRef.current = new WebSocket(wsUrl);
+
+      wsRef.current.onopen = () => {
+        console.log('📡 Exam proctor WebSocket connected');
+        setLiveConnected(true);
+        createPeerConnectionRef.current?.();
+      };
+
+      wsRef.current.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.type === 'user_join' && data.role === 'TEACHER') {
+            console.log('Teacher joined, re-sending offer...');
+            createPeerConnectionRef.current?.();
+          };
+
+          if (data.type === 'answer' && pcRef.current) {
+            await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+            const pendingCandidates = pendingIceCandidatesRef.current;
+            pendingIceCandidatesRef.current = [];
+            await Promise.all(pendingCandidates.map((candidate) =>
+              pcRef.current.addIceCandidate(new RTCIceCandidate(candidate))
+            ));
+          }
+
+          if (data.type === 'ice_candidate' && data.candidate && pcRef.current) {
+            if (pcRef.current.remoteDescription) {
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } else {
+              pendingIceCandidatesRef.current.push(data.candidate);
+            }
+          }
+        } catch (err) {
+          console.error('WS message error:', err);
+        }
+      }
+
+      wsRef.current.onclose = () => {
+        setLiveConnected(false);
+        console.log('Exam proctor WebSocket closed');
+      };
+
+      wsRef.current.onerror = (err) => {
+        console.error('Exam proctor WS error:', err);
+        setLiveConnected(false);
+      };
+    } catch (err) {
+      console.error('Failed to start live stream:', err);
+    }
+  }, [examId]);
+
+  const createPeerConnection = useCallback(() => {
+    try {
+      if (pcRef.current) {
+        pcRef.current.close();
+      }
+      pendingIceCandidatesRef.current = [];
+
+      const config = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ],
+      };
+
+      pcRef.current = new RTCPeerConnection(config);
+
+      // Add local camera tracks
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => {
+          pcRef.current.addTrack(track, streamRef.current);
+        });
+      }
+
+      // Send ICE candidates
+      pcRef.current.onicecandidate = (event) => {
+        if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(
+            JSON.stringify({
+              type: 'ice_candidate',
+              candidate: event.candidate,
+              sender_id: user?.id,
+            })
+          );
+        }
+      };
+
+      // Create and send offer (Student is the one offering)
+      createOfferRef.current?.();
+    } catch (err) {
+      console.error('PeerConnection error:', err);
+    }
+  }, [user]);
+  createPeerConnectionRef.current = createPeerConnection;
+
+  const createOffer = useCallback(async () => {
+    if (!pcRef.current || wsRef.current?.readyState !== WebSocket.OPEN) return;
+
+    try {
+      const offer = await pcRef.current.createOffer({
+        offerToReceiveAudio: false,
+        offerToReceiveVideo: false,
+      });
+      await pcRef.current.setLocalDescription(offer);
+
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'offer',
+          offer: offer,
+          sender: user?.full_name,
+          sender_role: user?.role,
+          sender_id: user?.id,
+        })
+      );
+    } catch (err) {
+      console.error('Create offer error:', err);
+    }
+  }, [user]);
+  createOfferRef.current = createOffer;
 
   // ==================== MEDIAPIPE ====================
   const initializeMediaPipe = useCallback(async () => {
@@ -102,13 +245,11 @@ const AIProctor = ({
 
       setFaceCount(count);
 
-      // ---------- MULTIPLE FACES ----------
       if (count > 1) {
         setMultipleFaces(true);
         setFaceDetected(true);
         faceLostFramesRef.current = 0;
 
-        // Prevent spamming (max once every 2.5s)
         const now = Date.now();
         if (now - lastMultipleFaceTime.current > 2500) {
           lastMultipleFaceTime.current = now;
@@ -118,14 +259,12 @@ const AIProctor = ({
         return;
       }
 
-      // ---------- NO FACE ----------
       if (count === 0) {
         setFaceDetected(false);
         setMultipleFaces(false);
         faceLostFramesRef.current += 1;
 
         if (hasDetectedSingleFace.current && faceLostFramesRef.current > 45) {
-          // ~1.5 seconds of no face
           faceLostFramesRef.current = 0;
           onViolation?.('FACE_LOST', 'No face detected');
           sendImage(true, 'FACE_LOST');
@@ -133,7 +272,6 @@ const AIProctor = ({
         return;
       }
 
-      // ---------- ONE FACE ----------
       setFaceDetected(true);
       setMultipleFaces(false);
       faceLostFramesRef.current = 0;
@@ -172,9 +310,7 @@ const AIProctor = ({
             frameCount = 0;
             lastTs = ts;
           }
-        } catch (e) {
-          // silent
-        }
+        } catch (e) {}
       }
 
       mediapipeLoopRef.current = requestAnimationFrame(loop);
@@ -216,10 +352,14 @@ const AIProctor = ({
         setError(null);
 
         await startCamera();
+        liveStreamStartTimeoutRef.current = setTimeout(() => {
+          startLiveStream();
+        }, 1500);
         const ok = await initializeMediaPipe();
 
         if (ok) {
           startLoop();
+
           // Normal image every 60 seconds
           imageIntervalRef.current = setInterval(() => {
             sendImage(false);
@@ -244,6 +384,7 @@ const AIProctor = ({
       isMounted.current = false;
       if (mediapipeLoopRef.current) cancelAnimationFrame(mediapipeLoopRef.current);
       if (imageIntervalRef.current) clearInterval(imageIntervalRef.current);
+      if (liveStreamStartTimeoutRef.current) clearTimeout(liveStreamStartTimeoutRef.current);
       if (landmarkerRef.current) {
         try {
           landmarkerRef.current.close();
@@ -251,6 +392,14 @@ const AIProctor = ({
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      if (pcRef.current) {
+        pcRef.current.close();
+      }
+      if (wsRef.current) {
+        try {
+          wsRef.current.close();
+        } catch (e) {}
       }
     };
   }, []);
@@ -345,6 +494,18 @@ const AIProctor = ({
               🚫 Multiple Faces
             </span>
           )}
+
+          <span
+            style={{
+              background: liveConnected ? 'rgba(59,130,246,0.9)' : 'rgba(100,116,139,0.9)',
+              padding: '4px 10px',
+              borderRadius: 6,
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            {liveConnected ? '📡 Live to Teacher' : '📡 Connecting...'}
+          </span>
         </div>
 
         {/* FPS */}

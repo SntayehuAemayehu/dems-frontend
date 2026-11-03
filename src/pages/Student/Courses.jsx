@@ -1,47 +1,45 @@
 // frontend/src/pages/Student/Courses.jsx
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Link } from 'react-router-dom';
-import { Search, Filter, BookOpen, Users, Clock, FileText, CheckCircle, Eye } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Search, BookOpen, Users, Clock, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchCourses, enrollCourse } from '../../store/slices/courseSlice';
-import api from '../../api/api';
+import { getAllPages } from '../../api/api';
 
 const Courses = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { courses = [], isLoading = false } = useSelector((state) => state.courses || { courses: [] });
   const { user } = useSelector((state) => state.auth || {});
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSemester, setSelectedSemester] = useState('');
   const [enrolling, setEnrolling] = useState(null);
   const [localCourses, setLocalCourses] = useState([]);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     fetchAllCourses();
   }, []);
 
   const fetchAllCourses = async () => {
+    setLoadError('');
     try {
       const result = await dispatch(fetchCourses()).unwrap();
-      console.log('Fetched courses from API:', result);
       setLocalCourses(Array.isArray(result) ? result : []);
     } catch (error) {
       console.error('Failed to fetch courses:', error);
-      toast.error('Failed to load courses');
-      // Try direct API call as fallback
       try {
-        const response = await api.get('/courses/');
-        console.log('Direct API call response:', response.data);
-        // Handle paginated response
-        let coursesData = response.data;
-        if (coursesData && coursesData.results && Array.isArray(coursesData.results)) {
-          coursesData = coursesData.results;
-        } else if (!Array.isArray(coursesData)) {
-          coursesData = [];
-        }
-        setLocalCourses(coursesData);
+        setLocalCourses(await getAllPages('/courses/'));
       } catch (err) {
         console.error('Direct API call failed:', err);
+        setLocalCourses([]);
+        setLoadError(
+          err.response?.data?.detail ||
+          err.response?.data?.message ||
+          err.message ||
+          'Could not load courses. Please try again.'
+        );
       }
     }
   };
@@ -49,8 +47,10 @@ const Courses = () => {
   // Use localCourses if available, otherwise use courses from Redux
   const displayCourses = localCourses.length > 0 ? localCourses : (Array.isArray(courses) ? courses : []);
   
-  // Filter courses - only show APPROVED courses for students
-  const approvedCourses = displayCourses.filter(c => c.is_approved === true);
+  // Keep active enrollments visible even if the course approval flag later changes.
+  const approvedCourses = displayCourses.filter(
+    (course) => course.is_approved === true || course.is_enrolled === true
+  );
   
   // Get enrolled course IDs
   const enrolledCourseIds = approvedCourses.filter(c => c.is_enrolled).map(c => c.id);
@@ -146,6 +146,7 @@ const Courses = () => {
           }}>
             {approvedCourses.length} courses available for enrollment
           </p>
+          {loadError && <p role="alert" style={{ color: '#b91c1c', marginTop: '8px' }}>{loadError}</p>}
         </div>
         <div style={{
           background: '#dbeafe',
@@ -296,14 +297,29 @@ const Courses = () => {
           {filteredCourses.map((course) => {
             const isEnrolled = enrolledCourseIds.includes(course.id);
             const isFull = course.enrolled_count >= course.capacity;
+            const isStudentCourse = user?.role === 'STUDENT';
+            const isCourseClickable = isStudentCourse && isEnrolled;
 
             return (
-              <div key={course.id} style={{
+              <div
+              key={course.id}
+              role={isCourseClickable ? 'link' : undefined}
+              tabIndex={isCourseClickable ? 0 : undefined}
+              aria-label={isCourseClickable ? `View ${course.title}` : undefined}
+              onClick={isCourseClickable ? () => navigate(`/courses/${course.id}`) : undefined}
+              onKeyDown={isCourseClickable ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  navigate(`/courses/${course.id}`);
+                }
+              } : undefined}
+              style={{
                 background: 'white',
                 borderRadius: '12px',
                 boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
                 overflow: 'hidden',
                 transition: 'all 0.3s ease',
+                cursor: isCourseClickable ? 'pointer' : 'default',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.1)';
@@ -405,85 +421,82 @@ const Courses = () => {
                     display: 'flex',
                     gap: '12px',
                   }} className="course-actions">
-                    <Link
-                      to={`/courses/${course.id}`}
-                      style={{
-                        flex: 1,
-                        textAlign: 'center',
-                        padding: '10px',
-                        border: '2px solid #3b82f6',
-                        color: '#3b82f6',
-                        borderRadius: '8px',
-                        textDecoration: 'none',
-                        fontWeight: 500,
-                        fontSize: '14px',
-                        transition: 'all 0.3s ease',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#eff6ff'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                    >
-                      <Eye size={16} style={{ display: 'inline', marginRight: '4px' }} />
-                      View Details
-                    </Link>
-                    
-                    {/* {user?.role === 'STUDENT' && (
-                      <>
-                        {isEnrolled ? (
-                          // If enrolled, show "View Materials" button
-                          <Link
-                            to={`/courses/${course.id}`}
-                            style={{
-                              flex: 1,
-                              textAlign: 'center',
-                              padding: '10px',
-                              background: '#22c55e',
-                              color: 'white',
-                              borderRadius: '8px',
-                              textDecoration: 'none',
-                              fontWeight: 500,
-                              fontSize: '14px',
-                              transition: 'all 0.3s ease',
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#16a34a'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = '#22c55e'}
-                          >
-                            <FileText size={16} style={{ display: 'inline', marginRight: '4px' }} />
-                            Materials
-                          </Link>
-                        ) : (
-                          <button
-                            onClick={() => handleEnroll(course.id)}
-                            disabled={isFull || enrolling === course.id}
-                            style={{
-                              flex: 1,
-                              padding: '10px',
-                              border: 'none',
-                              borderRadius: '8px',
-                              fontWeight: 500,
-                              fontSize: '14px',
-                              cursor: isFull || enrolling === course.id ? 'not-allowed' : 'pointer',
-                              transition: 'all 0.3s ease',
-                              background: isFull ? '#94a3b8' : '#3b82f6',
-                              color: 'white',
-                              opacity: isFull || enrolling === course.id ? 0.6 : 1,
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!isFull && enrolling !== course.id) {
-                                e.currentTarget.style.background = '#2563eb';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!isFull && enrolling !== course.id) {
-                                e.currentTarget.style.background = '#3b82f6';
-                              }
-                            }}
-                          >
-                            {enrolling === course.id ? 'Enrolling...' : 
-                             isFull ? 'Full' : 'Enroll'}
-                          </button>
-                        )}
-                      </>
-                    )} */}
+                    {isStudentCourse ? (
+                      isEnrolled ? (
+                        <Link
+                          to={`/courses/${course.id}`}
+                          onClick={(event) => event.stopPropagation()}
+                          style={{
+                            flex: 1,
+                            textAlign: 'center',
+                            padding: '10px',
+                            background: '#22c55e',
+                            color: 'white',
+                            borderRadius: '8px',
+                            textDecoration: 'none',
+                            fontWeight: 500,
+                            fontSize: '14px',
+                            transition: 'all 0.3s ease',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#16a34a'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = '#22c55e'}
+                        >
+                          <Eye size={16} style={{ display: 'inline', marginRight: '4px' }} />
+                          View Course
+                        </Link>
+                      ) : (
+                        <button
+                          onClick={() => handleEnroll(course.id)}
+                          disabled={isFull || enrolling === course.id}
+                          style={{
+                            flex: 1,
+                            padding: '10px',
+                            border: 'none',
+                            borderRadius: '8px',
+                            fontWeight: 500,
+                            fontSize: '14px',
+                            cursor: isFull || enrolling === course.id ? 'not-allowed' : 'pointer',
+                            transition: 'all 0.3s ease',
+                            background: isFull ? '#94a3b8' : '#3b82f6',
+                            color: 'white',
+                            opacity: isFull || enrolling === course.id ? 0.6 : 1,
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isFull && enrolling !== course.id) {
+                              e.currentTarget.style.background = '#2563eb';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isFull && enrolling !== course.id) {
+                              e.currentTarget.style.background = '#3b82f6';
+                            }
+                          }}
+                        >
+                          {enrolling === course.id ? 'Enrolling...' : isFull ? 'Full' : 'Enroll'}
+                        </button>
+                      )
+                    ) : (
+                      <Link
+                        to={`/courses/${course.id}`}
+                        style={{
+                          flex: 1,
+                          textAlign: 'center',
+                          padding: '10px',
+                          border: '2px solid #3b82f6',
+                          color: '#3b82f6',
+                          borderRadius: '8px',
+                          textDecoration: 'none',
+                          fontWeight: 500,
+                          fontSize: '14px',
+                          transition: 'all 0.3s ease',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#eff6ff'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                      >
+                        <Eye size={16} style={{ display: 'inline', marginRight: '4px' }} />
+                        View Details
+                      </Link>
+                    )}
                     
                     {user?.role === 'TEACHER' && (
                       <Link

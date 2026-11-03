@@ -752,14 +752,14 @@ const renderLockBanner = () => {
 
       <div className="dashboard-wrapper">
         
-        <div className="sidebar-container">
+        {/* <div className="sidebar-container">
           <StudentSidebar
             activeTab={activeTab}
             onTabChange={handleTabChange}
             user={user}
             unreadCount={unreadCount}
           />
-        </div>
+        </div> */}
 
         <div className="main-content-container">
           

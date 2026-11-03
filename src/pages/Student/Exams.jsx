@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { Clock, Calendar, FileText, CheckCircle, Eye, Loader } from 'lucide-react';
 import { fetchExams } from '../../store/slices/examSlice';
-import api from '../../api/api';
+import api, { getAllPages } from '../../api/api';
 import toast from 'react-hot-toast';
 
 const Exams = () => {
@@ -13,22 +13,30 @@ const Exams = () => {
   const { exams = [], isLoading = false } = useSelector((state) => state.exams || { exams: [] });
   const [localExams, setLocalExams] = useState([]);
   const [checkingFace, setCheckingFace] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     fetchAllExams();
   }, []);
 
   const fetchAllExams = async () => {
+    setLoadError('');
     try {
       const result = await dispatch(fetchExams()).unwrap();
       setLocalExams(Array.isArray(result) ? result : []);
     } catch (error) {
       console.error('Failed to fetch exams:', error);
       try {
-        const response = await api.get('/exams/');
-        setLocalExams(Array.isArray(response.data) ? response.data : []);
+        setLocalExams(await getAllPages('/exams/'));
       } catch (err) {
         console.error('Direct API call failed:', err);
+        setLocalExams([]);
+        setLoadError(
+          err.response?.data?.detail ||
+          err.response?.data?.message ||
+          err.message ||
+          'Could not load exams. Please try again.'
+        );
       }
     }
   };
@@ -103,6 +111,14 @@ const handleTakeExam = async (examId) => {
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#0f172a', margin: 0 }}>My Exams</h1>
         <p style={{ color: '#64748b', margin: '4px 0 0 0' }}>{publishedExams.length} exams available</p>
+        {loadError && (
+          <p role="alert" style={{ color: '#b91c1c', marginTop: '8px' }}>
+            {loadError}{' '}
+            <button type="button" onClick={fetchAllExams} style={{ color: '#1d4ed8', textDecoration: 'underline', background: 'none', border: 0, cursor: 'pointer' }}>
+              Retry
+            </button>
+          </p>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>

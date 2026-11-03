@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchCourseDetail } from '../store/slices/courseSlice';
-import api from '../api/api';
+import api, { getAllPages, getMediaUrl } from '../api/api';
 
 const CourseDetail = () => {
   const { id } = useParams();
@@ -20,6 +20,8 @@ const CourseDetail = () => {
   const { user } = useSelector((state) => state.auth);
   const [materials, setMaterials] = useState([]);
   const [assignments, setAssignments] = useState([]);
+  const [materialsError, setMaterialsError] = useState('');
+  const [assignmentsError, setAssignmentsError] = useState('');
   const [activeTab, setActiveTab] = useState('materials');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -35,18 +37,17 @@ const CourseDetail = () => {
   const fetchMaterials = async () => {
     try {
       setLoading(true);
-      const response = await api.get(`/courses/student/${id}/materials/`);
-      console.log('📚 Fetched materials:', response.data);
-      let materialsData = response.data;
-      if (materialsData && materialsData.results && Array.isArray(materialsData.results)) {
-        materialsData = materialsData.results;
-      } else if (!Array.isArray(materialsData)) {
-        materialsData = [];
-      }
-      setMaterials(materialsData);
+      setMaterials(await getAllPages(`/courses/student/${id}/materials/`));
+      setMaterialsError('');
     } catch (error) {
       console.error('Failed to fetch materials:', error);
       setMaterials([]);
+      setMaterialsError(
+        error.response?.data?.detail ||
+        error.response?.data?.message ||
+        error.message ||
+        'Could not load course materials.'
+      );
     } finally {
       setLoading(false);
     }
@@ -54,12 +55,17 @@ const CourseDetail = () => {
 
   const fetchAssignments = async () => {
     try {
-      const response = await api.get(`/courses/student/${id}/assignments/`);
-      console.log('📝 Fetched assignments:', response.data);
-      setAssignments(Array.isArray(response.data) ? response.data : []);
+      setAssignments(await getAllPages(`/courses/student/${id}/assignments/`));
+      setAssignmentsError('');
     } catch (error) {
       console.error('Failed to fetch assignments:', error);
       setAssignments([]);
+      setAssignmentsError(
+        error.response?.data?.detail ||
+        error.response?.data?.message ||
+        error.message ||
+        'Could not load assignments.'
+      );
     }
   };
 
@@ -135,8 +141,9 @@ const CourseDetail = () => {
   };
 
   const handleDownload = (material) => {
-    if (material.file) {
-      window.open(material.file, '_blank');
+    const fileUrl = getMediaUrl(material.file_url || material.file);
+    if (fileUrl) {
+      window.open(fileUrl, '_blank', 'noopener,noreferrer');
     } else {
       toast.error('No file available for download');
     }
@@ -439,7 +446,9 @@ const CourseDetail = () => {
         <div style={{ padding: '24px' }}>
           {activeTab === 'materials' && (
             <>
-              {materials.length === 0 ? (
+              {materialsError ? (
+                <p role="alert" style={{ color: '#b91c1c', textAlign: 'center' }}>{materialsError}</p>
+              ) : materials.length === 0 ? (
                 <div style={{
                   textAlign: 'center',
                   padding: '48px 0',
@@ -560,7 +569,9 @@ const CourseDetail = () => {
           {/* Assignments Tab Content */}
           {activeTab === 'assignments' && (
             <>
-              {assignments.length === 0 ? (
+              {assignmentsError ? (
+                <p role="alert" style={{ color: '#b91c1c', textAlign: 'center' }}>{assignmentsError}</p>
+              ) : assignments.length === 0 ? (
                 <div style={{
                   textAlign: 'center',
                   padding: '48px 0',
@@ -683,7 +694,7 @@ const CourseDetail = () => {
                         }}>
                           {assignment.attachment && (
                             <a
-                              href={assignment.attachment}
+                              href={getMediaUrl(assignment.attachment)}
                               target="_blank"
                               rel="noopener noreferrer"
                               style={{
@@ -709,7 +720,7 @@ const CourseDetail = () => {
                           
                           {assignment.video_attachment && (
                             <a
-                              href={assignment.video_attachment}
+                              href={getMediaUrl(assignment.video_url || assignment.video_attachment)}
                               target="_blank"
                               rel="noopener noreferrer"
                               style={{
