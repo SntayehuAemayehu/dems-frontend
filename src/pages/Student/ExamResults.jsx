@@ -13,95 +13,7 @@ import {
 import toast from 'react-hot-toast';
 import { fetchResults } from '../../store/slices/examSlice';
 import api from '../../api/api';
-
-// ============================================================
-// HELPERS
-// ============================================================
-
-const normalize = (d) =>
-  Array.isArray(d) ? d
-    : Array.isArray(d?.results) ? d.results
-    : Array.isArray(d?.data) ? d.data
-    : [];
-
-// ============================================================
-// LETTER GRADE (raw sum scale)
-// ============================================================
-
-const letterGrade = (total) => {
-  const p = Number(total) || 0;
-  if (p >= 90) return { letter: 'A+', color: '#16a34a' };
-  if (p >= 85) return { letter: 'A',  color: '#16a34a' };
-  if (p >= 80) return { letter: 'A-', color: '#16a34a' };
-  if (p >= 75) return { letter: 'B+', color: '#2563eb' };
-  if (p >= 70) return { letter: 'B',  color: '#2563eb' };
-  if (p >= 65) return { letter: 'B-', color: '#2563eb' };
-  if (p >= 60) return { letter: 'C+', color: '#d97706' };
-  if (p >= 55) return { letter: 'C',  color: '#d97706' };
-  if (p >= 50) return { letter: 'C-', color: '#d97706' };
-  if (p >= 45) return { letter: 'D',  color: '#dc2626' };
-  return { letter: 'F', color: '#dc2626' };
-};
-
-// ============================================================
-// BUILD COURSE GRADES — SUM ONLY
-// Takes ONLY the marks returned by the API. No division, no weights.
-// ============================================================
-
-const buildCourseGrades = (exams, assigns) => {
-  const courses = {};
-
-  const ensure = (courseId, code, title) => {
-    const key = courseId != null ? `id:${courseId}` : `code:${code}`;
-    if (!courses[key]) {
-      courses[key] = {
-        course_id: courseId,
-        course_code: code,
-        course_title: title || '—',
-        quiz: 0,
-        mid: 0,
-        assignment: 0,
-        final: 0,
-        total: 0,
-      };
-    }
-    return courses[key];
-  };
-
-  // EXAMS — take r.score ONLY (raw marks from API)
-  exams.forEach((r) => {
-    const code  = r.course_code || r.exam?.course_code || r.exam?.course_title || r.course_title || 'Unknown';
-    const title = r.exam?.course_title || r.course_title || '—';
-    const courseId = r.course_id ?? r.exam?.course_id;
-    const c = ensure(courseId, code, title);
-
-    const obtained = Number(r.score ?? 0);
-    const type = (r.exam_type || r.exam?.exam_type || '').toUpperCase();
-
-    if (type === 'QUIZ') c.quiz += obtained;
-    else if (type === 'MID' || type === 'MIDTERM') c.mid += obtained;
-    else if (type === 'FINAL') c.final += obtained;
-
-    c.total += obtained;
-  });
-
-  // ASSIGNMENTS — take a.marks_obtained ONLY
-  assigns.forEach((a) => {
-    const code  = a.course_code || a.course_title || 'Unknown';
-    const title = a.course_title || '—';
-    const c = ensure(a.course_id, code, title);
-
-    const obtained = Number(a.marks_obtained ?? 0);
-    c.assignment += obtained;
-    c.total += obtained;
-  });
-
-  // Attach letter grade (based on SUM)
-  return Object.values(courses).map((c) => {
-    const g = letterGrade(c.total);
-    return { ...c, letter: g.letter, color: g.color };
-  });
-};
+import { buildCourseGrades, letterGrade, normalizeResultList } from '../../utils/courseGrades';
 
 // ============================================================
 // UI PIECES
@@ -166,17 +78,17 @@ const ExamResults = () => {
     setError((e) => ({ ...e, exams: null }));
     try {
       const res = await dispatch(fetchResults()).unwrap();
-      let data = normalize(res);
+      let data = normalizeResultList(res);
       if (!data.length) {
         const r = await api.get('/exams/results/');
-        data = normalize(r.data);
+        data = normalizeResultList(r.data);
       }
       setExams(data);
       if (data.length) toast.success(`Loaded ${data.length} exam results`);
     } catch (err) {
       try {
         const r = await api.get('/exams/results/');
-        const data = normalize(r.data);
+        const data = normalizeResultList(r.data);
         setExams(data);
       } catch (e) {
         setError((x) => ({ ...x, exams: e?.response?.data?.detail || e?.message || 'Failed to load exam results' }));
@@ -193,7 +105,7 @@ const ExamResults = () => {
     setError((e) => ({ ...e, assignments: null }));
     try {
       const r = await api.get('/courses/student/assignments/results/');
-      const data = normalize(r.data);
+      const data = normalizeResultList(r.data);
       setAssigns(data);
       if (data.length) toast.success(`Loaded ${data.length} assignment results`);
     } catch (e) {

@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Award,
   RefreshCw,
   ArrowLeft,
   CheckCircle,
@@ -10,20 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/api';
 import toast from 'react-hot-toast';
-
-const GRADE_POINTS = {
-  'A+': 4.0,
-  'A': 4.0,
-  'A-': 3.75,
-  'B+': 3.5,
-  'B': 3.0,
-  'B-': 2.75,
-  'C+': 2.5,
-  'C': 2.0,
-  'C-': 1.75,
-  'D': 1.0,
-  'F': 0.0
-};
+import { buildCourseGrades, letterGrade, normalizeResultList } from '../../utils/courseGrades';
 
 const CertificateViewer = () => {
   const navigate = useNavigate();
@@ -36,70 +22,34 @@ const CertificateViewer = () => {
     fetchCertificates();
   }, []); // eslint-disable-line
 
-  const calculateLetterGrade = (percentage) => {
-    const p = parseFloat(percentage) || 0;
-
-    if (p >= 90) return 'A+';
-    if (p >= 85) return 'A';
-    if (p >= 80) return 'A-';
-    if (p >= 75) return 'B+';
-    if (p >= 70) return 'B';
-    if (p >= 65) return 'B-';
-    if (p >= 60) return 'C+';
-    if (p >= 50) return 'C';
-    if (p >= 45) return 'C-';
-    if (p >= 40) return 'D';
-
-    return 'F';
-  };
-
-    const fetchCertificates = async () => {
+  const fetchCertificates = async () => {
     try {
       setLoading(true);
 
-      const res = await api.get('/courses/my-grades/');
-      const courses = res.data?.courses || [];
+      const [studentGradesResponse, examsResponse, assignmentsResponse] = await Promise.all([
+        api.get('/courses/my-grades/'),
+        api.get('/exams/results/'),
+        api.get('/courses/student/assignments/results/'),
+      ]);
+      const studentGrades = studentGradesResponse.data || {};
 
       setStudentInfo({
-        name: res.data.student_name || 'Student Name',
-        id: res.data.student_id || 'N/A',
-        department: res.data.department || 'Distance Education',
-        cgpa: res.data.cgpa || '0.00'
+        name: studentGrades.student_name || 'Student Name',
+        id: studentGrades.student_id || 'N/A',
+        department: studentGrades.department || 'Distance Education',
+        year: studentGrades.year || 'N/A',
+        semester: studentGrades.semester || 'N/A',
       });
 
-      const mappedCourses = courses.map((course) => {
-        // ✅ FIX 1: Check both percentage and backend grade_letter
-        let finalGrade = course.grade_letter;
-        let finalPercentage = course.percentage;
-
-        // If the backend gave a valid letter grade (not 'NON'), use it.
-        // If the backend percentage is 0 or null, try to calculate it.
-        if (!finalGrade || finalGrade === 'NON' || finalGrade === 'F') {
-          if (finalPercentage > 0) {
-            finalGrade = calculateLetterGrade(finalPercentage);
-          } else {
-            // If both are empty, default to F (or whatever you prefer)
-            finalGrade = 'F';
-          }
-        }
-
-        // ✅ FIX 2: If percentage is 0 but grade_letter is A+, reverse calculate points
-        // (So your transcript doesn't show 0.00 points for an A+)
-        const points =
-          GRADE_POINTS[finalGrade] !== undefined
-            ? GRADE_POINTS[finalGrade]
-            : 0;
-
-        return {
-          id: course.course_id,
-          course_title: course.course_title,
-          course_code: course.course_code,
-          grade: finalGrade,
-          amount: points.toFixed(2)
-        };
-      });
-
-      setCertificates(mappedCourses);
+      const grades = buildCourseGrades(
+        normalizeResultList(examsResponse.data),
+        normalizeResultList(assignmentsResponse.data)
+      );
+      setCertificates(grades.map((course) => ({
+        ...course,
+        id: course.course_id ?? course.course_code,
+        grade: course.letter,
+      })));
 
     } catch (error) {
       console.error('Failed to fetch certificates:', error);
@@ -112,6 +62,9 @@ const CertificateViewer = () => {
   const handlePrint = () => {
     window.print();
   };
+
+  const totalMarks = certificates.reduce((sum, course) => sum + course.total, 0);
+  const overallGrade = certificates.length ? letterGrade(totalMarks).letter : '—';
 
   if (loading) {
     return (
@@ -258,15 +211,6 @@ const CertificateViewer = () => {
           margin: 3px 0;
           letter-spacing: 1.5px;
           text-align: center;
-          text-transform: uppercase;
-        }
-
-        .cert-sub-text {
-          color: #64748b;
-          font-size: 10px;
-          margin: 3px 0 12px;
-          text-align: center;
-          letter-spacing: 1px;
           text-transform: uppercase;
         }
 
@@ -590,11 +534,6 @@ const CertificateViewer = () => {
             margin: 2px 0 !important;
           }
 
-          .cert-sub-text {
-            font-size: 9px !important;
-            margin: 2px 0 8px !important;
-          }
-
           .cert-title {
             font-size: 21px !important;
             margin: 5px 0 9px !important;
@@ -752,10 +691,6 @@ const CertificateViewer = () => {
             MEKDELA AMBA UNIVERSITY
           </h3>
 
-          <p className="cert-sub-text">
-            Distance Education Management System
-          </p>
-
           <h1 className="cert-title">
             Official Transcript
           </h1>
@@ -783,6 +718,14 @@ const CertificateViewer = () => {
               <b>Department:</b> {studentInfo.department}
             </span>
 
+            <span>
+              <b>Year:</b> {studentInfo.year}
+            </span>
+
+            <span>
+              <b>Semester:</b> {studentInfo.semester}
+            </span>
+
           </div>
 
           {/* Courses Table */}
@@ -794,8 +737,8 @@ const CertificateViewer = () => {
                 <tr>
                   <th>Course Code</th>
                   <th>Course Name</th>
+                  <th>Total Marks</th>
                   <th>Grade</th>
-                  <th>Points</th>
                 </tr>
               </thead>
 
@@ -814,16 +757,16 @@ const CertificateViewer = () => {
                         {cert.course_title}
                       </td>
 
+                      <td style={{ fontWeight: 'bold' }}>
+                        {cert.total}
+                      </td>
+
                       <td className={
                         cert.grade === 'F'
                           ? 'grade-fail'
                           : 'grade-pass'
                       }>
                         {cert.grade}
-                      </td>
-
-                      <td style={{ fontWeight: 'bold' }}>
-                        {cert.amount}
                       </td>
 
                     </tr>
@@ -851,11 +794,11 @@ const CertificateViewer = () => {
             <div>
 
               <p className="summary-label">
-                Total Courses Taken
+                Total Marks (All Courses)
               </p>
 
               <p className="summary-value">
-                {certificates.length}
+                {totalMarks}
               </p>
 
             </div>
@@ -863,11 +806,11 @@ const CertificateViewer = () => {
             <div style={{ textAlign: 'right' }}>
 
               <p className="summary-label">
-                Cumulative GPA (CGPA)
+                Overall Letter Grade
               </p>
 
               <p className="summary-value summary-cgpa">
-                {studentInfo.cgpa}
+                {overallGrade}
               </p>
 
             </div>
