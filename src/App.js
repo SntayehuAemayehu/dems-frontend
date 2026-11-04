@@ -7,6 +7,10 @@ import { Toaster } from 'react-hot-toast';
 import { ConfigProvider, theme } from 'antd';
 import MainLayout from './layouts/MainLayout';
 import HomePage from './pages/HomePage/HomePage';
+import NewsPage from './pages/News/NewsPage';
+import NewsDetailPage from './pages/News/NewsDetailPage';
+import TermsPolicyPage from './pages/TermsPolicyPage';
+import AdminNews from './pages/admin/AdminNews';
 import Header from './components/Header/Header';
 import ChatWidget from './components/Chat/ChatWidget';
 import { DarkModeProvider, useDarkMode } from './context/DarkModeContext';
@@ -41,6 +45,8 @@ import LiveClass from './pages/LiveClass';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import TeacherCourses from './pages/teacher/TeacherCourses';
 import TeacherExams from './pages/teacher/TeacherExams';
+import LiveExamView from './pages/teacher/LiveExamView';
+import ProctoringImagesPage from './pages/teacher/ProctoringImagesPage';
 import Greading from './pages/teacher/Grading';
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -116,6 +122,18 @@ const AppContent = () => {
                   <HomePage />
                 </>
               }
+            />
+            <Route
+              path="/news"
+              element={<><Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} /><NewsPage /></>}
+            />
+            <Route
+              path="/news/:newsId"
+              element={<><Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} /><NewsDetailPage /></>}
+            />
+            <Route
+              path="/terms-and-policy"
+              element={<><Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} /><TermsPolicyPage /></>}
             />
             <Route
               path="/login"
@@ -209,10 +227,13 @@ const AppContent = () => {
               <Route path="/teacher/dashboard" element={<ProtectedRoute roles={['TEACHER']}><TeacherDashboard /></ProtectedRoute>} />
               <Route path="/teacher/courses" element={<ProtectedRoute roles={['TEACHER']}><TeacherCourses /></ProtectedRoute>} />
               <Route path="/teacher/exams" element={<ProtectedRoute roles={['TEACHER']}><TeacherExams /></ProtectedRoute>} />
+              <Route path="/teacher/exams/:examId/live" element={<ProtectedRoute roles={['TEACHER']}><LiveExamView /></ProtectedRoute>} />
+              <Route path="/teacher/courses/:courseId/proctoring-images" element={<ProtectedRoute roles={['TEACHER']}><ProctoringImagesPage /></ProtectedRoute>} />
               <Route path="/teacher/grade/:type/:id" element={<Grading />} />
               
               {/* Admin Routes */}
               <Route path="/admin/dashboard" element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
+              <Route path="/admin/news" element={<ProtectedRoute roles={['ADMIN']}><AdminNews /></ProtectedRoute>} />
               <Route path="/admin/proctoring-review" element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
 
               {/* Finance Routes */}

@@ -2,15 +2,25 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
-import { Video, Users, Clock, Play, BookOpen } from 'lucide-react';
+import { Video, Users, Clock, Play, BookOpen, CalendarDays, Download, FileVideo, X, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
+import { deleteClassRecording, getAttendance, getClassRecording, getRecordingMetadata } from '../../utils/liveClassStorage';
 
 const LiveClasses = () => {
   const { user } = useSelector((state) => state.auth || {});
+  const isTeacher = user?.role === 'TEACHER';
   const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [attendanceCourse, setAttendanceCourse] = useState(null);
+  const [attendanceSessions, setAttendanceSessions] = useState([]);
+  const [expandedAttendanceId, setExpandedAttendanceId] = useState('');
+  const [recordings, setRecordings] = useState([]);
+  const [recordingUrl, setRecordingUrl] = useState('');
+  const [activeRecording, setActiveRecording] = useState('');
+  const [recordingToDelete, setRecordingToDelete] = useState(null);
+  const [isDeletingRecording, setIsDeletingRecording] = useState(false);
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -72,8 +82,75 @@ const LiveClasses = () => {
     return () => clearInterval(interval);
   }, [fetchCourses]);
 
+  useEffect(() => {
+    try {
+      setRecordings(getRecordingMetadata());
+    } catch (error) {
+      console.error('Could not read locally saved class recordings:', error);
+      toast.error('Saved recording information could not be read.');
+    }
+  }, []);
+
+  useEffect(() => () => {
+    if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+  }, [recordingUrl]);
+
   const handleJoinLiveClass = (courseId) => {
     navigate(`/live-class/${courseId}`);
+  };
+
+  const showAttendance = (course) => {
+    try {
+      const sessions = getAttendance()
+        .filter((session) => String(session.courseId) === String(course.id))
+        .sort((first, second) => new Date(second.startedAt) - new Date(first.startedAt));
+      setAttendanceSessions(sessions);
+      setExpandedAttendanceId('');
+      setAttendanceCourse(course);
+    } catch (error) {
+      console.error('Could not read local attendance:', error);
+      toast.error('Attendance could not be read from this browser.');
+    }
+  };
+
+  const playRecording = async (recording) => {
+    try {
+      const saved = await getClassRecording(recording.id);
+      if (!saved?.blob) {
+        toast.error('This recording is no longer available on this device.');
+        return;
+      }
+      if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+      const url = URL.createObjectURL(saved.blob);
+      setRecordingUrl(url);
+      setActiveRecording(recording.id);
+    } catch (error) {
+      console.error('Could not load local class recording:', error);
+      toast.error('The recording could not be opened.');
+    }
+  };
+
+  const confirmDeleteRecording = async () => {
+    if (!recordingToDelete || isDeletingRecording) return;
+    setIsDeletingRecording(true);
+    try {
+      await deleteClassRecording(recordingToDelete.id);
+      setRecordings((current) => current.filter((recording) => recording.id !== recordingToDelete.id));
+      if (activeRecording === recordingToDelete.id) {
+        setRecordingUrl((currentUrl) => {
+          if (currentUrl) URL.revokeObjectURL(currentUrl);
+          return '';
+        });
+        setActiveRecording('');
+      }
+      setRecordingToDelete(null);
+      toast.success('Recording deleted from this device.');
+    } catch (error) {
+      console.error('Could not delete local class recording:', error);
+      toast.error('The recording could not be deleted.');
+    } finally {
+      setIsDeletingRecording(false);
+    }
   };
 
   if (loading) {
@@ -115,7 +192,6 @@ const LiveClasses = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '24px' }} className="live-class-grid">
           {courses.map((course) => {
             const isLive = course.is_live === true; 
-            const isTeacher = user?.role === 'TEACHER';
 
             return (
               <div key={course.id} style={{ background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)', transition: 'all 0.3s ease' }}
@@ -162,10 +238,117 @@ const LiveClasses = () => {
                       <Clock size={16} /> Waiting for Teacher...
                     </button>
                   )}
+                  {isTeacher && (
+                    <button onClick={() => showAttendance(course)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', marginTop: '10px', padding: '10px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>
+                      <CalendarDays size={16} /> See attendance
+                    </button>
+                  )}
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {isTeacher && recordings.length > 0 && (
+        <section style={{ marginTop: '28px', background: 'white', borderRadius: '12px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,.1)' }}>
+          <h2 style={{ margin: '0 0 14px', color: '#0f172a', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}><FileVideo size={20} /> Recordings saved on this device</h2>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            {recordings.map((recording) => (
+              <div key={recording.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px' }}>
+                <div>
+                  <strong style={{ color: '#0f172a' }}>{recording.courseName || `Course ${recording.courseId}`}</strong>
+                  <div style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>{new Date(recording.createdAt).toLocaleString()} · {(recording.size / (1024 * 1024)).toFixed(1)} MB</div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={() => playRecording(recording)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', border: 0, borderRadius: '7px', background: '#2563eb', color: 'white', cursor: 'pointer' }}><Play size={15} /> Play</button>
+                  {activeRecording === recording.id && recordingUrl && <a href={recordingUrl} download={`${recording.courseName || 'live-class'}-${recording.id}.webm`} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', borderRadius: '7px', background: '#e2e8f0', color: '#0f172a', textDecoration: 'none' }}><Download size={15} /> Download</a>}
+                  <button onClick={() => setRecordingToDelete(recording)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', border: '1px solid #fecaca', borderRadius: '7px', background: '#fff1f2', color: '#be123c', cursor: 'pointer' }} aria-label={`Delete ${recording.courseName || 'class'} recording`}>
+                    <Trash2 size={15} /> Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {recordingUrl && <video src={recordingUrl} controls style={{ width: '100%', maxHeight: '420px', marginTop: '16px', background: '#0f172a', borderRadius: '8px' }} />}
+        </section>
+      )}
+
+      {attendanceCourse && (
+        <div role="presentation" onClick={() => setAttendanceCourse(null)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15, 23, 42, .65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="attendance-title" onClick={(event) => event.stopPropagation()} style={{ width: 'min(720px, 100%)', maxHeight: '85vh', overflowY: 'auto', background: 'white', borderRadius: '14px', padding: '22px', boxShadow: '0 20px 50px rgba(0,0,0,.25)' }}>
+            <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '18px' }}>
+              <div>
+                <h2 id="attendance-title" style={{ margin: 0, color: '#0f172a', fontSize: '20px' }}>Class attendance</h2>
+                <p style={{ margin: '5px 0 0', color: '#64748b' }}>{attendanceCourse.title}</p>
+              </div>
+              <button onClick={() => setAttendanceCourse(null)} aria-label="Close attendance" style={{ background: 'transparent', border: 0, color: '#64748b', cursor: 'pointer' }}><X size={21} /></button>
+            </header>
+            {attendanceSessions.length === 0 ? (
+              <p style={{ color: '#64748b', textAlign: 'center', padding: '28px 8px' }}>No attendance has been recorded on this device yet. Attendance is saved locally when you host a class.</p>
+            ) : attendanceSessions.map((session) => (
+              <article key={session.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', marginBottom: '12px', overflow: 'hidden' }}>
+                <button onClick={() => setExpandedAttendanceId((current) => current === session.id ? '' : session.id)} style={{ width: '100%', textAlign: 'left', border: 0, padding: '12px 14px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', cursor: 'pointer' }}>
+                  <strong style={{ color: '#0f172a' }}>{session.date} · {session.attendees?.length || 0} student{session.attendees?.length === 1 ? '' : 's'}</strong>
+                  <span style={{ fontSize: '13px', color: '#64748b' }}>Started {new Date(session.startedAt).toLocaleTimeString()} · {expandedAttendanceId === session.id ? 'Hide' : 'View attendance'}</span>
+                </button>
+                {expandedAttendanceId === session.id && (session.attendees?.length ? (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', color: '#334155' }}>
+                      <thead><tr style={{ textAlign: 'left', background: '#fff' }}>
+                        <th style={{ padding: '10px 14px', borderBottom: '1px solid #e2e8f0' }}>Student</th>
+                        <th style={{ padding: '10px 14px', borderBottom: '1px solid #e2e8f0' }}>Joined</th>
+                        <th style={{ padding: '10px 14px', borderBottom: '1px solid #e2e8f0' }}>Left</th>
+                      </tr></thead>
+                      <tbody>{session.attendees.map((attendee) => (
+                        <tr key={attendee.userId}>
+                          <td style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', fontWeight: 600 }}>{attendee.name}</td>
+                          <td style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9' }}>{new Date(attendee.joinedAt).toLocaleTimeString()}</td>
+                          <td style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9' }}>{attendee.leftAt ? new Date(attendee.leftAt).toLocaleTimeString() : session.endedAt ? `${new Date(session.endedAt).toLocaleTimeString()} (class ended)` : 'Still in class'}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                ) : <p style={{ margin: 0, padding: '14px', color: '#64748b', fontSize: '13px' }}>No students attended this class.</p>)}
+              </article>
+            ))}
+          </section>
+        </div>
+      )}
+
+      {recordingToDelete && (
+        <div
+          role="presentation"
+          onClick={() => !isDeletingRecording && setRecordingToDelete(null)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && !isDeletingRecording) setRecordingToDelete(null);
+          }}
+          style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15, 23, 42, .65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-recording-title"
+            aria-describedby="delete-recording-description"
+            onClick={(event) => event.stopPropagation()}
+            style={{ width: 'min(440px, 100%)', background: 'white', borderRadius: '14px', padding: '24px', boxShadow: '0 20px 50px rgba(0,0,0,.25)' }}
+          >
+            <div style={{ width: '44px', height: '44px', display: 'grid', placeItems: 'center', borderRadius: '12px', background: '#fff1f2', color: '#be123c', marginBottom: '16px' }}>
+              <Trash2 size={22} />
+            </div>
+            <h2 id="delete-recording-title" style={{ margin: '0 0 8px', color: '#0f172a', fontSize: '19px' }}>Delete this recording?</h2>
+            <p id="delete-recording-description" style={{ margin: '0 0 22px', color: '#64748b', lineHeight: 1.5 }}>
+              “{recordingToDelete.courseName || `Course ${recordingToDelete.courseId}`}” saved on {new Date(recordingToDelete.createdAt).toLocaleString()} will be permanently deleted from this device.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button onClick={() => setRecordingToDelete(null)} disabled={isDeletingRecording} style={{ padding: '9px 14px', background: 'white', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={confirmDeleteRecording} disabled={isDeletingRecording} style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 14px', background: '#dc2626', color: 'white', border: 0, borderRadius: '8px', cursor: isDeletingRecording ? 'wait' : 'pointer', opacity: isDeletingRecording ? 0.7 : 1 }}>
+                <Trash2 size={15} /> {isDeletingRecording ? 'Deleting…' : 'Delete recording'}
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </div>

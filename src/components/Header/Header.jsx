@@ -1,204 +1,185 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { 
-  Menu, X, User, LogOut, BookOpen, GraduationCap, 
-  Home, Shield, ClipboardList, CheckCircle, Lock, 
-  Sun, Moon, LogIn, UserPlus, Video, CreditCard, 
-  FileText, LayoutDashboard, Search, Sparkles,
-  Bell, MessageSquare, Globe, Send
+import {
+  Menu,
+  X,
+  User,
+  LogOut,
+  BookOpen,
+  Home,
+  Sun,
+  Moon,
+  LogIn,
+  UserPlus,
+  Video,
+  FileText,
+  LayoutDashboard,
+  ChevronDown,
+  Info,
+  ClipboardList,
+  CreditCard,
+  Shield,
+  Sparkles,
+  Bell,
+  Newspaper
 } from 'lucide-react';
 import { logout } from '../../store/slices/authSlice';
 import NotificationBell from '../common/NotificationBell';
 import { useDarkMode } from '../../context/DarkModeContext';
-import api, { getMediaUrl } from '../../api/api';
-//import LanguageSelector from '../i18n/LanguageSelector';
-//import CurrencySelector from '../Payment/CurrencySelector';
+import { getMediaUrl } from '../../api/api';
 
 const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [paymentAccess, setPaymentAccess] = useState(true);
-  const [checkingPayment, setCheckingPayment] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  // AI Assistant State
-  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
-  const [assistantMessage, setAssistantMessage] = useState('');
-  const [assistantMessages, setAssistantMessages] = useState([
-    { type: 'bot', text: 'Hello! 👋 Welcome to DEMS AI Assistant. How can I assist you today?' }
-  ]);
-  const [isLoading, setIsLoading] = useState(false);
-  
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
+  const darkModeContext = useDarkMode();
   
-  // Use context for dark mode if props are not provided
-  let contextDarkMode;
-  let contextToggleDarkMode;
-  try {
-    const context = useDarkMode();
-    contextDarkMode = context.isDarkMode;
-    contextToggleDarkMode = context.toggleDarkMode;
-  } catch (e) {
-    // Fallback to props if context not available
-    contextDarkMode = propDarkMode;
-    contextToggleDarkMode = propToggleDarkMode;
-  }
+  const isDarkMode =
+    propDarkMode !== undefined
+      ? propDarkMode
+      : darkModeContext.isDarkMode;
+      
+  const toggleDarkMode =
+    propToggleDarkMode ||
+    darkModeContext.toggleDarkMode ||
+    (() => {});
+    
+  const role = user?.role?.toUpperCase();
 
-  const isDarkMode = propDarkMode !== undefined ? propDarkMode : contextDarkMode;
-  const toggleDarkMode = propToggleDarkMode || contextToggleDarkMode || (() => {});
+  // Dashboard paths for different user roles
+  const dashboardPaths = {
+    STUDENT: '/dashboard',
+    TEACHER: '/teacher/dashboard',
+    ADMIN: '/admin/dashboard',
+    FINANCE: '/finance/dashboard',
+    REGISTRAR: '/registrar/dashboard',
+    DEPT_HEAD: '/dept/dashboard',
+  };
+  const dashboardPath = dashboardPaths[role] || '/dashboard';
+
+  // Public navigation links with refined items
+  const publicLinks = [
+    {
+      name: 'Home',
+      path: '/',
+      icon: <Home size={17} />,
+    },
+    {
+      name: 'Courses',
+      path: '/courses',
+      icon: <BookOpen size={17} />,
+    },
+    {
+      name: 'About Portal',
+      path: '/about',
+      icon: <Info size={17} />,
+    },
+  ];
+
+  // Role-specific navigation links
+  const getRoleLinks = () => {
+    if (!isAuthenticated) return [];
+    switch (role) {
+      case 'STUDENT':
+        return [
+          { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={17} /> },
+          { name: 'My Courses', path: '/courses', icon: <BookOpen size={17} /> },
+          { name: 'Exams', path: '/exams', icon: <FileText size={17} /> },
+          { name: 'Results', path: '/assignment-results', icon: <ClipboardList size={17} /> },
+          { name: 'Live Classes', path: '/live-classes', icon: <Video size={17} /> },
+          { name: 'Payments', path: '/payments', icon: <CreditCard size={17} /> },
+        ];
+      case 'TEACHER':
+        return [
+          { name: 'Dashboard', path: '/teacher/dashboard', icon: <LayoutDashboard size={17} /> },
+          { name: 'My Courses', path: '/teacher/courses', icon: <BookOpen size={17} /> },
+          { name: 'Exams', path: '/teacher/exams', icon: <FileText size={17} /> },
+        ];
+      case 'ADMIN':
+        return [
+          { name: 'Dashboard', path: '/admin/dashboard', icon: <LayoutDashboard size={17} /> },
+          { name: 'Proctoring', path: '/admin/proctoring-review', icon: <Shield size={17} /> },
+        ];
+      case 'FINANCE':
+        return [{ name: 'Dashboard', path: '/finance/dashboard', icon: <LayoutDashboard size={17} /> }];
+      case 'REGISTRAR':
+        return [{ name: 'Dashboard', path: '/registrar/dashboard', icon: <LayoutDashboard size={17} /> }];
+      case 'DEPT_HEAD':
+        return [{ name: 'Dashboard', path: '/dept/dashboard', icon: <LayoutDashboard size={17} /> }];
+      default:
+        return [{ name: 'Dashboard', path: dashboardPath, icon: <LayoutDashboard size={17} /> }];
+    }
+  };
+  const roleLinks = getRoleLinks();
+
+  // Ultra-Premium Theme Color Palette
+  const colors = {
+    background: isDarkMode
+      ? 'rgba(3, 7, 18, 0.85)'
+      : 'rgba(255, 255, 255, 0.85)',
+    text: isDarkMode ? '#f8fafc' : '#0f172a',
+    muted: isDarkMode ? '#94a3b8' : '#64748b',
+    border: isDarkMode
+      ? 'rgba(255, 255, 255, 0.08)'
+      : 'rgba(15, 23, 42, 0.06)',
+    hover: isDarkMode
+      ? 'rgba(255, 255, 255, 0.06)'
+      : 'rgba(79, 70, 229, 0.04)',
+    mobileBackground: isDarkMode ? '#0b0f19' : '#ffffff',
+    accent: '#4f46e5', // Rich Indigo Accent
+    accentGradient: 'linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)',
+  };
 
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
     };
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    handleScroll();
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && user?.role === 'STUDENT') {
-      checkPaymentAccess();
-    }
-  }, [isAuthenticated, user]);
-
-  const checkPaymentAccess = async () => {
-    try {
-      setCheckingPayment(true);
-      const response = await api.get('/analytics/check-access/?service_type=COURSE_ENROLLMENT');
-      setPaymentAccess(response.data.has_access);
-    } catch (error) {
-      console.error('Failed to check payment access:', error);
-      setPaymentAccess(true);
-    } finally {
-      setCheckingPayment(false);
-    }
-  };
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsMenuOpen(false);
+        setIsProfileOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
 
   const handleLogout = () => {
+    setIsMenuOpen(false);
+    setIsProfileOpen(false);
     dispatch(logout());
     navigate('/login');
   };
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
-      setSearchQuery('');
-      setIsSearchOpen(false);
-    }
+  const closeMobileMenu = () => {
+    setIsMenuOpen(false);
   };
 
-  // AI Assistant Functions
-  const handleAssistantSubmit = async () => {
-    if (!assistantMessage.trim()) return;
-    
-    const userMessage = assistantMessage;
-    setAssistantMessages(prev => [...prev, { type: 'user', text: userMessage }]);
-    setAssistantMessage('');
-    setIsLoading(true);
-
-    try {
-      // Simulate AI response - Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const responses = [
-        "I can help you with course enrollment. What would you like to know?",
-        "Our courses cover Software Engineering, Data Science, and more!",
-        "You can check your exam results in the dashboard.",
-        "We offer live classes every Monday, Wednesday, and Friday.",
-        "AI Proctoring ensures secure and fair examinations.",
-        "You can make payments via Bank Transfer, Telebirr, or Chapa.",
-        "Your profile can be updated from the profile page.",
-        "We have 500+ courses available for you to choose from.",
-        "Certificates are issued upon successful course completion.",
-        "You can access our platform on any device - desktop, tablet, or mobile.",
-      ];
-      const botResponse = responses[Math.floor(Math.random() * responses.length)];
-      setAssistantMessages(prev => [...prev, { type: 'bot', text: botResponse }]);
-    } catch (error) {
-      console.error('AI Assistant error:', error);
-      setAssistantMessages(prev => [...prev, { 
-        type: 'bot', 
-        text: 'Sorry, I encountered an error. Please try again later.' 
-      }]);
-    } finally {
-      setIsLoading(false);
-    }
+  const getInitials = () => {
+    const name = user?.full_name || user?.username || 'User';
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0].toUpperCase())
+      .join('');
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleAssistantSubmit();
-    }
-  };
-
-  // Navigation Links - Home Page Only: Home, About
-  const publicNavLinks = [
-    { name: 'Home', path: '/', icon: <Home size={18} /> },
-    { name: 'About', path: '/about', icon: <Globe size={18} /> },
-  ];
-
-  // Get role-based navigation links for authenticated users (used in mobile menu)
-  const getAuthNavLinks = () => {
-    if (!isAuthenticated) return [];
-
-    const role = user?.role?.toUpperCase();
-    const links = [];
-
-    if (role === 'STUDENT') {
-      links.push(
-        { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={18} /> },
-        { name: 'Courses', path: '/courses', icon: <BookOpen size={18} /> },
-        { name: 'Exams', path: '/exams', icon: <FileText size={18} /> },
-        { name: 'Results', path: '/assignment-results', icon: <ClipboardList size={18} /> },
-        { name: 'Live Classes', path: '/live-classes', icon: <Video size={18} /> },
-        { name: 'Payments', path: '/payments', icon: <CreditCard size={18} /> },
-        { name: 'Profile', path: '/profile', icon: <User size={18} /> }
-      );
-    } else if (role === 'TEACHER') {
-      links.push(
-        { name: 'Dashboard', path: '/teacher/dashboard', icon: <LayoutDashboard size={18} /> },
-        { name: 'My Courses', path: '/teacher/courses', icon: <BookOpen size={18} /> },
-        { name: 'Exams', path: '/teacher/exams', icon: <FileText size={18} /> },
-        { name: 'Profile', path: '/profile', icon: <User size={18} /> }
-      );
-    } else if (role === 'ADMIN') {
-      links.push(
-        { name: 'Dashboard', path: '/admin/dashboard', icon: <LayoutDashboard size={18} /> },
-        { name: 'Proctoring', path: '/admin/proctoring-review', icon: <Shield size={18} /> },
-        { name: 'Profile', path: '/profile', icon: <User size={18} /> }
-      );
-    } else if (role === 'FINANCE') {
-      links.push(
-        { name: 'Dashboard', path: '/finance/dashboard', icon: <LayoutDashboard size={18} /> },
-        { name: 'Profile', path: '/profile', icon: <User size={18} /> }
-      );
-    } else if (role === 'REGISTRAR') {
-      links.push(
-        { name: 'Dashboard', path: '/registrar/dashboard', icon: <LayoutDashboard size={18} /> },
-        { name: 'Profile', path: '/profile', icon: <User size={18} /> }
-      );
-    } else if (role === 'DEPT_HEAD') {
-      links.push(
-        { name: 'Dashboard', path: '/dept/dashboard', icon: <LayoutDashboard size={18} /> },
-        { name: 'Profile', path: '/profile', icon: <User size={18} /> }
-      );
-    } else {
-      links.push(
-        { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={18} /> },
-        { name: 'Profile', path: '/profile', icon: <User size={18} /> }
-      );
-    }
-
-    return links;
-  };
-
-  // For mobile menu - combine public + auth links
-  const mobileNavLinks = [...publicNavLinks, ...getAuthNavLinks()];
+  const profileImage = user?.profile_picture ? getMediaUrl(user.profile_picture) : null;
 
   const headerStyle = {
     position: 'fixed',
@@ -206,839 +187,818 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
     left: 0,
     right: 0,
     zIndex: 1000,
-    padding: '0 24px',
-    height: '72px',
-    background: scrolled
-      ? isDarkMode
-        ? 'rgba(15, 23, 42, 0.92)'
-        : 'rgba(255, 255, 255, 0.92)'
-      : isDarkMode
-        ? 'rgba(15, 23, 42, 0.8)'
-        : 'rgba(255, 255, 255, 0.8)',
-    backdropFilter: 'blur(24px)',
-    WebkitBackdropFilter: 'blur(24px)',
-    borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
+    height: '76px',
+    padding: '0 32px',
+    background: colors.background,
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    borderBottom: `1px solid ${colors.border}`,
     boxShadow: scrolled
       ? isDarkMode
-        ? '0 4px 40px rgba(0,0,0,0.3)'
-        : '0 4px 40px rgba(0,0,0,0.06)'
+        ? '0 10px 30px -10px rgba(0, 0, 0, 0.5)'
+        : '0 10px 30px -10px rgba(79, 70, 229, 0.08)'
       : 'none',
-    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
   };
 
-  const linkColor = isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
-  const linkHoverColor = isDarkMode ? '#ffffff' : '#0f172a';
-  const linkHoverBg = isDarkMode ? 'rgba(255,255,255,0.06)' : '#f1f5f9';
+  const navLinkStyle = ({ isActive }) => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 16px',
+    borderRadius: '12px',
+    textDecoration: 'none',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: isActive ? colors.accent : colors.muted,
+    background: isActive
+      ? isDarkMode
+        ? 'rgba(79, 70, 229, 0.15)'
+        : 'rgba(79, 70, 229, 0.08)'
+      : 'transparent',
+    transition: 'all 0.25s ease',
+  });
+
+  const mobileLinkStyle = ({ isActive }) => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    padding: '14px 18px',
+    borderRadius: '12px',
+    textDecoration: 'none',
+    fontSize: '15px',
+    fontWeight: 500,
+    color: isActive ? colors.accent : colors.text,
+    background: isActive
+      ? isDarkMode
+        ? 'rgba(79, 70, 229, 0.18)'
+        : 'rgba(79, 70, 229, 0.08)'
+      : 'transparent',
+  });
 
   return (
     <>
       <header style={headerStyle}>
         <style>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
+          .dems-header-link:hover {
+            color: ${colors.accent} !important;
+            background: ${colors.hover} !important;
           }
-          @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+          .dems-header-button:hover {
+            background: ${colors.hover} !important;
+            transform: scale(1.05);
           }
-          @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
+          .dems-glow-btn:hover {
+            opacity: 0.92;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(79, 70, 229, 0.35);
           }
-          @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+          .dems-profile-dropdown {
+            animation: demsDropdown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           }
-          @media (max-width: 768px) {
-            .mobile-menu-btn { display: flex !important; }
-            .nav-desktop { display: none !important; }
-            .nav-mobile { display: flex !important; }
-            .auth-buttons-desktop { display: none !important; }
-            .auth-buttons-mobile { display: flex !important; }
-            .search-desktop { display: none !important; }
+          @keyframes demsDropdown {
+            from {
+              opacity: 0;
+              transform: translateY(-8px) scale(0.98);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+            }
           }
-          @media (min-width: 769px) {
-            .mobile-menu-btn { display: none !important; }
-            .nav-desktop { display: flex !important; }
-            .nav-mobile { display: none !important; }
-            .auth-buttons-desktop { display: flex !important; }
-            .auth-buttons-mobile { display: none !important; }
-            .search-desktop { display: flex !important; }
+          @media (max-width: 860px) {
+            .dems-desktop-nav { display: none !important; }
+            .dems-desktop-actions { display: none !important; }
+            .dems-mobile-button { display: flex !important; }
           }
-          .mobile-nav-overlay {
-            position: fixed;
-            top: 72px;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: ${isDarkMode ? 'rgba(15,23,42,0.98)' : 'rgba(255,255,255,0.98)'};
-            z-index: 999;
-            padding: 24px;
-            animation: slideDown 0.3s ease;
-            overflow-y: auto;
-            backdrop-filter: blur(20px);
-          }
-          .mobile-nav-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 14px 16px;
-            border-radius: 12px;
-            color: ${isDarkMode ? '#f1f5f9' : '#0f172a'};
-            text-decoration: none;
-            transition: all 0.2s ease;
-            font-size: 16px;
-            font-weight: 500;
-          }
-          .mobile-nav-item:hover {
-            background: ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#f1f5f9'};
-          }
-          .mobile-nav-item svg {
-            color: #3b82f6;
-          }
-          .mobile-divider {
-            height: 1px;
-            background: ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'};
-            margin: 8px 0;
-          }
-          .nav-link {
-            position: relative;
-            padding: 8px 16px !important;
-          }
-          .nav-link::after {
-            content: '';
-            position: absolute;
-            bottom: 4px;
-            left: 50%;
-            width: 0;
-            height: 2px;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            transition: all 0.3s ease;
-            transform: translateX(-50%);
-            border-radius: 2px;
-          }
-          .nav-link:hover::after {
-            width: 60%;
-          }
-          .search-input {
-            animation: slideDown 0.2s ease;
-          }
-          .assistant-modal {
-            animation: fadeInUp 0.3s ease;
+          @media (min-width: 861px) {
+            .dems-desktop-nav { display: flex !important; }
+            .dems-desktop-actions { display: flex !important; }
+            .dems-mobile-button { display: none !important; }
+            .dems-mobile-menu { display: none !important; }
           }
         `}</style>
 
-        <div style={{
-          maxWidth: '1400px',
-          margin: '0 auto',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          height: '100%',
-        }}>
-          {/* Logo */}
-          <Link to="/" style={{
+        <div
+          className="dems-header-container"
+          style={{
+            maxWidth: '1440px',
+            height: '100%',
+            margin: '0 auto',
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
-            textDecoration: 'none',
-            color: isDarkMode ? '#ffffff' : '#0f172a',
-            fontWeight: 700,
-            fontSize: '22px',
-            flexShrink: 0,
-          }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+            justifyContent: 'space-between',
+            gap: '20px',
+          }}
+        >
+          {/* Brand Logo & Title */}
+          <Link
+            to="/"
+            onClick={closeMobileMenu}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              textDecoration: 'none',
+              flexShrink: 0,
+            }}
+          >
+            <div
+              style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '14px',
+                background: isDarkMode ? '#1e1b4b' : '#e0e7ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.15)',
+                padding: '3px',
+              }}
+            >
+              <img
+                src="/Mekdela_Amba_University_logo.jpg"
+                alt="Mekdela Amba University"
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  objectFit: 'contain',
+                  borderRadius: '10px',
+                  background: '#ffffff',
+                }}
+              />
+            </div>
+            <div>
+              <div
+                className="dems-logo-name"
+                style={{
+                  color: colors.text,
+                  fontSize: '16px',
+                  fontWeight: 800,
+                  letterSpacing: '0.6px',
+                  lineHeight: 1.2,
+                }}
+              >
+                MEKDELA AMBA UNIVERSITY
+              </div>
+              <div
+                style={{
+                  color: colors.muted,
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  marginTop: '2px',
+                  letterSpacing: '0.3px',
+                }}
+              >
+                Distance Education Portal
+              </div>
+            </div>
+          </Link>
+
+          {/* Desktop Navigation */}
+          <nav
+            className="dems-desktop-nav"
+            style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '20px',
-              color: 'white',
-              boxShadow: '0 4px 14px rgba(59,130,246,0.3)',
-            }}>
-              <GraduationCap size={22} />
-            </div>
-            <span style={{
-              background: 'linear-gradient(135deg, #60a5fa, #a78bfa)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>DEMS</span>
-            
-          </Link>
-
-          {/* Desktop Navigation - ONLY Home, About */}
-          <nav className="nav-desktop" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '2px',
-            flex: 1,
-            justifyContent: 'center',
-          }}>
-            {publicNavLinks.map((link) => (
-              <Link
+              gap: '6px',
+              flex: 1,
+            }}
+          >
+            {publicLinks.map((link) => (
+              <NavLink
                 key={link.path}
                 to={link.path}
-                className="nav-link"
-                style={{
-                  color: linkColor,
-                  textDecoration: 'none',
-                  padding: '8px 14px',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  transition: 'all 0.3s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = linkHoverColor;
-                  e.currentTarget.style.background = linkHoverBg;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = linkColor;
-                  e.currentTarget.style.background = 'transparent';
-                }}
+                end={link.path === '/'}
+                style={navLinkStyle}
+                className="dems-header-link"
               >
-                {link.icon && <span style={{ display: 'inline-flex' }}>{link.icon}</span>}
+                {link.icon}
                 {link.name}
-              </Link>
+              </NavLink>
             ))}
+            {isAuthenticated && (
+              <NavLink
+                to={dashboardPath}
+                style={navLinkStyle}
+                className="dems-header-link"
+              >
+                <LayoutDashboard size={17} />
+                Dashboard
+              </NavLink>
+            )}
           </nav>
 
-          {/* Right Section */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            flexShrink: 0,
-          }}>
-
-            {/* Payment Status - Only for authenticated students */}
-            {isAuthenticated && user?.role === 'STUDENT' && (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '4px 10px',
-                borderRadius: '20px',
-                fontSize: '10px',
-                fontWeight: 500,
-                background: paymentAccess ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-                color: paymentAccess ? '#22c55e' : '#ef4444',
-                border: paymentAccess ? '1px solid rgba(34,197,94,0.15)' : '1px solid rgba(239,68,68,0.15)',
-              }}>
-                {checkingPayment ? (
-                  <span style={{
-                    display: 'inline-block',
-                    width: '10px',
-                    height: '10px',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: '#94a3b8',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite',
-                  }} />
-                ) : paymentAccess ? (
-                  <><CheckCircle size={10} /> Access</>
-                ) : (
-                  <><Lock size={10} /> Locked</>
-                )}
-              </span>
-            )}
-
-            {/* Notification Bell - Only for authenticated users */}
+          {/* Desktop Actions */}
+          <div
+            className="dems-desktop-actions"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+            }}
+          >
+            {/* Notification Bell */}
             {isAuthenticated && <NotificationBell />}
+
+            {isAuthenticated && role !== 'ADMIN' && (
+              <Link
+                to="/news"
+                aria-label="News"
+                title="News"
+                className="dems-header-button"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  border: `1px solid ${colors.border}`,
+                  background: colors.hover,
+                  color: colors.accent,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textDecoration: 'none',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <Newspaper size={16} />
+              </Link>
+            )}
 
             {/* Dark Mode Toggle */}
             <button
+              type="button"
               onClick={toggleDarkMode}
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label="Toggle dark mode"
+              className="dems-header-button"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '38px',
-                height: '38px',
-                borderRadius: '50%',
-                border: 'none',
-                background: isDarkMode ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
-                cursor: 'pointer',
-                color: isDarkMode ? '#fbbf24' : '#6366f1',
-                transition: 'all 0.3s ease',
-              }}
-              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
-            </button>
-
-            {/* Auth Buttons - Desktop */}
-            <div className="auth-buttons-desktop" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              {isAuthenticated ? (
-                <>
-                  {/* USER AVATAR AND NAME */}
-                  <div 
-                    onClick={() => navigate('/profile')}
-                    style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '8px', 
-                      cursor: 'pointer',
-                      padding: '4px 8px',
-                      borderRadius: '8px',
-                      transition: 'all 0.2s ease',
-                      background: isDarkMode ? 'rgba(255,255,255,0.03)' : 'transparent'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.08)' : '#f1f5f9'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.03)' : 'transparent'}
-                  >
-                    <div style={{
-                      width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-                      border: `2px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`
-                    }}>
-                      <img 
-                        src={getMediaUrl(user?.profile_picture) || 'https://via.placeholder.com/36x36?text=User'} 
-                        alt="Profile" 
-                        onError={(e) => { e.target.src = 'https://via.placeholder.com/36x36?text=User'; }}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    </div>
-                    <span style={{ fontSize: '14px', fontWeight: 500, color: isDarkMode ? '#f1f5f9' : '#0f172a' }}>
-                      {user?.full_name?.split(' ')[0] || 'User'}
-                    </span>
-                  </div>
-
-                  {/* Logout Button */}
-                  <button
-                    onClick={handleLogout}
-                    style={{
-                      background: 'rgba(239,68,68,0.1)',
-                      color: isDarkMode ? '#fca5a5' : '#dc2626',
-                      border: 'none',
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: 500,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      transition: 'all 0.3s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
-                    }}
-                  >
-                    <LogOut size={15} />
-                    Logout
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link
-                    to="/login"
-                    style={{
-                      color: isDarkMode ? '#94a3b8' : '#64748b',
-                      padding: '8px 14px',
-                      borderRadius: '8px',
-                      textDecoration: 'none',
-                      fontWeight: 500,
-                      fontSize: '13px',
-                      transition: 'all 0.3s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = isDarkMode ? '#ffffff' : '#0f172a';
-                      e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.05)' : '#f1f5f9';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = isDarkMode ? '#94a3b8' : '#64748b';
-                      e.currentTarget.style.background = 'transparent';
-                    }}
-                  >
-                    <LogIn size={15} />
-                    Login
-                  </Link>
-                  <Link
-                    to="/register"
-                    style={{
-                      background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                      color: 'white',
-                      padding: '8px 20px',
-                      borderRadius: '8px',
-                      textDecoration: 'none',
-                      fontWeight: 500,
-                      fontSize: '13px',
-                      transition: 'all 0.3s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      boxShadow: '0 4px 14px rgba(59,130,246,0.25)',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 6px 24px rgba(59,130,246,0.35)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'none';
-                      e.currentTarget.style.boxShadow = '0 4px 14px rgba(59,130,246,0.25)';
-                    }}
-                  >
-                    <UserPlus size={15} />
-                    Register
-                  </Link>
-                </>
-              )}
-            </div>
-
-            {/* Mobile Menu Button */}
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="mobile-menu-btn"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: isDarkMode ? '#ffffff' : '#0f172a',
-                cursor: 'pointer',
-                padding: '8px',
-                borderRadius: '8px',
-                transition: 'all 0.3s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              aria-label="Toggle menu"
-            >
-              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Navigation */}
-        {isMenuOpen && (
-          <div className="mobile-nav-overlay">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {/* Mobile Search */}
-              <form onSubmit={handleSearch} style={{
-                display: 'flex',
-                alignItems: 'center',
-                background: isDarkMode ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
+                width: '42px',
+                height: '42px',
                 borderRadius: '12px',
-                padding: '4px 12px',
-                marginBottom: '12px',
-                border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
-              }}>
-                <Search size={18} color={isDarkMode ? '#94a3b8' : '#64748b'} />
-                <input
-                  type="text"
-                  placeholder="Search courses..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                border: `1px solid ${colors.border}`,
+                background: colors.hover,
+                color: isDarkMode ? '#fbbf24' : '#4f46e5',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
+            {/* Authenticated User Menu */}
+            {isAuthenticated ? (
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsProfileOpen(!isProfileOpen)}
+                  aria-expanded={isProfileOpen}
                   style={{
-                    background: 'transparent',
-                    border: 'none',
-                    outline: 'none',
-                    padding: '12px 10px',
-                    fontSize: '15px',
-                    color: isDarkMode ? '#f1f5f9' : '#0f172a',
-                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '6px 14px 6px 6px',
+                    border: `1px solid ${colors.border}`,
+                    background: colors.hover,
+                    borderRadius: '35px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
                   }}
-                />
-              </form>
-
-              {/* Mobile Navigation Links */}
-              {mobileNavLinks.map((link) => (
-                <Link
-                  key={link.path}
-                  to={link.path}
-                  className="mobile-nav-item"
-                  onClick={() => setIsMenuOpen(false)}
                 >
-                  {link.icon || <span style={{ width: '18px' }} />}
-                  {link.name}
-                </Link>
-              ))}
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      overflow: 'hidden',
+                      background: colors.accent,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      position: 'relative',
+                    }}
+                  >
+                    {getInitials()}
+                    {profileImage && (
+                      <img
+                        src={profileImage}
+                        alt="Profile"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                    )}
+                  </div>
+                  <span
+                    style={{
+                      color: colors.text,
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      maxWidth: '110px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {user?.full_name?.split(' ')[0] || 'Account'}
+                  </span>
+                  <ChevronDown
+                    size={15}
+                    color={colors.muted}
+                    style={{
+                      transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0)',
+                      transition: 'transform 0.25s ease',
+                    }}
+                  />
+                </button>
 
-              <div className="mobile-divider" />
-
-              {/* AI Assistant - Mobile */}
-              <button
-                onClick={() => {
-                  setIsAssistantOpen(true);
-                  setIsMenuOpen(false);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '14px 16px',
-                  borderRadius: '12px',
-                  background: 'none',
-                  border: 'none',
-                  color: '#3b82f6',
-                  fontSize: '16px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  width: '100%',
-                  textAlign: 'left',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <MessageSquare size={18} />
-                AI Assistant
-                <span style={{
-                  marginLeft: 'auto',
-                  fontSize: '11px',
-                  color: isDarkMode ? '#94a3b8' : '#64748b',
-                  background: isDarkMode ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
-                  padding: '2px 10px',
-                  borderRadius: '12px',
-                }}>
-                  Available
-                </span>
-              </button>
-
-              <div className="mobile-divider" />
-
-              {/* Dark Mode Toggle - Mobile */}
-              <button
-                onClick={() => {
-                  toggleDarkMode();
-                  setIsMenuOpen(false);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '14px 16px',
-                  borderRadius: '12px',
-                  background: 'none',
-                  border: 'none',
-                  color: isDarkMode ? '#f1f5f9' : '#0f172a',
-                  fontSize: '16px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  width: '100%',
-                  textAlign: 'left',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.06)' : '#f1f5f9';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                {isDarkMode ? <Sun size={20} color="#fbbf24" /> : <Moon size={20} color="#6366f1" />}
-                {isDarkMode ? 'Light Mode' : 'Dark Mode'}
-              </button>
-
-              <div className="mobile-divider" />
-
-              {/* Auth Buttons - Mobile */}
-              <div className="auth-buttons-mobile" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {isAuthenticated ? (
-                  <>
+                {/* Profile Dropdown Menu */}
+                {isProfileOpen && (
+                  <div
+                    className="dems-profile-dropdown"
+                    style={{
+                      position: 'absolute',
+                      top: '54px',
+                      right: 0,
+                      width: '240px',
+                      background: colors.mobileBackground,
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: '16px',
+                      padding: '10px',
+                      boxShadow: '0 20px 40px -15px rgba(0,0,0,0.2)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '14px',
+                        borderBottom: `1px solid ${colors.border}`,
+                        marginBottom: '8px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: colors.text,
+                          fontWeight: 700,
+                          fontSize: '14px',
+                        }}
+                      >
+                        {user?.full_name || 'User'}
+                      </div>
+                      <div
+                        style={{
+                          color: colors.muted,
+                          fontSize: '11px',
+                          marginTop: '3px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                        }}
+                      >
+                        {role?.replace('_', ' ') || 'Scholar'}
+                      </div>
+                    </div>
                     <Link
                       to="/profile"
-                      className="mobile-nav-item"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      <User size={18} />
-                      Profile
-                    </Link>
-                    <button
-                      className="mobile-nav-item"
-                      onClick={() => {
-                        handleLogout();
-                        setIsMenuOpen(false);
-                      }}
+                      onClick={() => setIsProfileOpen(false)}
+                      className="dems-header-link"
                       style={{
-                        background: 'none',
-                        border: 'none',
-                        width: '100%',
-                        textAlign: 'left',
-                        color: '#dc2626',
-                        cursor: 'pointer',
-                        fontSize: '16px',
-                        fontWeight: 500,
-                        padding: '14px 16px',
-                        borderRadius: '12px',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '12px',
-                        transition: 'all 0.2s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(239,68,68,0.08)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'transparent';
+                        padding: '12px',
+                        color: colors.text,
+                        textDecoration: 'none',
+                        borderRadius: '10px',
+                        fontSize: '13px',
+                        fontWeight: 500,
                       }}
                     >
-                      <LogOut size={18} />
-                      Logout
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      to="/login"
-                      className="mobile-nav-item"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      <LogIn size={18} />
-                      Login
+                      <User size={17} />
+                      My Profile
                     </Link>
                     <Link
-                      to="/register"
-                      className="mobile-nav-item"
-                      onClick={() => setIsMenuOpen(false)}
+                      to={dashboardPath}
+                      onClick={() => setIsProfileOpen(false)}
+                      className="dems-header-link"
                       style={{
-                        background: isDarkMode ? 'rgba(59,130,246,0.15)' : '#eff6ff',
-                        color: '#3b82f6',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px',
+                        color: colors.text,
+                        textDecoration: 'none',
+                        borderRadius: '10px',
+                        fontSize: '13px',
+                        fontWeight: 500,
                       }}
                     >
-                      <UserPlus size={18} />
-                      Register
+                      <LayoutDashboard size={17} />
+                      Dashboard Hub
                     </Link>
-                  </>
+                    <div style={{ height: '1px', background: colors.border, margin: '6px 0' }} />
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        width: '100%',
+                        padding: '12px',
+                        border: 'none',
+                        borderRadius: '10px',
+                        background: 'transparent',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        textAlign: 'left',
+                      }}
+                    >
+                      <LogOut size={17} />
+                      Sign Out
+                    </button>
+                  </div>
                 )}
               </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Link
+                  to="/login"
+                  className="dems-header-link"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 18px',
+                    borderRadius: '12px',
+                    color: colors.text,
+                    textDecoration: 'none',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                  }}
+                >
+                  <LogIn size={17} />
+                  Login
+                </Link>
+                <Link
+                  to="/register"
+                  className="dems-glow-btn"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '11px 22px',
+                    borderRadius: '12px',
+                    background: colors.accentGradient,
+                    color: '#ffffff',
+                    textDecoration: 'none',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    boxShadow: '0 4px 14px rgba(79,70,229,0.3)',
+                    transition: 'all 0.25s ease',
+                  }}
+                >
+                  <UserPlus size={17} />
+                  Get Started
+                </Link>
+              </div>
+            )}
+          </div>
+
+          {/* Mobile Actions Button Group */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            {isAuthenticated && (
+              <div className="dems-mobile-button" style={{ display: 'none' }}>
+                <NotificationBell />
+              </div>
+            )}
+            {isAuthenticated && role !== 'ADMIN' && (
+              <Link
+                to="/news"
+                aria-label="News"
+                title="News"
+                className="dems-mobile-button"
+                style={{
+                  display: 'none',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '9px',
+                  border: `1px solid ${colors.border}`,
+                  background: colors.hover,
+                  color: colors.accent,
+                  textDecoration: 'none',
+                }}
+              >
+                <Newspaper size={16} />
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={toggleDarkMode}
+              className="dems-mobile-button"
+              aria-label="Toggle dark mode"
+              style={{
+                display: 'none',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '40px',
+                height: '40px',
+                borderRadius: '12px',
+                border: `1px solid ${colors.border}`,
+                background: colors.hover,
+                color: isDarkMode ? '#fbbf24' : '#4f46e5',
+                cursor: 'pointer',
+              }}
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="dems-mobile-button"
+              aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMenuOpen}
+              style={{
+                display: 'none',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '40px',
+                height: '40px',
+                borderRadius: '12px',
+                border: `1px solid ${colors.border}`,
+                background: colors.hover,
+                color: colors.text,
+                cursor: 'pointer',
+              }}
+            >
+              {isMenuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Navigation Dropdown/Drawer */}
+        {isMenuOpen && (
+          <div
+            className="dems-mobile-menu"
+            style={{
+              position: 'fixed',
+              top: '76px',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              overflowY: 'auto',
+              background: colors.mobileBackground,
+              padding: '24px',
+              borderTop: `1px solid ${colors.border}`,
+              boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+              zIndex: 999,
+            }}
+          >
+            {/* Mobile User Profile Header Banner */}
+            {isAuthenticated && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  padding: '16px',
+                  background: colors.hover,
+                  borderRadius: '16px',
+                  marginBottom: '20px',
+                  border: `1px solid ${colors.border}`,
+                }}
+              >
+                <div
+                  style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '50%',
+                    background: colors.accent,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    fontSize: '15px',
+                    position: 'relative',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {getInitials()}
+                  {profileImage && (
+                    <img
+                      src={profileImage}
+                      alt="Profile"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                      }}
+                    />
+                  )}
+                </div>
+                <div>
+                  <div
+                    style={{
+                      color: colors.text,
+                      fontSize: '15px',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {user?.full_name || 'User'}
+                  </div>
+                  <div
+                    style={{
+                      color: colors.muted,
+                      fontSize: '12px',
+                      marginTop: '2px',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {role?.replace('_', ' ') || 'Scholar'}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div
+              style={{
+                color: colors.muted,
+                fontSize: '11px',
+                fontWeight: 700,
+                letterSpacing: '1px',
+                margin: '12px 8px 8px',
+              }}
+            >
+              NAVIGATION
             </div>
+            {publicLinks.map((link) => (
+              <NavLink
+                key={link.path}
+                to={link.path}
+                end={link.path === '/'}
+                onClick={closeMobileMenu}
+                style={mobileLinkStyle}
+              >
+                {link.icon}
+                {link.name}
+              </NavLink>
+            ))}
+
+            {isAuthenticated && (
+              <>
+                <div
+                  style={{
+                    height: '1px',
+                    background: colors.border,
+                    margin: '18px 0',
+                  }}
+                />
+                <div
+                  style={{
+                    color: colors.muted,
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    letterSpacing: '1px',
+                    margin: '12px 8px 8px',
+                  }}
+                >
+                  PORTAL WORKSPACE
+                </div>
+                {roleLinks.map((link) => (
+                  <NavLink
+                    key={link.name}
+                    to={link.path}
+                    onClick={closeMobileMenu}
+                    style={mobileLinkStyle}
+                  >
+                    {link.icon}
+                    {link.name}
+                  </NavLink>
+                ))}
+                <NavLink
+                  to="/profile"
+                  onClick={closeMobileMenu}
+                  style={mobileLinkStyle}
+                >
+                  <User size={18} />
+                  My Profile
+                </NavLink>
+              </>
+            )}
+
+            <div
+              style={{
+                height: '1px',
+                background: colors.border,
+                margin: '20px 0',
+              }}
+            />
+
+            {!isAuthenticated ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                }}
+              >
+                <Link
+                  to="/login"
+                  onClick={closeMobileMenu}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    padding: '14px',
+                    borderRadius: '12px',
+                    border: `1px solid ${colors.border}`,
+                    color: colors.text,
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                    fontSize: '15px',
+                  }}
+                >
+                  <LogIn size={18} />
+                  Login
+                </Link>
+                <Link
+                  to="/register"
+                  onClick={closeMobileMenu}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    padding: '14px',
+                    borderRadius: '12px',
+                    background: colors.accentGradient,
+                    color: '#ffffff',
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                    fontSize: '15px',
+                    boxShadow: '0 6px 18px rgba(79,70,229,0.3)',
+                  }}
+                >
+                  <UserPlus size={18} />
+                  Create Free Account
+                </Link>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  width: '100%',
+                  padding: '15px 18px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  color: '#ef4444',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                }}
+              >
+                <LogOut size={19} />
+                Sign Out
+              </button>
+            )}
           </div>
         )}
       </header>
-
-      {/* ============================================================ */}
-      {/* AI ASSISTANT CHAT MODAL */}
-      {/* ============================================================ */}
-      {isAssistantOpen && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 2000,
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'center',
-          background: 'rgba(0,0,0,0.5)',
-          backdropFilter: 'blur(4px)',
-          animation: 'fadeInUp 0.3s ease',
-          padding: '16px',
-        }} onClick={() => setIsAssistantOpen(false)}>
-          <div 
-            className="assistant-modal"
-            style={{
-              width: '100%',
-              maxWidth: '420px',
-              maxHeight: '600px',
-              background: isDarkMode ? '#1e293b' : '#ffffff',
-              borderRadius: '20px',
-              overflow: 'hidden',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-              border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'}`,
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div style={{
-              padding: '16px 20px',
-              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexShrink: 0,
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-              }}>
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                  <Sparkles size={20} color="white" />
-                </div>
-                <div>
-                  <div style={{ color: 'white', fontWeight: 600, fontSize: '16px' }}>
-                    DEMS Assistant
-                  </div>
-                  <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '12px' }}>
-                    AI-powered help at your service
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsAssistantOpen(false)}
-                style={{
-                  background: 'rgba(255,255,255,0.15)',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '32px',
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  color: 'white',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.25)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Messages */}
-            <div style={{
-              padding: '16px 20px',
-              flex: 1,
-              overflowY: 'auto',
-              background: isDarkMode ? '#0f172a' : '#f8fafc',
-              maxHeight: '380px',
-              minHeight: '300px',
-            }}>
-              {assistantMessages.map((msg, index) => (
-                <div
-                  key={index}
-                  style={{
-                    display: 'flex',
-                    justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start',
-                    marginBottom: '12px',
-                    animation: 'fadeInUp 0.3s ease',
-                  }}
-                >
-                  <div style={{
-                    maxWidth: '85%',
-                    padding: '10px 16px',
-                    borderRadius: '14px',
-                    background: msg.type === 'user'
-                      ? 'linear-gradient(135deg, #3b82f6, #8b5cf6)'
-                      : isDarkMode ? 'rgba(255,255,255,0.08)' : '#ffffff',
-                    color: msg.type === 'user' ? 'white' : (isDarkMode ? '#f1f5f9' : '#0f172a'),
-                    boxShadow: msg.type === 'bot' 
-                      ? (isDarkMode ? 'none' : '0 2px 8px rgba(0,0,0,0.06)') 
-                      : 'none',
-                    border: msg.type === 'bot' 
-                      ? `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'}` 
-                      : 'none',
-                    fontSize: '14px',
-                    lineHeight: 1.6,
-                    wordBreak: 'break-word',
-                  }}>
-                    {msg.text}
-                  </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'flex-start',
-                  marginBottom: '12px',
-                }}>
-                  <div style={{
-                    padding: '10px 16px',
-                    borderRadius: '14px',
-                    background: isDarkMode ? 'rgba(255,255,255,0.08)' : '#ffffff',
-                    border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'}`,
-                    fontSize: '14px',
-                    color: isDarkMode ? '#94a3b8' : '#64748b',
-                  }}>
-                    <span style={{
-                      display: 'inline-block',
-                      animation: 'pulse 1.5s infinite',
-                    }}>Typing...</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Input */}
-            <div style={{
-              padding: '12px 16px',
-              borderTop: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'}`,
-              display: 'flex',
-              gap: '8px',
-              background: isDarkMode ? '#1e293b' : '#ffffff',
-              flexShrink: 0,
-            }}>
-              <input
-                type="text"
-                placeholder="Ask about DEMS..."
-                value={assistantMessage}
-                onChange={(e) => setAssistantMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                style={{
-                  flex: 1,
-                  padding: '10px 14px',
-                  borderRadius: '12px',
-                  background: isDarkMode ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
-                  border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'}`,
-                  color: isDarkMode ? '#f1f5f9' : '#0f172a',
-                  fontSize: '14px',
-                  outline: 'none',
-                  transition: 'all 0.3s ease',
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#3b82f6';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              />
-              <button
-                onClick={handleAssistantSubmit}
-                disabled={!assistantMessage.trim() || isLoading}
-                style={{
-                  padding: '10px 18px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                  border: 'none',
-                  color: 'white',
-                  cursor: assistantMessage.trim() && !isLoading ? 'pointer' : 'not-allowed',
-                  opacity: assistantMessage.trim() && !isLoading ? 1 : 0.5,
-                  transition: 'all 0.3s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                onMouseEnter={(e) => {
-                  if (assistantMessage.trim() && !isLoading) {
-                    e.currentTarget.style.transform = 'scale(1.05)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-              >
-                <Send size={18} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };

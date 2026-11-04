@@ -1,633 +1,483 @@
-// frontend/src/components/Footer/Footer.jsx
-// PROFESSIONAL FOOTER WITH ALYAH STYLE INSPIRATION
-
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { GraduationCap, MessageCircle, Sparkles, X } from 'lucide-react';
-import { Divider, Typography, Button, Tooltip, Space, Modal, Input, message } from 'antd';
-import { 
-  FacebookOutlined, 
-  TwitterOutlined, 
-  YoutubeOutlined, 
-  LinkedinOutlined, 
+import { Divider, Typography, Tooltip, Input, Button, message } from 'antd';
+import {
+  FacebookOutlined,
+  YoutubeOutlined,
+  LinkedinOutlined,
   InstagramOutlined,
-  GlobalOutlined,
   MailOutlined,
   PhoneOutlined,
   EnvironmentOutlined,
+  ArrowUpOutlined,
+  BookOutlined,
+  HomeOutlined,
+  ReadOutlined,
+  FileTextOutlined,
+  VideoCameraOutlined,
+  UserOutlined,
+  QuestionCircleOutlined,
   SendOutlined,
-  CloseOutlined
+  CheckCircleFilled,
+  GlobalOutlined
 } from '@ant-design/icons';
 import { useDarkMode } from '../../context/DarkModeContext';
 
 const { Text, Title, Paragraph } = Typography;
-const { TextArea } = Input;
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
   const { isDarkMode } = useDarkMode();
-  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
-  const [assistantMessage, setAssistantMessage] = useState('');
-  const [messages, setMessages] = useState([
-    { type: 'bot', text: 'Hello! 👋 Welcome to DEMS AI Assistant. How can I assist you today?' }
-  ]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState('');
+
+  const colors = {
+    background: isDarkMode ? '#030712' : '#f8fafc',
+    card: isDarkMode ? '#111827' : '#ffffff',
+    heading: isDarkMode ? '#f9fafb' : '#0f172a',
+    text: isDarkMode ? '#9ca3af' : '#475569',
+    muted: isDarkMode ? '#6b7280' : '#64748b',
+    border: isDarkMode ? '#1f2937' : '#e2e8f0',
+    accent: '#4f46e5', // Ultra-premium Indigo
+    accentGradient: 'linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)',
+  };
 
   const quickLinks = [
-    { name: 'Home', href: '/' },
-    { name: 'Courses', href: '/courses' },
-    { name: 'Exams', href: '/exams' },
-    { name: 'Live Classes', href: '/live-classes' },
-    { name: 'About Us', href: '/about' },
+    { name: 'Home Portal', path: '/', icon: <HomeOutlined /> },
+    { name: 'Available Courses', path: '/courses', icon: <BookOutlined /> },
+    { name: 'About University', path: '/about', icon: <ReadOutlined /> },
+    { name: 'Help & Support', path: '/support', icon: <QuestionCircleOutlined /> },
   ];
 
   const studentLinks = [
-    { name: 'Dashboard', href: '/dashboard' },
-    { name: 'Payments', href: '/payments' },
-    { name: 'Results', href: '/results' },
-    { name: 'Profile', href: '/profile' },
-    { name: 'Support', href: '/support' },
+    { name: 'Student Dashboard', path: '/dashboard', icon: <UserOutlined /> },
+    { name: 'Online Examinations', path: '/exams', icon: <FileTextOutlined /> },
+    { name: 'Live Video Classes', path: '/live-classes', icon: <VideoCameraOutlined /> },
+    { name: 'Learning Modules', path: '/courses', icon: <ReadOutlined /> },
   ];
 
   const socialLinks = [
-    { icon: <FacebookOutlined />, label: 'Facebook', color: '#1877f2' },
-    { icon: <TwitterOutlined />, label: 'Twitter', color: '#1da1f2' },
-    { icon: <YoutubeOutlined />, label: 'YouTube', color: '#ff0000' },
-    { icon: <LinkedinOutlined />, label: 'LinkedIn', color: '#0a66c2' },
-    { icon: <InstagramOutlined />, label: 'Instagram', color: '#e4405f' },
+    { name: 'Facebook', url: 'https://facebook.com', icon: <FacebookOutlined /> },
+    { name: 'YouTube', url: 'https://youtube.com', icon: <YoutubeOutlined /> },
+    { name: 'LinkedIn', url: 'https://linkedin.com', icon: <LinkedinOutlined /> },
+    { name: 'Instagram', url: 'https://instagram.com', icon: <InstagramOutlined /> },
   ];
 
-  const handleAssistantSubmit = async () => {
-    if (!assistantMessage.trim()) return;
-    
-    const userMessage = assistantMessage;
-    setMessages(prev => [...prev, { type: 'user', text: userMessage }]);
-    setAssistantMessage('');
-    setIsLoading(true);
-
-    try {
-      // Simulate AI response - Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const responses = [
-        "I can help you with course enrollment. What would you like to know?",
-        "Our courses cover Software Engineering, Data Science, and more!",
-        "You can check your exam results in the dashboard.",
-        "We offer live classes every Monday, Wednesday, and Friday.",
-        "AI Proctoring ensures secure and fair examinations.",
-      ];
-      const botResponse = responses[Math.floor(Math.random() * responses.length)];
-      setMessages(prev => [...prev, { type: 'bot', text: botResponse }]);
-    } catch (error) {
-      message.error('Failed to get response');
-    } finally {
-      setIsLoading(false);
+  const handleSubscribe = (e) => {
+    e.preventDefault();
+    if (!email) {
+      message.error('Please enter a valid email address.');
+      return;
     }
+    message.success('Subscribed successfully to DEMS updates!');
+    setEmail('');
   };
 
-  const footerBg = isDarkMode 
-    ? 'linear-gradient(180deg, #0f172a 0%, #0b1120 100%)'
-    : 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)';
-
-  const textColor = isDarkMode ? '#e2e8f0' : '#1e293b';
-  const textMuted = isDarkMode ? '#94a3b8' : '#64748b';
-  const borderColor = isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-  const cardBg = isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.8)';
+  const handleBackToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  };
 
   return (
     <>
-      <footer style={{
-        background: footerBg,
-        color: textColor,
-        marginTop: 'auto',
-        width: '100%',
-        borderTop: `1px solid ${borderColor}`,
-        transition: 'all 0.3s ease',
-        position: 'relative',
-      }}>
-        <div style={{
-          maxWidth: '1400px',
-          margin: '0 auto',
-          padding: '60px 24px 24px',
-        }}>
-          {/* Main Footer Grid */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '2fr 1fr 1fr 1.5fr',
-            gap: '48px',
-            marginBottom: '40px',
-          }} className="footer-grid">
-            
-            {/* Brand Section */}
+      <footer
+        style={{
+          background: colors.background,
+          color: colors.text,
+          borderTop: `1px solid ${colors.border}`,
+          marginTop: '80px',
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        <div
+          className="dems-footer-container"
+          style={{
+            maxWidth: '1340px',
+            margin: '0 auto',
+            padding: '70px 24px 30px',
+          }}
+        >
+          {/* NEWSLETTER / ANNOUNCEMENT BANNER */}
+          <div
+            style={{
+              background: isDarkMode ? '#111827' : '#eff6ff',
+              border: `1px solid ${colors.border}`,
+              borderRadius: '20px',
+              padding: '30px 40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '24px',
+              marginBottom: '60px',
+              boxShadow: isDarkMode ? 'none' : '0 10px 30px -10px rgba(79, 70, 229, 0.08)',
+            }}
+          >
             <div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                marginBottom: '16px',
-              }}>
-                <div style={{
-                  width: '48px',
-                  height: '48px',
+              <Title level={4} style={{ margin: 0, color: colors.heading, fontSize: '20px', fontWeight: 700 }}>
+                Stay Connected with DEMS Updates
+              </Title>
+              <Paragraph style={{ margin: '6px 0 0', color: colors.text, fontSize: '14px' }}>
+                Receive instant notifications regarding examination timetables, grade uploads, and announcements.
+              </Paragraph>
+            </div>
+            <form onSubmit={handleSubscribe} style={{ display: 'flex', gap: '10px', width: '100%', maxWidth: '420px' }}>
+              <Input
+                type="email"
+                placeholder="Enter your university email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={{
+                  height: '46px',
                   borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                  background: isDarkMode ? '#1f2937' : '#ffffff',
+                  borderColor: colors.border,
+                  color: colors.heading,
+                }}
+              />
+              <Button
+                type="primary"
+                htmlType="submit"
+                className="dems-glow-btn"
+                style={{
+                  height: '46px',
+                  padding: '0 24px',
+                  borderRadius: '12px',
+                  background: colors.accentGradient,
+                  border: 'none',
+                  fontWeight: 600,
+                  boxShadow: '0 4px 14px rgba(79,70,229,0.3)',
+                }}
+              >
+                Subscribe <SendOutlined />
+              </Button>
+            </form>
+          </div>
+
+          {/* Footer Main Sections */}
+          <div
+            className="dems-footer-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1.8fr 1fr 1.2fr 1.4fr',
+              gap: '40px',
+              marginBottom: '50px',
+            }}
+          >
+            {/* University & DEMS Info */}
+            <div>
+              <div
+                style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 14px rgba(59,130,246,0.3)',
-                }}>
-                  <GraduationCap size={28} color="white" />
+                  gap: '14px',
+                  marginBottom: '18px',
+                }}
+              >
+                <div
+                  style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '16px',
+                    background: isDarkMode ? '#1e1b4b' : '#e0e7ff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 6px 16px rgba(79,70,229,0.15)',
+                    padding: '3px',
+                  }}
+                >
+                  <img
+                    src="/Mekdela_Amba_University_logo.jpg"
+                    alt="Mekdela Amba University Logo"
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      objectFit: 'contain',
+                      borderRadius: '12px',
+                      background: '#ffffff',
+                    }}
+                  />
                 </div>
                 <div>
-                  <Title level={3} style={{
-                    margin: 0,
-                    background: 'linear-gradient(135deg, #60a5fa, #a78bfa)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                  }}>
+                  <Title
+                    level={4}
+                    style={{
+                      margin: 0,
+                      color: colors.heading,
+                      fontWeight: 800,
+                      letterSpacing: '0.5px',
+                    }}
+                  >
                     DEMS
                   </Title>
-                  <Text style={{ color: textMuted, fontSize: '12px' }}>
-                    Distance Education Management System
+                  <Text
+                    style={{
+                      color: colors.muted,
+                      fontSize: '12px',
+                      fontWeight: 500,
+                    }}
+                  >
+                    Distance Education Management
                   </Text>
                 </div>
               </div>
-              <Paragraph style={{
-                color: textMuted,
-                lineHeight: 1.8,
-                fontSize: '14px',
-                maxWidth: '350px',
-              }}>
-                Empowering students with quality online education, secure AI-proctored exams, 
-                interactive live classes, and seamless learning management since 2020.
+
+              <Paragraph
+                style={{
+                  color: colors.text,
+                  fontSize: '14px',
+                  lineHeight: '1.8',
+                  maxWidth: '340px',
+                  marginBottom: '20px',
+                }}
+              >
+                Mekdela Amba University's official distance learning portal providing world-class online education management and resources.
               </Paragraph>
-              <Space size="small" style={{ marginTop: '20px' }}>
-                {socialLinks.map((social, index) => (
-                  <Tooltip title={social.label} key={index}>
-                    <Button
-                      type="text"
-                      icon={social.icon}
+
+              {/* Status Indicator */}
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  background: isDarkMode ? 'rgba(16, 185, 129, 0.1)' : '#ecfdf5',
+                  color: '#10b981',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  marginBottom: '20px',
+                  border: '1px solid rgba(16, 185, 129, 0.2)',
+                }}
+              >
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                System Operational & Secure
+              </div>
+
+              {/* Social Media Links */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '12px',
+                }}
+              >
+                {socialLinks.map((social) => (
+                  <Tooltip title={social.name} key={social.name}>
+                    <a
+                      href={social.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={social.name}
                       style={{
                         width: '40px',
                         height: '40px',
-                        borderRadius: '50%',
-                        background: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
-                        color: textMuted,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        transition: 'all 0.3s ease',
-                        border: `1px solid transparent`,
+                        borderRadius: '12px',
+                        background: colors.card,
+                        border: `1px solid ${colors.border}`,
+                        color: colors.text,
+                        fontSize: '18px',
+                        transition: 'all 0.25s ease',
                       }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = social.color + '20';
-                        e.currentTarget.style.color = social.color;
-                        e.currentTarget.style.borderColor = social.color + '40';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
-                        e.currentTarget.style.color = textMuted;
-                        e.currentTarget.style.borderColor = 'transparent';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                      }}
-                    />
+                      className="dems-social-icon"
+                    >
+                      {social.icon}
+                    </a>
                   </Tooltip>
                 ))}
-              </Space>
+              </div>
             </div>
 
-            {/* Quick Links */}
+            {/* Quick Navigation */}
             <div>
-              <Title level={4} style={{
-                color: isDarkMode ? '#f1f5f9' : '#0f172a',
-                marginBottom: '20px',
-                fontSize: '16px',
-                fontWeight: 600,
-              }}>
+              <Title level={5} style={{ color: colors.heading, fontSize: '15px', fontWeight: 700, marginBottom: '24px' }}>
                 Quick Links
               </Title>
-              <ul style={{
-                listStyle: 'none',
-                padding: 0,
-                margin: 0,
-              }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {quickLinks.map((link) => (
-                  <li key={link.name} style={{ marginBottom: '12px' }}>
-                    <Link
-                      to={link.href}
-                      style={{
-                        color: textMuted,
-                        textDecoration: 'none',
-                        transition: 'all 0.3s ease',
-                        fontSize: '14px',
-                        display: 'inline-block',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = isDarkMode ? '#ffffff' : '#0f172a';
-                        e.currentTarget.style.transform = 'translateX(4px)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = textMuted;
-                        e.currentTarget.style.transform = 'translateX(0)';
-                      }}
-                    >
-                      {link.name}
-                    </Link>
-                  </li>
+                  <Link
+                    key={link.name}
+                    to={link.path}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      color: colors.text,
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      transition: 'color 0.2s ease',
+                    }}
+                    className="dems-footer-link"
+                  >
+                    <span style={{ color: colors.accent, display: 'flex' }}>{link.icon}</span>
+                    {link.name}
+                  </Link>
                 ))}
-              </ul>
+              </div>
             </div>
 
-            {/* Student Resources */}
+            {/* Student Services */}
             <div>
-              <Title level={4} style={{
-                color: isDarkMode ? '#f1f5f9' : '#0f172a',
-                marginBottom: '20px',
-                fontSize: '16px',
-                fontWeight: 600,
-              }}>
-                Student Resources
+              <Title level={5} style={{ color: colors.heading, fontSize: '15px', fontWeight: 700, marginBottom: '24px' }}>
+                Student Hub
               </Title>
-              <ul style={{
-                listStyle: 'none',
-                padding: 0,
-                margin: 0,
-              }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {studentLinks.map((link) => (
-                  <li key={link.name} style={{ marginBottom: '12px' }}>
-                    <Link
-                      to={link.href}
-                      style={{
-                        color: textMuted,
-                        textDecoration: 'none',
-                        transition: 'all 0.3s ease',
-                        fontSize: '14px',
-                        display: 'inline-block',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = isDarkMode ? '#ffffff' : '#0f172a';
-                        e.currentTarget.style.transform = 'translateX(4px)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = textMuted;
-                        e.currentTarget.style.transform = 'translateX(0)';
-                      }}
-                    >
-                      {link.name}
-                    </Link>
-                  </li>
+                  <Link
+                    key={link.name}
+                    to={link.path}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      color: colors.text,
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      transition: 'color 0.2s ease',
+                    }}
+                    className="dems-footer-link"
+                  >
+                    <span style={{ color: colors.accent, display: 'flex' }}>{link.icon}</span>
+                    {link.name}
+                  </Link>
                 ))}
-              </ul>
+              </div>
             </div>
 
-            {/* Contact */}
+            {/* Contact Information */}
             <div>
-              <Title level={4} style={{
-                color: isDarkMode ? '#f1f5f9' : '#0f172a',
-                marginBottom: '20px',
-                fontSize: '16px',
-                fontWeight: 600,
-              }}>
-                Contact Us
+              <Title level={5} style={{ color: colors.heading, fontSize: '15px', fontWeight: 700, marginBottom: '24px' }}>
+                Contact Support
               </Title>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  color: textMuted,
-                  fontSize: '14px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  background: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
-                }}>
-                  <MailOutlined style={{ color: '#60a5fa', fontSize: '18px' }} />
-                  <span>sntualex@gmail.com</span>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', color: colors.text, fontSize: '14px' }}>
+                  <MailOutlined style={{ color: colors.accent, fontSize: '18px', marginTop: '2px' }} />
+                  <a href="mailto:sntualex@gmail.com" style={{ color: colors.text, textDecoration: 'none' }} className="dems-footer-link">
+                    sntualex@gmail.com
+                  </a>
                 </div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  color: textMuted,
-                  fontSize: '14px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  background: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
-                }}>
-                  <PhoneOutlined style={{ color: '#60a5fa', fontSize: '18px' }} />
-                  <span>+251 918 116 960</span>
+
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', color: colors.text, fontSize: '14px' }}>
+                  <PhoneOutlined style={{ color: colors.accent, fontSize: '18px', marginTop: '2px' }} />
+                  <a href="tel:+251918116960" style={{ color: colors.text, textDecoration: 'none' }} className="dems-footer-link">
+                    +251 918 116 960
+                  </a>
                 </div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  color: textMuted,
-                  fontSize: '14px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  background: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
-                }}>
-                  <EnvironmentOutlined style={{ color: '#60a5fa', fontSize: '18px' }} />
-                  <span>Mekdela Amba University, Ethiopia</span>
-                </div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  color: textMuted,
-                  fontSize: '14px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  background: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
-                }}>
-                  <GlobalOutlined style={{ color: '#60a5fa', fontSize: '18px' }} />
-                  <span>www.dems.edu.et</span>
+
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', color: colors.text, fontSize: '14px' }}>
+                  <EnvironmentOutlined style={{ color: colors.accent, fontSize: '18px', marginTop: '2px' }} />
+                  <span style={{ lineHeight: 1.6 }}>
+                    Mekdela Amba University, <br />
+                    Amhara Region, Ethiopia
+                  </span>
                 </div>
               </div>
             </div>
           </div>
 
-          <Divider style={{
-            borderColor: borderColor,
-            margin: '0 0 24px 0',
-          }} />
+          <Divider style={{ borderColor: colors.border, margin: '0 0 30px' }} />
 
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '12px',
-          }}>
-            <Text style={{
-              color: textMuted,
-              fontSize: '13px',
-            }}>
-              © {currentYear} Distance Education Management System. All rights reserved.
-            </Text>
-            <div style={{
+          {/* Bottom Footer */}
+          <div
+            className="dems-footer-bottom"
+            style={{
               display: 'flex',
+              justifyContent: 'space-between',
               alignItems: 'center',
-              gap: '16px',
-            }}>
-              <Text style={{
-                color: textMuted,
-                fontSize: '12px',
-              }}>
-                Mekdela Amba University
+              flexWrap: 'wrap',
+              gap: '20px',
+            }}
+          >
+            <Text style={{ color: colors.muted, fontSize: '13px' }}>
+              © {currentYear} Mekdela Amba University - DEMS. All rights reserved.
+            </Text>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+              <Text style={{ color: colors.muted, fontSize: '13px' }}>
+                Distance Education Portal
               </Text>
-              <span style={{ color: textMuted, fontSize: '12px' }}>•</span>
-              <Text style={{
-                color: textMuted,
-                fontSize: '12px',
-              }}>
-                Made with <span style={{ color: '#ef4444' }}>❤️EST</span>
-              </Text>
+              <Link
+                to="/terms-and-policy"
+                style={{ color: colors.muted, fontSize: '13px', textDecoration: 'none' }}
+                className="dems-footer-link"
+              >
+                Terms &amp; Policy
+              </Link>
+              
+              <button
+                type="button"
+                onClick={handleBackToTop}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: colors.card,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '12px',
+                  padding: '10px 16px',
+                  color: colors.heading,
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  transition: 'all 0.2s ease',
+                }}
+                className="dems-top-btn"
+              >
+                Back to top
+                <ArrowUpOutlined />
+              </button>
             </div>
           </div>
         </div>
       </footer>
 
-      {/* AI Assistant Floating Button */}
-      <div style={{
-        position: 'fixed',
-        bottom: '28px',
-        right: '28px',
-        zIndex: 999,
-      }}>
-        <Tooltip title="AI Assistant" placement="left">
-          <button
-            onClick={() => setIsAssistantOpen(true)}
-            style={{
-              width: '60px',
-              height: '60px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-              border: 'none',
-              color: 'white',
-              cursor: 'pointer',
-              boxShadow: '0 8px 32px rgba(59,130,246,0.4)',
-              transition: 'all 0.3s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              position: 'relative',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'scale(1.1)';
-              e.currentTarget.style.boxShadow = '0 12px 40px rgba(59,130,246,0.5)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'scale(1)';
-              e.currentTarget.style.boxShadow = '0 8px 32px rgba(59,130,246,0.4)';
-            }}
-          >
-            <MessageCircle size={28} />
-            <span style={{
-              position: 'absolute',
-              top: '-4px',
-              right: '-4px',
-              width: '16px',
-              height: '16px',
-              borderRadius: '50%',
-              background: '#22c55e',
-              border: '2px solid white',
-              animation: 'pulse 2s infinite',
-            }} />
-          </button>
-        </Tooltip>
-      </div>
-
-      {/* AI Assistant Modal */}
-      <Modal
-        open={isAssistantOpen}
-        onCancel={() => setIsAssistantOpen(false)}
-        footer={null}
-        width={400}
-        style={{
-          borderRadius: '16px',
-          overflow: 'hidden',
-        }}
-        bodyStyle={{
-          padding: 0,
-          background: isDarkMode ? '#1e293b' : '#ffffff',
-        }}
-        closeIcon={<CloseOutlined style={{ color: isDarkMode ? '#f1f5f9' : '#0f172a' }} />}
-      >
-        <div style={{
-          padding: '20px 24px',
-          background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-        }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            <Sparkles size={20} color="white" />
-          </div>
-          <div>
-            <Text style={{ color: 'white', fontWeight: 600, fontSize: '16px', display: 'block' }}>
-              DEMS Assistant
-            </Text>
-            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: '12px' }}>
-              AI-powered help at your service
-            </Text>
-          </div>
-        </div>
-
-        <div style={{
-          padding: '16px 24px',
-          maxHeight: '400px',
-          overflowY: 'auto',
-          background: isDarkMode ? '#0f172a' : '#f8fafc',
-        }}>
-          {messages.map((msg, index) => (
-            <div
-              key={index}
-              style={{
-                display: 'flex',
-                justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start',
-                marginBottom: '12px',
-              }}
-            >
-              <div style={{
-                maxWidth: '85%',
-                padding: '10px 14px',
-                borderRadius: '12px',
-                background: msg.type === 'user'
-                  ? 'linear-gradient(135deg, #3b82f6, #8b5cf6)'
-                  : isDarkMode ? 'rgba(255,255,255,0.06)' : '#ffffff',
-                color: msg.type === 'user' ? 'white' : (isDarkMode ? '#f1f5f9' : '#0f172a'),
-                boxShadow: msg.type === 'bot' ? (isDarkMode ? 'none' : '0 2px 8px rgba(0,0,0,0.06)') : 'none',
-                border: msg.type === 'bot' ? `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'}` : 'none',
-                fontSize: '14px',
-                lineHeight: 1.6,
-              }}>
-                {msg.text}
-              </div>
-            </div>
-          ))}
-          {isLoading && (
-            <div style={{
-              display: 'flex',
-              justifyContent: 'flex-start',
-              marginBottom: '12px',
-            }}>
-              <div style={{
-                padding: '10px 14px',
-                borderRadius: '12px',
-                background: isDarkMode ? 'rgba(255,255,255,0.06)' : '#ffffff',
-                border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'}`,
-              }}>
-                <span style={{
-                  display: 'inline-block',
-                  animation: 'pulse 1.5s infinite',
-                }}>Typing...</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div style={{
-          padding: '12px 24px',
-          borderTop: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'}`,
-          display: 'flex',
-          gap: '8px',
-          background: isDarkMode ? '#1e293b' : '#ffffff',
-        }}>
-          <Input
-            placeholder="Ask about DEMS..."
-            value={assistantMessage}
-            onChange={(e) => setAssistantMessage(e.target.value)}
-            onPressEnter={handleAssistantSubmit}
-            style={{
-              flex: 1,
-              borderRadius: '8px',
-              background: isDarkMode ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
-              border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'}`,
-              color: isDarkMode ? '#f1f5f9' : '#0f172a',
-            }}
-          />
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={handleAssistantSubmit}
-            style={{
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-              border: 'none',
-            }}
-          />
-        </div>
-      </Modal>
-
+      {/* Scoped CSS Styles */}
       <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+        .dems-footer-link:hover {
+          color: ${colors.accent} !important;
+          transform: translateX(4px);
         }
+        .dems-footer-link {
+          transition: all 0.2s ease;
+        }
+        .dems-social-icon:hover {
+          border-color: ${colors.accent} !important;
+          color: ${colors.accent} !important;
+          transform: translateY(-3px);
+        }
+        .dems-top-btn:hover {
+          border-color: ${colors.accent} !important;
+          color: ${colors.accent} !important;
+        }
+
         @media (max-width: 1024px) {
-          .footer-grid {
+          .dems-footer-grid {
             grid-template-columns: 1fr 1fr !important;
-            gap: 32px !important;
+            gap: 35px !important;
           }
         }
+
         @media (max-width: 640px) {
-          .footer-grid {
-            grid-template-columns: 1fr !important;
-            gap: 24px !important;
+          .dems-footer-container {
+            padding: 40px 20px 24px !important;
           }
-        }
-        .ant-modal-content {
-          border-radius: 16px !important;
-          overflow: hidden !important;
-          background: ${isDarkMode ? '#1e293b' : '#ffffff'} !important;
-        }
-        .ant-modal-header {
-          background: ${isDarkMode ? '#1e293b' : '#ffffff'} !important;
-          border-bottom: 1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'} !important;
-        }
-        .ant-modal-title {
-          color: ${isDarkMode ? '#f1f5f9' : '#0f172a'} !important;
-        }
-        .ant-modal-close {
-          color: ${isDarkMode ? '#94a3b8' : '#64748b'} !important;
+
+          .dems-footer-grid {
+            grid-template-columns: 1fr !important;
+            gap: 30px !important;
+          }
+
+          .dems-footer-bottom {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+          }
         }
       `}</style>
     </>

@@ -15,17 +15,17 @@
 }
 
 .dark {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-card: #1e293b;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --border-color: #334155;
+  --bg-primary: #000000;
+  --bg-secondary: #000000;
+  --bg-card: #000000;
+  --text-primary: #ffffff;
+  --text-secondary: #e5e7eb;
+  --text-muted: #9ca3af;
+  --border-color: #333333;
   --shadow-color: rgba(0,0,0,0.4);
-  --header-bg: #0f172a;
-  --header-text: #f1f5f9;
-  --input-bg: #0f172a;
+  --header-bg: #000000;
+  --header-text: #ffffff;
+  --input-bg: #000000;
 }
 
 * {
@@ -42,6 +42,106 @@ body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background-color: #ffffff;
+}
+
+html.dark,
+html.dark body,
+html.dark #root {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+html.dark #root main,
+html.dark #root section,
+html.dark #root footer,
+html.dark #root article,
+html.dark #root [style*="min-height: 100vh"],
+html.dark #root .ant-collapse {
+  background-color: #000000 !important;
+}
+
+html.dark #root .ant-card,
+html.dark #root .ant-card-head,
+html.dark #root .ant-card-body,
+html.dark #root .ant-statistic,
+html.dark #root .ant-modal-content,
+html.dark #root .ant-drawer-content,
+html.dark #root .ant-popover-inner,
+html.dark #root .ant-dropdown-menu,
+html.dark #root .ant-select-dropdown,
+html.dark #root [style*="background: white"],
+html.dark #root [style*="background:white"],
+html.dark #root [style*="background: #fff"],
+html.dark #root [style*="background:#fff"],
+html.dark #root [style*="background: #ffffff"],
+html.dark #root [style*="background:#ffffff"],
+html.dark #root [style*="background-color: white"],
+html.dark #root [style*="background-color: #fff"],
+html.dark #root [style*="background-color: #ffffff"],
+html.dark #root [style*="background: rgb(255, 255, 255)"],
+html.dark #root [style*="background-color: rgb(255, 255, 255)"],
+html.dark #root [style*="background: #f8fafc"],
+html.dark #root [style*="background-color: #f8fafc"],
+html.dark #root [style*="background: #f9fafb"],
+html.dark #root [style*="background-color: #f9fafb"],
+html.dark #root [style*="background: #f1f5f9"],
+html.dark #root [style*="background-color: #f1f5f9"] {
+  background-color: #111827 !important;
+  color: #f9fafb !important;
+}
+
+html.dark #root h1,
+html.dark #root h2,
+html.dark #root h3,
+html.dark #root h4,
+html.dark #root h5,
+html.dark #root p,
+html.dark #root li,
+html.dark #root label {
+  color: #ffffff !important;
+}
+
+html.dark #root [style*="color: #0f172a"],
+html.dark #root [style*="color:#0f172a"],
+html.dark #root [style*="color: #111827"],
+html.dark #root [style*="color:#111827"],
+html.dark #root [style*="color: #1f2937"],
+html.dark #root [style*="color:#1f2937"],
+html.dark #root [style*="color: #334155"],
+html.dark #root [style*="color:#334155"],
+html.dark #root [style*="color: #475569"],
+html.dark #root [style*="color:#475569"],
+html.dark #root [style*="color: #64748b"],
+html.dark #root [style*="color:#64748b"],
+html.dark #root [style*="color: #6b7280"],
+html.dark #root [style*="color:#6b7280"],
+html.dark #root [style*="color: rgb(15, 23, 42)"],
+html.dark #root [style*="color: rgb(17, 24, 39)"],
+html.dark #root [style*="color: rgb(31, 41, 55)"],
+html.dark #root [style*="color: rgb(51, 65, 85)"],
+html.dark #root [style*="color: rgb(71, 85, 105)"],
+html.dark #root [style*="color: rgb(100, 116, 139)"],
+html.dark #root [style*="color: rgb(107, 114, 128)"] {
+  color: #e5e7eb !important;
+}
+
+html:not(.dark) #root main,
+html:not(.dark) #root section,
+html:not(.dark) #root footer,
+html:not(.dark) #root article,
+html:not(.dark) #root [style*="min-height: 100vh"],
+html:not(.dark) #root .ant-card,
+html:not(.dark) #root .ant-collapse,
+html:not(.dark) #root .ant-modal-content,
+html:not(.dark) #root .ant-drawer-content {
+  background-color: #ffffff !important;
 }
 
 code {

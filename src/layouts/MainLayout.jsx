@@ -6,7 +6,7 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   LayoutDashboard, BookOpen, FileText, CreditCard, User,
-  LogOut, Menu, X, ChevronDown, GraduationCap, Video,
+  LogOut, Menu, X, ChevronDown, GraduationCap, Video, Newspaper,
   BarChart3, Sun, Moon, MessageCircle, Sparkles,Map, Trophy, Award, TrendingUp
 } from 'lucide-react';
 import { logout } from '../store/slices/authSlice';
@@ -60,6 +60,7 @@ const MainLayout = () => {
     ],
     ADMIN: [
       { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+      { name: 'News', href: '/admin/news', icon: Newspaper },
       { name: 'Proctoring', href: '/admin/proctoring-review', icon: FileText },
       { name: 'Profile', href: '/profile', icon: User },
     ],
@@ -416,6 +417,27 @@ const MainLayout = () => {
               </button>
 
               <NotificationBell />
+              {user && user.role?.toUpperCase() !== 'ADMIN' && (
+                <Link
+                  to="/news"
+                  aria-label="News"
+                  title="News"
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '10px',
+                    border: `1px solid ${headerBorder}`,
+                    background: hoverBg,
+                    color: textColor,
+                    textDecoration: 'none',
+                  }}
+                >
+                  <Newspaper size={16} />
+                </Link>
+              )}
               
               <div style={{ position: 'relative' }}>
                 <button

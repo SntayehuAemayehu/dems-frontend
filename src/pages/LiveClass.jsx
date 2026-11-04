@@ -1,22 +1,26 @@
-// frontend/src/pages/LiveClass.jsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
-import { 
-    Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, 
-    Users, RefreshCw, AlertCircle, Wifi, WifiOff, Monitor, 
-    Hand, HandMetal, StopCircle
+import {
+    AlertCircle, Hand, HandMetal, MessageSquare, Mic, MicOff, Monitor,
+    PhoneOff, Play, Send, Square, Users, Video, VideoOff, Wifi, WifiOff,
+    X
 } from 'lucide-react';
+import { getWebSocketUrl } from '../api/api';
+import { saveAttendanceSession, saveClassRecording } from '../utils/liveClassStorage';
+
+const formatTime = (date) => new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit'
+}).format(date);
 
 const LiveClass = () => {
     const { courseId } = useParams();
     const navigate = useNavigate();
     const { user } = useSelector((state) => state.auth || {});
-    
-    // ============================================================
-    // STATE
-    // ============================================================
+    const isTeacher = user?.role === 'TEACHER';
     const [isConnected, setIsConnected] = useState(false);
     const [isConnecting, setIsConnecting] = useState(true);
     const [isMuted, setIsMuted] = useState(false);
@@ -27,632 +31,822 @@ const LiveClass = () => {
     const [messages, setMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const [showChat, setShowChat] = useState(false);
-    const [error, setError] = useState(null);
     const [participants, setParticipants] = useState([]);
-    const [connectionAttempts, setConnectionAttempts] = useState(0);
-    const isTeacher = user?.role === 'TEACHER';
-    
-    // ============================================================
-    // REFS
-    // ============================================================
-    const localVideoRef = useRef(null);
-    const remoteVideoRef = useRef(null);
-    const wsRef = useRef(null);
-    const pcRef = useRef(null);
-    const localStreamRef = useRef(null);
-    const screenStreamRef = useRef(null); // For Screen Share
-    const isMounted = useRef(true);
-    const reconnectTimerRef = useRef(null);
-    const heartbeatIntervalRef = useRef(null);
-    const maxReconnectAttempts = 5;
+    const [remoteStreams, setRemoteStreams] = useState({});
+    const [isRecording, setIsRecording] = useState(false);
+    const [error, setError] = useState('');
 
-    // ============================================================
-    // CLEANUP FUNCTION
-    // ============================================================
-    const cleanup = useCallback(() => {
-        if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
-        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-        if (pcRef.current) pcRef.current.close();
-        if (wsRef.current) {
-            try { wsRef.current.close(1000, 'User left'); } catch (e) {}
+    const localVideoRef = useRef(null);
+    const messagesEndRef = useRef(null);
+    const wsRef = useRef(null);
+    const localStreamRef = useRef(null);
+    const screenStreamRef = useRef(null);
+    const peersRef = useRef(new Map());
+    const pendingCandidatesRef = useRef(new Map());
+    const participantsRef = useRef([]);
+    const mountedRef = useRef(false);
+    const reconnectTimerRef = useRef(null);
+    const heartbeatRef = useRef(null);
+    const recorderRef = useRef(null);
+    const recordingChunksRef = useRef([]);
+    const recordingFrameRef = useRef(null);
+    const recordingStartedAtRef = useRef(null);
+    const videoElementsRef = useRef(new Map());
+    const recordingAudioContextRef = useRef(null);
+    const recordingAudioDestinationRef = useRef(null);
+    const recordedAudioTrackIdsRef = useRef(new Set());
+    const sessionRef = useRef(null);
+    const connectionAttemptsRef = useRef(0);
+    const currentUserId = String(user?.id ?? '');
+    const className = `Course ${courseId}`;
+    participantsRef.current = participants;
+
+    const sendSocketMessage = useCallback((message) => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify(message));
+            return true;
         }
-        if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(t => t.stop());
-        }
-        if (screenStreamRef.current) {
-            screenStreamRef.current.getTracks().forEach(t => t.stop());
-        }
-        setIsConnected(false);
-        setParticipants([]);
+        return false;
     }, []);
 
-    // ============================================================
-    // CREATE PEER CONNECTION
-    // ============================================================
-    const createPeerConnection = useCallback(() => {
+    const addRecordingAudioStream = useCallback((stream) => {
+        const audioContext = recordingAudioContextRef.current;
+        const destination = recordingAudioDestinationRef.current;
+        if (!audioContext || !destination) return;
+        stream.getAudioTracks().forEach((track) => {
+            if (recordedAudioTrackIdsRef.current.has(track.id)) return;
+            try {
+                audioContext.createMediaStreamSource(new MediaStream([track])).connect(destination);
+                recordedAudioTrackIdsRef.current.add(track.id);
+            } catch (audioError) {
+                console.error('Could not include a participant audio track in the recording:', audioError);
+            }
+        });
+    }, []);
+
+    const saveSession = useCallback((updates = {}) => {
+        if (!isTeacher || !sessionRef.current) return;
+        const nextSession = { ...sessionRef.current, ...updates };
+        sessionRef.current = nextSession;
         try {
-            const config = {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                ],
-                iceCandidatePoolSize: 5,
-            };
-            
-            pcRef.current = new RTCPeerConnection(config);
-            
-            // Add local tracks
-            if (localStreamRef.current) {
-                localStreamRef.current.getTracks().forEach(track => {
-                    pcRef.current.addTrack(track, localStreamRef.current);
+            saveAttendanceSession(nextSession);
+        } catch (storageError) {
+            console.error('Could not save attendance:', storageError);
+            toast.error('Attendance could not be saved in this browser.');
+        }
+    }, [isTeacher]);
+
+    const closePeer = useCallback((peerId) => {
+        const peer = peersRef.current.get(String(peerId));
+        if (peer) peer.close();
+        peersRef.current.delete(String(peerId));
+        pendingCandidatesRef.current.delete(String(peerId));
+        setRemoteStreams((current) => {
+            const next = { ...current };
+            delete next[String(peerId)];
+            return next;
+        });
+    }, []);
+
+    const createPeer = useCallback((peerId, peerName) => {
+        const id = String(peerId);
+        if (!id || id === currentUserId) return null;
+        const existing = peersRef.current.get(id);
+        if (existing && existing.connectionState !== 'closed') return existing;
+
+        const peer = new RTCPeerConnection({
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ],
+            iceCandidatePoolSize: 5
+        });
+
+        if (screenStreamRef.current) {
+            localStreamRef.current?.getAudioTracks().forEach((track) => {
+                peer.addTrack(track, localStreamRef.current);
+            });
+            screenStreamRef.current.getVideoTracks().forEach((track) => {
+                peer.addTrack(track, screenStreamRef.current);
+            });
+        } else {
+            localStreamRef.current?.getTracks().forEach((track) => {
+                peer.addTrack(track, localStreamRef.current);
+            });
+        }
+        peer.ontrack = (event) => {
+            const stream = event.streams?.[0];
+            if (stream) {
+                setRemoteStreams((current) => ({ ...current, [id]: stream }));
+                addRecordingAudioStream(stream);
+            }
+        };
+        peer.onicecandidate = (event) => {
+            if (event.candidate) {
+                sendSocketMessage({
+                    type: 'ice_candidate',
+                    candidate: event.candidate,
+                    sender_id: currentUserId,
+                    target_id: id
                 });
             }
-            
-            // Handle remote tracks
-            pcRef.current.ontrack = (event) => {
-                if (event.streams && event.streams[0]) {
-                    if (remoteVideoRef.current) {
-                        remoteVideoRef.current.srcObject = event.streams[0];
-                    }
-                }
-            };
-            
-            // Handle ICE candidates
-            pcRef.current.onicecandidate = (event) => {
-                if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
-                    wsRef.current.send(JSON.stringify({
-                        type: 'ice_candidate',
-                        candidate: event.candidate,
-                        sender_id: user?.id
-                    }));
-                }
-            };
-            
-            // Teacher sends offer
-            if (isTeacher) {
-                setTimeout(createOffer, 1500);
-            }
-            
-        } catch (err) {
-            console.error('Peer connection error:', err);
-        }
-    }, [user, isTeacher]);
+        };
+        peer.onconnectionstatechange = () => {
+            if (['failed', 'closed'].includes(peer.connectionState)) closePeer(id);
+        };
+        peer.peerName = peerName;
+        peersRef.current.set(id, peer);
+        return peer;
+    }, [addRecordingAudioStream, closePeer, currentUserId, sendSocketMessage]);
 
-    // ============================================================
-    // CREATE OFFER (Teacher)
-    // ============================================================
-    const createOffer = useCallback(async () => {
-        if (!pcRef.current || !wsRef.current) return;
-        
+    const makeOffer = useCallback(async (participant) => {
+        const peer = createPeer(participant.user_id, participant.user);
+        if (!peer || peer.signalingState !== 'stable') return;
         try {
-            const offer = await pcRef.current.createOffer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true,
-            });
-            await pcRef.current.setLocalDescription(offer);
-            
-            wsRef.current.send(JSON.stringify({
+            const offer = await peer.createOffer();
+            await peer.setLocalDescription(offer);
+            sendSocketMessage({
                 type: 'offer',
-                offer: offer,
-                sender: user?.full_name,
-                sender_role: user?.role,
-                sender_id: user?.id
-            }));
-            
-        } catch (err) {
-            console.error('Offer error:', err);
-        }
-    }, [user]);
-
-    // ============================================================
-    // HANDLE WEBSOCKET MESSAGES
-    // ============================================================
-    const handleMessage = useCallback(async (data) => {
-        if (!pcRef.current) return;
-        
-        try {
-            switch (data.type) {
-                case 'offer':
-                    if (data.sender_id !== user?.id) {
-                        await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
-                        const answer = await pcRef.current.createAnswer();
-                        await pcRef.current.setLocalDescription(answer);
-                        
-                        wsRef.current?.send(JSON.stringify({
-                            type: 'answer',
-                            answer: answer,
-                            sender: user?.full_name,
-                            sender_role: user?.role,
-                            sender_id: user?.id
-                        }));
-                    }
-                    break;
-                    
-                case 'answer':
-                    if (data.sender_id !== user?.id) {
-                        await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-                    }
-                    break;
-                    
-                case 'ice_candidate':
-                    if (data.sender_id !== user?.id && data.candidate) {
-                        try {
-                            await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-                        } catch (e) {
-                            console.error('ICE candidate error:', e);
-                        }
-                    }
-                    break;
-                    
-                case 'chat':
-                    setMessages(prev => [...prev, {
-                        id: Date.now(),
-                        text: data.message,
-                        sender: data.user,
-                        sender_id: data.user_id,
-                        time: new Date()
-                    }]);
-                    break;
-                    
-                case 'user_join':
-                    setParticipants(prev => {
-                        if (!prev.find(p => p.user_id === data.user_id)) {
-                            return [...prev, { user: data.user, role: data.role, user_id: data.user_id }];
-                        }
-                        return prev;
-                    });
-                    toast.success(`${data.user} joined the class`);
-                    break;
-                    
-                case 'user_leave':
-                    setParticipants(prev => prev.filter(p => p.user_id !== data.user_id));
-                    setRaisedHands(prev => prev.filter(h => h.user_id !== data.user_id)); // Remove hand if they leave
-                    toast.info(`${data.user} left the class`);
-                    break;
-
-                case 'hand_raise':
-                    setRaisedHands(prev => {
-                        if (!prev.find(h => h.user_id === data.user_id)) {
-                            return [...prev, { user: data.user, user_id: data.user_id }];
-                        }
-                        return prev;
-                    });
-                    if (isTeacher) {
-                        toast(`${data.user} raised their hand!`, { icon: '✋' });
-                    }
-                    break;
-
-                case 'hand_lower':
-                    setRaisedHands(prev => prev.filter(h => h.user_id !== data.user_id));
-                    break;
-                    
-                default:
-                    console.log('Unknown message:', data.type);
-            }
-        } catch (err) {
-            console.error('Message handler error:', err);
-        }
-    }, [user, isTeacher]);
-
-    // ============================================================
-    // INITIALIZE CLASS WITH AUTO-RECONNECT
-    // ============================================================
-    const initializeClass = useCallback(async () => {
-        try {
-            setIsConnecting(true);
-            setError(null);
-            
-            // Get media
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 360 } },
-                audio: true
+                offer,
+                sender_id: currentUserId,
+                target_id: String(participant.user_id)
             });
-            
-            localStreamRef.current = stream;
-            if (localVideoRef.current) {
-                localVideoRef.current.srcObject = stream;
+        } catch (offerError) {
+            console.error('Could not start student video connection:', offerError);
+            toast.error(`Could not connect to ${participant.user || 'a student'} video.`);
+        }
+    }, [createPeer, currentUserId, sendSocketMessage]);
+
+    const handleSignal = useCallback(async (message) => {
+        const signal = message.type === 'webrtc' ? message.data : message;
+        if (!signal || (signal.target_id && String(signal.target_id) !== currentUserId)) return;
+        const senderId = String(message.sender_id ?? signal.sender_id ?? '');
+        if (!senderId || senderId === currentUserId) return;
+
+        if (signal.type === 'offer') {
+            const participant = participantsRef.current.find((item) => String(item.user_id) === senderId);
+            const peer = createPeer(senderId, participant?.user || 'Participant');
+            if (!peer) return;
+            try {
+                if (peer.signalingState !== 'stable') {
+                    await peer.setLocalDescription({ type: 'rollback' });
+                }
+                await peer.setRemoteDescription(new RTCSessionDescription(signal.offer));
+                const pendingCandidates = pendingCandidatesRef.current.get(senderId) || [];
+                pendingCandidatesRef.current.delete(senderId);
+                for (const candidate of pendingCandidates) {
+                    await peer.addIceCandidate(new RTCIceCandidate(candidate));
+                }
+                const answer = await peer.createAnswer();
+                await peer.setLocalDescription(answer);
+                sendSocketMessage({
+                    type: 'answer',
+                    answer,
+                    sender_id: currentUserId,
+                    target_id: senderId
+                });
+            } catch (signalError) {
+                console.error('Could not answer video connection:', signalError);
             }
-            
-            // Connect WebSocket
+        } else if (signal.type === 'answer') {
+            const peer = peersRef.current.get(senderId);
+            if (peer?.signalingState === 'have-local-offer') {
+                try {
+                    await peer.setRemoteDescription(new RTCSessionDescription(signal.answer));
+                    const pendingCandidates = pendingCandidatesRef.current.get(senderId) || [];
+                    pendingCandidatesRef.current.delete(senderId);
+                    for (const candidate of pendingCandidates) {
+                        await peer.addIceCandidate(new RTCIceCandidate(candidate));
+                    }
+                } catch (signalError) {
+                    console.error('Could not finish video connection:', signalError);
+                }
+            }
+        } else if (signal.type === 'ice_candidate' && signal.candidate) {
+            const peer = peersRef.current.get(senderId);
+            if (peer?.remoteDescription) {
+                try {
+                    await peer.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                } catch (signalError) {
+                    console.error('Could not add video connection candidate:', signalError);
+                }
+            } else {
+                const candidates = pendingCandidatesRef.current.get(senderId) || [];
+                pendingCandidatesRef.current.set(senderId, [...candidates, signal.candidate]);
+            }
+        }
+    }, [createPeer, currentUserId, sendSocketMessage]);
+
+    const handleMessage = useCallback((data) => {
+        if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
+            handleSignal(data);
+            return;
+        }
+        if (data.type === 'chat') {
+            setMessages((current) => [...current, {
+                id: `${Date.now()}-${Math.random()}`,
+                text: data.message,
+                sender: data.user,
+                senderId: String(data.user_id),
+                role: data.role,
+                time: new Date()
+            }]);
+        } else if (data.type === 'user_join') {
+            if (String(data.user_id) === currentUserId) return;
+            const participant = {
+                user: data.user || 'Participant',
+                role: data.role || 'STUDENT',
+                user_id: String(data.user_id)
+            };
+            setParticipants((current) => current.some((item) => item.user_id === participant.user_id)
+                ? current
+                : [...current, participant]);
+            if (isTeacher && participant.role === 'STUDENT') {
+                const joinedAt = new Date();
+                const attendees = sessionRef.current?.attendees || [];
+                const currentAttendee = attendees.find((item) => item.userId === participant.user_id);
+                const nextAttendee = {
+                    userId: participant.user_id,
+                    name: participant.user,
+                    joinedAt: currentAttendee?.joinedAt || joinedAt.toISOString(),
+                    leftAt: null
+                };
+                saveSession({
+                    attendees: [
+                        ...attendees.filter((item) => item.userId !== participant.user_id),
+                        nextAttendee
+                    ]
+                });
+                makeOffer(participant);
+            } else if (!isTeacher && participant.role === 'TEACHER') {
+                makeOffer(participant);
+            }
+        } else if (data.type === 'user_leave') {
+            const leavingId = String(data.user_id);
+            setParticipants((current) => current.filter((item) => item.user_id !== leavingId));
+            setRaisedHands((current) => current.filter((item) => item.user_id !== leavingId));
+            closePeer(leavingId);
+            if (isTeacher) {
+                const attendees = sessionRef.current?.attendees || [];
+                const attendee = attendees.find((item) => item.userId === leavingId);
+                if (attendee) {
+                    saveSession({
+                        attendees: attendees.map((item) => item.userId === leavingId
+                            ? { ...item, leftAt: new Date().toISOString() }
+                            : item)
+                    });
+                }
+            }
+        } else if (data.type === 'hand_raise') {
+            setRaisedHands((current) => current.some((item) => String(item.user_id) === String(data.user_id))
+                ? current
+                : [...current, { user: data.user, user_id: String(data.user_id) }]);
+        } else if (data.type === 'hand_lower') {
+            setRaisedHands((current) => current.filter((item) => String(item.user_id) !== String(data.user_id)));
+        } else if (data.type === 'student_removed' && String(data.target_id) === currentUserId) {
+            toast.error('The teacher removed you from this class.');
+            wsRef.current?.close(1000, 'Removed by teacher');
+            navigate('/live-classes');
+        } else if (data.type === 'error') {
+            toast.error(data.message || 'The class action could not be completed.');
+        }
+    }, [closePeer, currentUserId, handleSignal, isTeacher, makeOffer, navigate, saveSession]);
+
+    const connect = useCallback(async () => {
+        setIsConnecting(true);
+        setError('');
+        try {
+            if (!navigator.mediaDevices?.getUserMedia) {
+                throw new Error('Camera and microphone access requires a secure browser connection.');
+            }
+            let stream = localStreamRef.current;
+            if (!stream?.getTracks().some((track) => track.readyState === 'live')) {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: true
+                });
+            }
+            if (!mountedRef.current) {
+                stream.getTracks().forEach((track) => track.stop());
+                return;
+            }
+            localStreamRef.current = stream;
+            if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+
             const token = localStorage.getItem('access_token');
             if (!token) {
-                toast.error('Please login to join the class');
+                toast.error('Please log in to join this class.');
                 navigate('/login');
                 return;
             }
-            
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//localhost:8000/ws/live-class/${courseId}/?token=${token}`;
-            
-            if (wsRef.current) {
-                try { wsRef.current.close(); } catch (e) {}
-            }
-            
-            wsRef.current = new WebSocket(wsUrl);
-            
-            const connectionTimeout = setTimeout(() => {
-                if (wsRef.current?.readyState !== WebSocket.OPEN) {
-                    setError('Connection timeout. Please try again.');
+            const wsUrl = getWebSocketUrl(`/ws/live-class/${courseId}/`, { token });
+            const socket = new WebSocket(wsUrl);
+            wsRef.current = socket;
+            const timeout = setTimeout(() => {
+                if (socket.readyState !== WebSocket.OPEN) {
+                    socket.close();
+                    setError('Could not connect to the class. Check your connection and try again.');
                     setIsConnecting(false);
                 }
-            }, 10000);
-            
-            wsRef.current.onopen = () => {
-                clearTimeout(connectionTimeout);
+            }, 12000);
+            socket.onopen = () => {
+                clearTimeout(timeout);
+                connectionAttemptsRef.current = 0;
                 setIsConnected(true);
                 setIsConnecting(false);
-                setError(null);
-                setConnectionAttempts(0);
-                toast.success('Connected to live class!');
-                createPeerConnection();
-                
-                if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
-                heartbeatIntervalRef.current = setInterval(() => {
-                    if (wsRef.current?.readyState === WebSocket.OPEN) {
-                        try { wsRef.current.send(JSON.stringify({ type: 'ping' })); } catch (e) {}
-                    }
+                setError('');
+                toast.success('You joined the live class.');
+                if (isTeacher && !sessionRef.current) {
+                    const startedAt = new Date();
+                    sessionRef.current = {
+                        id: `${courseId}-${startedAt.getTime()}-${currentUserId}`,
+                        courseId: String(courseId),
+                        courseName: className,
+                        date: startedAt.toLocaleDateString(),
+                        startedAt: startedAt.toISOString(),
+                        endedAt: null,
+                        attendees: []
+                    };
+                    saveSession();
+                }
+                heartbeatRef.current = setInterval(() => {
+                    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'ping' }));
                 }, 30000);
             };
-            
-            wsRef.current.onmessage = (event) => {
+            socket.onmessage = (event) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'pong') return;
-                    handleMessage(data);
-                } catch (err) {
-                    console.error('Message parse error:', err);
+                    const message = JSON.parse(event.data);
+                    if (message.type !== 'pong') handleMessage(message);
+                } catch (messageError) {
+                    console.error('Could not read live class message:', messageError);
                 }
             };
-            
-            wsRef.current.onerror = () => {
-                setError('Connection error. Please refresh.');
+            socket.onerror = () => {
+                clearTimeout(timeout);
+                setError('Live class connection failed. Check your connection and retry.');
                 setIsConnecting(false);
             };
-            
-            wsRef.current.onclose = (event) => {
-                clearTimeout(connectionTimeout);
+            socket.onclose = (event) => {
+                clearTimeout(timeout);
+                if (heartbeatRef.current) clearInterval(heartbeatRef.current);
                 setIsConnected(false);
                 setIsConnecting(false);
-                
-                if (event.code !== 1000 && event.code !== 1001 && connectionAttempts < maxReconnectAttempts) {
-                    const newAttempts = connectionAttempts + 1;
-                    setConnectionAttempts(newAttempts);
-                    toast.error(`Disconnected. Reconnecting (${newAttempts}/${maxReconnectAttempts})...`);
-                    
-                    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-                    const delay = Math.min(2000 * Math.pow(2, connectionAttempts), 30000);
-                    reconnectTimerRef.current = setTimeout(() => {
-                        if (isMounted.current) initializeClass();
-                    }, delay);
-                } else if (connectionAttempts >= maxReconnectAttempts) {
-                    setError('Connection failed after multiple attempts. Please refresh.');
+                if (mountedRef.current && event.code !== 1000 && event.code !== 1001) {
+                    peersRef.current.forEach((peer) => peer.close());
+                    peersRef.current.clear();
+                    pendingCandidatesRef.current.clear();
+                    setRemoteStreams({});
+                    if (connectionAttemptsRef.current < 5) {
+                        const attempt = connectionAttemptsRef.current++;
+                        reconnectTimerRef.current = setTimeout(connect, Math.min(1500 * (2 ** attempt), 20000));
+                        toast.error('Connection lost. Reconnecting…');
+                    } else {
+                        setError('Connection failed after several attempts. Please reconnect.');
+                    }
                 }
             };
-            
-        } catch (err) {
+        } catch (connectionError) {
             setIsConnecting(false);
-            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                setError('Camera/microphone access denied. Please allow permissions.');
-            } else {
-                setError('Failed to initialize. Please refresh.');
-            }
+            const message = connectionError.name === 'NotAllowedError' || connectionError.name === 'PermissionDeniedError'
+                ? 'Allow camera and microphone access in your browser to join.'
+                : connectionError.message || 'Could not start your camera and microphone.';
+            setError(message);
         }
-    }, [courseId, navigate, connectionAttempts, createPeerConnection, handleMessage]);
+    }, [className, courseId, currentUserId, handleMessage, isTeacher, navigate, saveSession]);
+
+    const stopRecording = useCallback(() => {
+        if (recordingFrameRef.current) cancelAnimationFrame(recordingFrameRef.current);
+        recordingFrameRef.current = null;
+        const recorder = recorderRef.current;
+        if (recorder && recorder.state !== 'inactive') recorder.stop();
+    }, []);
+
+    const cleanup = useCallback(() => {
+        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+        if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+        if (recorderRef.current?.state !== 'inactive') stopRecording();
+        peersRef.current.forEach((peer) => peer.close());
+        peersRef.current.clear();
+        pendingCandidatesRef.current.clear();
+        wsRef.current?.close(1000, 'Class left');
+        localStreamRef.current?.getTracks().forEach((track) => track.stop());
+        screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+    }, [stopRecording]);
 
     useEffect(() => {
-        isMounted.current = true;
-        initializeClass();
-        
+        mountedRef.current = true;
+        connect();
         return () => {
-            isMounted.current = false;
+            mountedRef.current = false;
             cleanup();
         };
-    }, [courseId, initializeClass, cleanup]);
+    }, [cleanup, connect]);
 
-    // ============================================================
-    // CONTROLS (MUTE, VIDEO, SCREEN SHARE, HAND RAISE)
-    // ============================================================
-    const toggleMute = () => {
-        if (localStreamRef.current) {
-            const track = localStreamRef.current.getAudioTracks()[0];
-            if (track) {
-                track.enabled = isMuted;
-                setIsMuted(!isMuted);
-            }
-        }
-    };
-    
-    const toggleVideo = () => {
-        if (localStreamRef.current) {
-            const track = localStreamRef.current.getVideoTracks()[0];
-            if (track) {
-                track.enabled = isVideoOff;
-                setIsVideoOff(!isVideoOff);
-            }
-        }
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, [messages, showChat]);
+
+    const toggleTrack = (kind) => {
+        const track = kind === 'audio'
+            ? localStreamRef.current?.getAudioTracks()[0]
+            : localStreamRef.current?.getVideoTracks()[0];
+        if (!track) return;
+        track.enabled = !track.enabled;
+        if (kind === 'audio') setIsMuted(!track.enabled);
+        else setIsVideoOff(!track.enabled);
     };
 
     const toggleScreenShare = async () => {
-        if (!isTeacher) {
-            toast.error('Only the teacher can share screen.');
+        if (isScreenSharing) {
+            screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+            screenStreamRef.current = null;
+            const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
+            peersRef.current.forEach((peer) => {
+                const sender = peer.getSenders().find((item) => item.track?.kind === 'video');
+                if (sender && cameraTrack) sender.replaceTrack(cameraTrack);
+            });
+            if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+            setIsScreenSharing(false);
             return;
         }
-
-        if (isScreenSharing) {
-            // Stop screen sharing
-            if (screenStreamRef.current) {
-                screenStreamRef.current.getTracks().forEach(track => track.stop());
-            }
-            // Revert to camera
-            const videoTrack = localStreamRef.current.getVideoTracks()[0];
-            const sender = pcRef.current.getSenders().find(s => s.track?.kind === 'video');
-            if (sender && videoTrack) sender.replaceTrack(videoTrack);
-            
-            localVideoRef.current.srcObject = localStreamRef.current;
-            setIsScreenSharing(false);
-            toast.success('Stopped screen sharing');
-        } else {
-            // Start screen sharing
-            try {
-                const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                screenStreamRef.current = screenStream;
-                
-                const screenTrack = screenStream.getVideoTracks()[0];
-                const sender = pcRef.current.getSenders().find(s => s.track?.kind === 'video');
+        try {
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            screenStreamRef.current = stream;
+            const screenTrack = stream.getVideoTracks()[0];
+            peersRef.current.forEach((peer) => {
+                const sender = peer.getSenders().find((item) => item.track?.kind === 'video');
                 if (sender) sender.replaceTrack(screenTrack);
-                
-                localVideoRef.current.srcObject = screenStream;
-                setIsScreenSharing(true);
-                toast.success('Screen sharing started');
-
-                // If user clicks "Stop Sharing" on the browser popup
-                screenTrack.onended = () => {
-                    toggleScreenShare();
-                };
-            } catch (err) {
-                console.error('Error sharing screen:', err);
-                toast.error('Failed to share screen');
+            });
+            if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+            setIsScreenSharing(true);
+            screenTrack.onended = () => {
+                screenStreamRef.current = null;
+                const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
+                peersRef.current.forEach((peer) => {
+                    const sender = peer.getSenders().find((item) => item.track?.kind === 'video');
+                    if (sender && cameraTrack) sender.replaceTrack(cameraTrack);
+                });
+                if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+                setIsScreenSharing(false);
+            };
+        } catch (shareError) {
+            if (shareError.name !== 'NotAllowedError') {
+                console.error('Could not share screen:', shareError);
+                toast.error('Screen sharing could not be started.');
             }
         }
     };
 
-    const toggleHandRaise = () => {
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-        
-        const newState = !isHandRaised;
-        setIsHandRaised(newState);
-
-        wsRef.current.send(JSON.stringify({
-            type: newState ? 'hand_raise' : 'hand_lower',
-            user: user?.full_name,
-            user_id: user?.id
-        }));
-
-        if (newState) {
-            toast.success('Hand raised. Teacher will see it.');
-        } else {
-            toast.success('Hand lowered.');
-        }
-    };
-
-    const sendMessage = () => {
-        if (chatInput.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
+    const startRecording = async () => {
+        if (!isTeacher) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = 1280;
+        canvas.height = 720;
+        const context = canvas.getContext('2d');
+        const drawFrame = () => {
+            if (context) {
+                context.fillStyle = '#0f172a';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                const videos = [...videoElementsRef.current.entries()]
+                    .filter(([, video]) => video.readyState >= 2 && video.videoWidth > 0);
+                const columns = Math.max(1, Math.ceil(Math.sqrt(videos.length)));
+                const rows = Math.max(1, Math.ceil(videos.length / columns));
+                const tileWidth = canvas.width / columns;
+                const tileHeight = canvas.height / rows;
+                videos.forEach(([id, video], index) => {
+                    const x = (index % columns) * tileWidth;
+                    const y = Math.floor(index / columns) * tileHeight;
+                    const scale = Math.max(tileWidth / video.videoWidth, tileHeight / video.videoHeight);
+                    const width = video.videoWidth * scale;
+                    const height = video.videoHeight * scale;
+                    context.save();
+                    context.beginPath();
+                    context.rect(x, y, tileWidth, tileHeight);
+                    context.clip();
+                    context.drawImage(video, x + (tileWidth - width) / 2, y + (tileHeight - height) / 2, width, height);
+                    context.fillStyle = 'rgba(2, 6, 23, .72)';
+                    context.fillRect(x + 10, y + tileHeight - 38, Math.min(tileWidth - 20, 220), 28);
+                    context.fillStyle = '#fff';
+                    context.font = '16px sans-serif';
+                    const participant = participantsRef.current.find((item) => item.user_id === id);
+                    context.fillText(id === currentUserId ? 'Teacher' : participant?.user || 'Student', x + 20, y + tileHeight - 19);
+                    context.restore();
+                });
+            }
+            recordingFrameRef.current = requestAnimationFrame(drawFrame);
+        };
+        drawFrame();
+        let recordingAudioTracks = localStreamRef.current?.getAudioTracks() || [];
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
             try {
-                wsRef.current.send(JSON.stringify({
-                    type: 'chat',
-                    message: chatInput.trim(),
-                    sender: user?.full_name,
-                    sender_id: user?.id
-                }));
-                
-                setMessages(prev => [...prev, {
-                    id: Date.now(),
-                    text: chatInput.trim(),
-                    sender: 'You',
-                    sender_id: user?.id,
-                    time: new Date()
-                }]);
-                setChatInput('');
-            } catch (e) {
-                toast.error('Failed to send message');
+                const audioContext = new AudioContextClass();
+                const destination = audioContext.createMediaStreamDestination();
+                recordingAudioContextRef.current = audioContext;
+                recordingAudioDestinationRef.current = destination;
+                recordedAudioTrackIdsRef.current = new Set();
+                addRecordingAudioStream(localStreamRef.current);
+                Object.values(remoteStreams).forEach(addRecordingAudioStream);
+                await audioContext.resume();
+                recordingAudioTracks = destination.stream.getAudioTracks();
+            } catch (audioError) {
+                console.error('Could not mix class audio for recording:', audioError);
+                recordingAudioContextRef.current?.close();
+                recordingAudioContextRef.current = null;
+                recordingAudioDestinationRef.current = null;
             }
         }
+        const recordingStream = new MediaStream([
+            ...canvas.captureStream(24).getVideoTracks(),
+            ...recordingAudioTracks
+        ]);
+        if (!window.MediaRecorder || !MediaRecorder.isTypeSupported('video/webm')) {
+            cancelAnimationFrame(recordingFrameRef.current);
+            toast.error('This browser does not support local class recording.');
+            recordingAudioContextRef.current?.close();
+            recordingAudioContextRef.current = null;
+            recordingAudioDestinationRef.current = null;
+            recordingStream.getVideoTracks().forEach((track) => track.stop());
+            return;
+        }
+        recordingChunksRef.current = [];
+        const recorder = new MediaRecorder(recordingStream, { mimeType: 'video/webm' });
+        recorderRef.current = recorder;
+        recordingStartedAtRef.current = new Date();
+        recorder.ondataavailable = (event) => {
+            if (event.data.size) recordingChunksRef.current.push(event.data);
+        };
+        recorder.onerror = (event) => {
+            console.error('Class recording error:', event.error);
+            toast.error('The class recording stopped because of an error.');
+            setIsRecording(false);
+        };
+        recorder.onstop = async () => {
+            const blob = new Blob(recordingChunksRef.current, { type: 'video/webm' });
+            recordingChunksRef.current = [];
+            setIsRecording(false);
+            if (!blob.size) return;
+            try {
+                await saveClassRecording({
+                    id: `${courseId}-${Date.now()}`,
+                    courseId: String(courseId),
+                    courseName: className,
+                    createdAt: recordingStartedAtRef.current.toISOString(),
+                    blob
+                });
+                toast.success('Recording saved on this device. Find it on the Live Classes page.');
+            } catch (saveError) {
+                console.error('Could not store class recording:', saveError);
+                toast.error('Could not save the recording locally. Check available browser storage.');
+            }
+            recordingStream.getVideoTracks().forEach((track) => track.stop());
+            recordingAudioContextRef.current?.close();
+            recordingAudioContextRef.current = null;
+            recordingAudioDestinationRef.current = null;
+            recordedAudioTrackIdsRef.current.clear();
+        };
+        recorder.start(1000);
+        setIsRecording(true);
+        toast.success('Recording the class gallery and audio on this device.');
     };
-    
+
+    const toggleHand = () => {
+        const next = !isHandRaised;
+        if (sendSocketMessage({ type: next ? 'hand_raise' : 'hand_lower' })) {
+            setIsHandRaised(next);
+        }
+    };
+
+    const sendMessage = (event) => {
+        event.preventDefault();
+        const text = chatInput.trim();
+        if (!text || text.length > 1000 || !isConnected) return;
+        if (sendSocketMessage({ type: 'chat', message: text })) setChatInput('');
+    };
+
+    const removeParticipant = (participant) => {
+        if (!window.confirm(`Remove ${participant.user} from this live class?`)) return;
+        if (!sendSocketMessage({ type: 'remove_student', target_id: participant.user_id })) {
+            toast.error('Could not remove the student while disconnected.');
+        }
+    };
+
     const leaveClass = () => {
+        if (isRecording) stopRecording();
+        saveSession({ endedAt: new Date().toISOString() });
         cleanup();
-        navigate(-1);
-        toast.success('Left the class');
+        navigate('/live-classes');
     };
 
-    const forceReconnect = () => {
-        setConnectionAttempts(0);
-        cleanup();
-        initializeClass();
-        toast('Reconnecting...');
+    const retryConnection = () => {
+        connectionAttemptsRef.current = 0;
+        setError('');
+        connect();
     };
 
-    // ============================================================
-    // RENDER ERROR
-    // ============================================================
-    if (error) {
+    if (error && !isConnecting) {
         return (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0f172a', padding: '20px' }}>
-                <div style={{ textAlign: 'center', color: 'white', maxWidth: '400px' }}>
-                    <AlertCircle size={48} color="#dc2626" />
-                    <h2 style={{ fontSize: '22px', fontWeight: 'bold', margin: '16px 0', color: '#ef4444' }}>Connection Error</h2>
-                    <p style={{ color: '#94a3b8', marginBottom: '24px' }}>{error}</p>
-                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                        <button onClick={forceReconnect} style={{ padding: '10px 28px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <RefreshCw size={18} /> Reconnect
-                        </button>
-                        <button onClick={() => navigate('/dashboard')} style={{ padding: '10px 28px', background: 'transparent', color: 'white', border: '1px solid #475569', borderRadius: '8px', cursor: 'pointer' }}>
-                            Dashboard
-                        </button>
-                    </div>
+            <main style={styles.errorPage}>
+                <AlertCircle size={46} color="#f87171" />
+                <h1>Unable to join class</h1>
+                <p>{error}</p>
+                <div style={{ display: 'flex', gap: 12 }}>
+                    <button style={styles.primaryButton} onClick={retryConnection}>Try again</button>
+                    <button style={styles.secondaryButton} onClick={() => navigate('/live-classes')}>Back to live classes</button>
                 </div>
-            </div>
+            </main>
         );
     }
 
-    // ============================================================
-    // RENDER MAIN
-    // ============================================================
+    const videoTiles = [
+        { id: currentUserId, name: 'You', stream: null, local: true },
+        ...participants.filter((participant) => remoteStreams[participant.user_id]).map((participant) => ({
+            id: participant.user_id,
+            name: participant.user,
+            stream: remoteStreams[participant.user_id],
+            local: false,
+            participant
+        }))
+    ];
+
     return (
-        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0f172a' }}>
+        <main style={styles.page}>
             <style>{`
-                @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-                @keyframes spin { to { transform: rotate(360deg); } }
-                .pulse { animation: pulse 1.5s ease-in-out infinite; }
-                .spin { animation: spin 1s linear infinite; }
-                @media (max-width: 768px) {
-                    .video-grid { grid-template-columns: 1fr !important; }
-                    .chat-panel { width: 100% !important; }
-                    .controls-group { flex-wrap: wrap !important; justify-content: center !important; }
+                .live-chat-heading { display:flex; align-items:center; gap:10px; }
+                .live-chat-heading > div { display:flex; flex-direction:column; gap:3px; }
+                .live-chat-heading strong { color:#f8fafc; font-size:14px; }
+                .live-chat-heading small { color:#94a3b8; font-size:11px; }
+                .live-chat-message strong { display:block; font-size:11px; color:#bfdbfe; margin-bottom:4px; }
+                .live-chat-message p { margin:0; font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
+                .live-chat-message time { display:block; text-align:right; font-size:10px; opacity:.72; margin-top:5px; }
+                .live-chat-empty svg { margin-bottom:7px; }
+                .live-chat-empty p { margin:0 0 5px; color:#cbd5e1; }
+                .live-chat-empty span { font-size:12px; }
+                .live-chat-form input { flex:1; min-width:0; padding:10px 12px; color:#f8fafc; background:#1e293b; border:1px solid #334155; border-radius:8px; outline:none; }
+                .live-chat-form input:focus { border-color:#60a5fa; }
+                .live-chat-form button { width:40px; border:0; border-radius:8px; background:#2563eb; color:white; display:grid; place-items:center; cursor:pointer; }
+                .live-chat-form button:disabled { background:#334155; color:#64748b; cursor:not-allowed; }
+                @media(max-width:700px) {
+                    .live-class-controls { flex-direction:column; align-items:stretch !important; }
+                    .live-class-control-group { justify-content:center; }
+                    .live-class-controls > button { justify-content:center; }
+                    .live-class-chat { width:min(100%, 380px); }
+                    .live-class-content-chat { margin-right:0 !important; }
                 }
             `}</style>
-            
-            {/* Video Grid */}
-            <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', padding: '16px', minHeight: '0' }} className="video-grid">
-                
-                {/* Local Video - ADDED scaleX(-1) TO FIX MIRROR ISSUE */}
-                <div style={{ position: 'relative', background: '#1e293b', borderRadius: '12px', overflow: 'hidden', minHeight: '200px' }}>
-                    <video 
-                        ref={localVideoRef} 
-                        autoPlay 
-                        playsInline 
-                        muted 
-                        style={{ 
-                            width: '100%', 
-                            height: '100%', 
-                            objectFit: 'contain', 
-                            background: '#0f172a',
-                            transform: isScreenSharing ? 'none' : 'scaleX(-1)' // ✅ MIRROR FIX
-                        }} 
-                    />
-                    
-                    {/* Screen Share Indicator */}
-                    {isScreenSharing && (
-                        <div style={{ position: 'absolute', top: '10px', left: '10px', background: '#22c55e', padding: '4px 10px', borderRadius: '4px', color: 'white', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Monitor size={14} /> Sharing Screen
-                        </div>
-                    )}
-
-                    <div style={{ position: 'absolute', bottom: '10px', left: '10px', background: 'rgba(0,0,0,0.6)', padding: '4px 10px', borderRadius: '4px', color: 'white', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        You {isMuted ? '🔇' : ''} {isVideoOff ? '📷 Off' : ''}
-                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isConnected ? '#22c55e' : '#ef4444', display: 'inline-block' }} />
-                    </div>
+            <header style={styles.header}>
+                <div>
+                    <div style={styles.liveLabel}><span style={styles.liveDot} /> LIVE CLASS</div>
+                    <h1 style={styles.title}>{className}</h1>
                 </div>
-                
-                {/* Remote Video */}
-                <div style={{ position: 'relative', background: '#1e293b', borderRadius: '12px', overflow: 'hidden', minHeight: '200px' }}>
-                    <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#0f172a' }} />
-                    
-                    <div style={{ position: 'absolute', bottom: '10px', left: '10px', background: 'rgba(0,0,0,0.6)', padding: '4px 10px', borderRadius: '4px', color: 'white', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {isTeacher ? 'Student' : 'Teacher'} 
-                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isConnected ? '#22c55e' : '#ef4444', display: 'inline-block' }} />
-                    </div>
-
-                    {!isConnected && (
-                        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#64748b', textAlign: 'center' }}>
-                            <Users size={40} style={{ opacity: 0.5, margin: '0 auto 8px' }} />
-                            <p>Waiting for {isTeacher ? 'students' : 'teacher'}...</p>
-                        </div>
-                    )}
+                <div style={styles.headerStatus}>
+                    {isConnected ? <Wifi size={16} color="#4ade80" /> : <WifiOff size={16} color="#f87171" />}
+                    {isConnecting ? 'Connecting…' : isConnected ? 'Connected' : 'Disconnected'}
+                    <span style={styles.countBadge}><Users size={15} /> {participants.length + 1}</span>
                 </div>
-            </div>
-            
-            {/* Controls Bar */}
-            <div style={{ background: '#1e293b', padding: '12px 16px', borderTop: '1px solid #334155' }}>
-                <div style={{ maxWidth: '80rem', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                    
-                    <div className="controls-group" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <button onClick={toggleMute} disabled={!isConnected} style={{ padding: '10px', borderRadius: '50%', border: 'none', cursor: isConnected ? 'pointer' : 'not-allowed', background: isMuted ? '#dc2626' : '#4b5563', color: 'white', opacity: isConnected ? 1 : 0.5 }}>
-                            {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
-                        </button>
-                        
-                        <button onClick={toggleVideo} disabled={!isConnected} style={{ padding: '10px', borderRadius: '50%', border: 'none', cursor: isConnected ? 'pointer' : 'not-allowed', background: isVideoOff ? '#dc2626' : '#4b5563', color: 'white', opacity: isConnected ? 1 : 0.5 }}>
-                            {isVideoOff ? <VideoOff size={18} /> : <Video size={18} />}
-                        </button>
+            </header>
 
-                        {/* Screen Share Button (Teacher Only) */}
-                        {isTeacher && (
-                            <button onClick={toggleScreenShare} disabled={!isConnected} style={{ padding: '10px', borderRadius: '50%', border: 'none', cursor: isConnected ? 'pointer' : 'not-allowed', background: isScreenSharing ? '#eab308' : '#4b5563', color: 'white', opacity: isConnected ? 1 : 0.5 }} title="Share Screen">
-                                {isScreenSharing ? <StopCircle size={18} /> : <Monitor size={18} />}
-                            </button>
-                        )}
-
-                        {/* Raise Hand Button (Student Only) */}
-                        {!isTeacher && (
-                            <button onClick={toggleHandRaise} disabled={!isConnected} style={{ padding: '10px', borderRadius: '50%', border: 'none', cursor: isConnected ? 'pointer' : 'not-allowed', background: isHandRaised ? '#eab308' : '#4b5563', color: 'white', opacity: isConnected ? 1 : 0.5 }} title="Raise Hand">
-                                {isHandRaised ? <HandMetal size={18} /> : <Hand size={18} />}
-                            </button>
-                        )}
-                        
-                        <button onClick={leaveClass} style={{ padding: '10px', borderRadius: '50%', border: 'none', cursor: 'pointer', background: '#dc2626', color: 'white' }}>
-                            <PhoneOff size={18} />
-                        </button>
-                    </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'white', fontSize: '13px' }}>
-                        {/* Show Raised Hands for Teacher */}
-                        {isTeacher && raisedHands.length > 0 && (
-                            <div style={{ background: '#eab308', color: '#0f172a', padding: '4px 12px', borderRadius: '20px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <Hand size={14} /> {raisedHands.length} hand(s) raised
+            <section className={showChat ? 'live-class-content-chat' : ''} style={{ ...styles.content, marginRight: showChat ? 344 : 0 }}>
+                {isConnecting && <div style={styles.connecting}>Connecting to your class…</div>}
+                <div style={styles.videoGrid}>
+                    {videoTiles.map((tile) => (
+                        <article key={tile.id} style={styles.videoTile}>
+                            {tile.local ? (
+                                <video ref={(element) => {
+                                    localVideoRef.current = element;
+                                    if (element) videoElementsRef.current.set(tile.id, element);
+                                    else videoElementsRef.current.delete(tile.id);
+                                }} autoPlay muted playsInline style={{ ...styles.video, transform: isScreenSharing ? 'none' : 'scaleX(-1)' }} />
+                            ) : (
+                                <video
+                                    autoPlay
+                                    playsInline
+                                    style={styles.video}
+                                    ref={(element) => {
+                                        if (element) {
+                                            videoElementsRef.current.set(tile.id, element);
+                                            if (element.srcObject !== tile.stream) element.srcObject = tile.stream;
+                                        } else videoElementsRef.current.delete(tile.id);
+                                    }}
+                                />
+                            )}
+                            {tile.local && !isScreenSharing && isVideoOff && <div style={styles.cameraOff}><VideoOff size={28} /><span>Camera off</span></div>}
+                            <div style={styles.tileFooter}>
+                                <span>{tile.name}{tile.local ? ' (You)' : ''}</span>
+                                {isTeacher && !tile.local && tile.participant?.role === 'STUDENT' && (
+                                    <button title={`Remove ${tile.name}`} onClick={() => removeParticipant(tile.participant)} style={styles.removeButton}><X size={15} /></button>
+                                )}
                             </div>
-                        )}
-
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            {isConnected ? <Wifi size={14} color="#22c55e" /> : <WifiOff size={14} color="#ef4444" />}
-                            <span style={{ color: isConnected ? '#22c55e' : '#ef4444' }}>{isConnected ? 'Connected' : 'Disconnected'}</span>
-                        </span>
-                        <span style={{ color: '#94a3b8' }}>{participants.length} participant{participants.length !== 1 ? 's' : ''}</span>
-                    </div>
+                        </article>
+                    ))}
+                    {isTeacher && participants.filter((participant) => participant.role === 'STUDENT' && !remoteStreams[participant.user_id]).map((participant) => (
+                        <article key={`waiting-${participant.user_id}`} style={{ ...styles.videoTile, ...styles.waitingTile }}>
+                            <div style={styles.avatar}>{participant.user?.charAt(0)?.toUpperCase() || '?'}</div>
+                            <p>{participant.user} · Connecting video…</p>
+                            <button onClick={() => removeParticipant(participant)} style={styles.removeButton} title={`Remove ${participant.user}`}><X size={15} /></button>
+                        </article>
+                    ))}
                 </div>
-            </div>
-            
-            {/* Chat Toggle Button */}
-            <button onClick={() => setShowChat(!showChat)} style={{ position: 'fixed', right: '16px', bottom: '80px', padding: '10px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '50%', cursor: 'pointer', zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
-                <MessageSquare size={20} />
-                {messages.length > 0 && (
-                    <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#dc2626', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{messages.length}</span>
+                {isTeacher && raisedHands.length > 0 && (
+                    <div style={styles.handNotice}><Hand size={17} /> {raisedHands.map((person) => person.user).join(', ')} {raisedHands.length === 1 ? 'has' : 'have'} a hand raised</div>
                 )}
-            </button>
-            
-            {/* Chat Panel */}
-            {showChat && (
-                <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: '340px', background: 'white', boxShadow: '-2px 0 8px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', zIndex: 50 }} className="chat-panel">
-                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <MessageSquare size={18} color="#2563eb" />
-                            <h3 style={{ fontWeight: 600, color: '#0f172a', margin: 0, fontSize: '15px' }}>Chat</h3>
-                        </div>
-                        <button onClick={() => setShowChat(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
-                    </div>
-                    
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {messages.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: '14px' }}>No messages yet</div>
-                        ) : (
-                            messages.map((msg, idx) => (
-                                <div key={msg.id || idx} style={{ display: 'flex', justifyContent: msg.sender === 'You' ? 'flex-end' : 'flex-start' }}>
-                                    <div style={{ maxWidth: '80%', padding: '6px 12px', borderRadius: '8px', background: msg.sender === 'You' ? '#2563eb' : '#f1f5f9', color: msg.sender === 'You' ? 'white' : '#0f172a' }}>
-                                        {msg.sender !== 'You' && <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '2px' }}>{msg.sender}</div>}
-                                        <div style={{ fontSize: '14px', wordBreak: 'break-word' }}>{msg.text}</div>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                    
-                    <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '8px' }}>
-                        <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && sendMessage()} placeholder="Type a message..." disabled={!isConnected} style={{ flex: 1, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', outline: 'none' }} />
-                        <button onClick={sendMessage} disabled={!isConnected || !chatInput.trim()} style={{ padding: '8px 16px', background: isConnected && chatInput.trim() ? '#2563eb' : '#94a3b8', color: 'white', border: 'none', borderRadius: '6px', cursor: isConnected && chatInput.trim() ? 'pointer' : 'not-allowed' }}>Send</button>
-                    </div>
+            </section>
+
+            <footer className="live-class-controls" style={styles.controls}>
+                <div className="live-class-control-group" style={styles.controlGroup}>
+                    <button style={{ ...styles.controlButton, ...(isMuted ? styles.controlActive : {}) }} onClick={() => toggleTrack('audio')} title={isMuted ? 'Turn microphone on' : 'Mute microphone'}>
+                        {isMuted ? <MicOff /> : <Mic />}<span>{isMuted ? 'Unmute' : 'Mute'}</span>
+                    </button>
+                    <button style={{ ...styles.controlButton, ...(isVideoOff ? styles.controlActive : {}) }} onClick={() => toggleTrack('video')} title={isVideoOff ? 'Turn camera on' : 'Turn camera off'}>
+                        {isVideoOff ? <VideoOff /> : <Video />}<span>{isVideoOff ? 'Start video' : 'Stop video'}</span>
+                    </button>
+                    {isTeacher && <>
+                        <button style={{ ...styles.controlButton, ...(isScreenSharing ? styles.controlActive : {}) }} onClick={toggleScreenShare}>
+                            <Monitor /><span>{isScreenSharing ? 'Stop sharing' : 'Share screen'}</span>
+                        </button>
+                        <button style={{ ...styles.controlButton, ...(isRecording ? styles.recordingButton : {}) }} onClick={isRecording ? stopRecording : startRecording}>
+                            {isRecording ? <Square /> : <Play />}<span>{isRecording ? 'Stop recording' : 'Record class'}</span>
+                        </button>
+                    </>}
+                    {!isTeacher && <button style={{ ...styles.controlButton, ...(isHandRaised ? styles.handActive : {}) }} onClick={toggleHand}>
+                        {isHandRaised ? <HandMetal /> : <Hand />}<span>{isHandRaised ? 'Lower hand' : 'Raise hand'}</span>
+                    </button>}
+                    <button style={styles.endButton} onClick={leaveClass}><PhoneOff /><span>Leave class</span></button>
                 </div>
-            )}
-        </div>
+                <button style={styles.chatToggle} onClick={() => setShowChat((value) => !value)}>
+                    <MessageSquare /> Chat {messages.length > 0 && <span style={styles.unreadBadge}>{messages.length}</span>}
+                </button>
+            </footer>
+
+            {showChat && <aside className="live-class-chat" style={styles.chatPanel}>
+                <div style={styles.chatHeader}>
+                    <div className="live-chat-heading"><MessageSquare size={18} /><div><strong>Class chat</strong><small>{participants.length + 1} participants</small></div></div>
+                    <button onClick={() => setShowChat(false)} style={styles.closeChat}><X size={18} /></button>
+                </div>
+                <div style={styles.messageList}>
+                    {messages.length === 0
+                        ? <div className="live-chat-empty" style={styles.emptyChat}><MessageSquare size={30} /><p>Class chat is ready</p><span>Send a message to everyone in class.</span></div>
+                        : messages.map((message) => {
+                            const ownMessage = message.senderId === currentUserId;
+                            return <div key={message.id} style={{ ...styles.messageRow, justifyContent: ownMessage ? 'flex-end' : 'flex-start' }}>
+                                <div className="live-chat-message" style={{ ...styles.messageBubble, ...(ownMessage ? styles.ownMessage : {}) }}>
+                                    {!ownMessage && <strong>{message.sender || 'Participant'}</strong>}
+                                    <p>{message.text}</p>
+                                    <time>{formatTime(message.time)}</time>
+                                </div>
+                            </div>;
+                        })}
+                    <div ref={messagesEndRef} />
+                </div>
+                <form onSubmit={sendMessage} className="live-chat-form" style={styles.chatForm}>
+                    <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} maxLength={1000} placeholder="Message everyone…" disabled={!isConnected} />
+                    <button type="submit" disabled={!isConnected || !chatInput.trim()} aria-label="Send message"><Send size={17} /></button>
+                </form>
+            </aside>}
+        </main>
     );
+};
+
+const styles = {
+    page: { height: '100vh', minHeight: 540, display: 'flex', flexDirection: 'column', background: '#0b1120', color: '#f8fafc', overflow: 'hidden', fontFamily: 'Inter, system-ui, sans-serif', position: 'relative' },
+    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid #1e293b', gap: 16 },
+    liveLabel: { display: 'flex', alignItems: 'center', gap: 7, color: '#fda4af', fontSize: 11, letterSpacing: 1.4, fontWeight: 700 },
+    liveDot: { width: 8, height: 8, background: '#f43f5e', borderRadius: '50%', boxShadow: '0 0 12px #f43f5e' },
+    title: { fontSize: 18, margin: '5px 0 0', fontWeight: 650 },
+    headerStatus: { display: 'flex', alignItems: 'center', gap: 8, color: '#cbd5e1', fontSize: 13 },
+    countBadge: { display: 'flex', alignItems: 'center', gap: 6, background: '#1e293b', borderRadius: 18, padding: '7px 10px', marginLeft: 8 },
+    content: { flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, transition: 'margin 180ms ease' },
+    connecting: { textAlign: 'center', color: '#94a3b8', padding: '8px 0 15px', fontSize: 13 },
+    videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 14, alignContent: 'start' },
+    videoTile: { position: 'relative', aspectRatio: '16 / 10', minHeight: 180, maxHeight: 'calc(100vh - 220px)', borderRadius: 12, overflow: 'hidden', background: '#172033', border: '1px solid #293449' },
+    video: { width: '100%', height: '100%', objectFit: 'contain', background: '#080d18' },
+    tileFooter: { position: 'absolute', bottom: 10, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', background: 'rgba(2, 6, 23, .72)', padding: '7px 10px', borderRadius: 7, fontSize: 13 },
+    cameraOff: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#94a3b8', background: '#111827' },
+    waitingTile: { display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#9aa9bd', gap: 8, fontSize: 13 },
+    avatar: { width: 58, height: 58, display: 'grid', placeItems: 'center', borderRadius: '50%', background: '#253550', fontSize: 22, color: '#dbeafe' },
+    removeButton: { background: '#7f1d1d', border: 0, color: 'white', borderRadius: 6, width: 27, height: 27, display: 'grid', placeItems: 'center', cursor: 'pointer' },
+    handNotice: { position: 'fixed', bottom: 100, left: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#422006', color: '#fde68a', borderRadius: 9, fontSize: 13 },
+    controls: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', background: '#111827', borderTop: '1px solid #253044', gap: 12 },
+    controlGroup: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+    controlButton: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 9, background: '#263247', color: 'white', border: 0, cursor: 'pointer', fontSize: 12 },
+    controlActive: { background: '#7f1d1d' },
+    recordingButton: { background: '#b91c1c' },
+    handActive: { background: '#92400e' },
+    endButton: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 9, background: '#dc2626', color: 'white', border: 0, cursor: 'pointer', fontSize: 12, fontWeight: 600 },
+    chatToggle: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 9, background: '#263247', color: 'white', border: 0, cursor: 'pointer', fontSize: 13, position: 'relative' },
+    unreadBadge: { background: '#ef4444', borderRadius: 12, padding: '2px 6px', fontSize: 10 },
+    chatPanel: { position: 'absolute', top: 0, right: 0, bottom: 0, width: 344, display: 'flex', flexDirection: 'column', background: '#111827', borderLeft: '1px solid #263247', boxShadow: '-12px 0 30px rgba(0,0,0,.25)' },
+    chatHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottom: '1px solid #263247' },
+    closeChat: { background: 'transparent', border: 0, color: '#94a3b8', cursor: 'pointer' },
+    messageList: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, padding: 14 },
+    emptyChat: { margin: 'auto', textAlign: 'center', color: '#64748b', fontSize: 13 },
+    messageRow: { display: 'flex' },
+    messageBubble: { maxWidth: '84%', background: '#1e293b', padding: '9px 11px', borderRadius: 10, color: '#e2e8f0' },
+    ownMessage: { background: '#1d4ed8', color: 'white' },
+    chatForm: { display: 'flex', gap: 8, padding: 12, borderTop: '1px solid #263247' },
+    errorPage: { minHeight: '100vh', background: '#0b1120', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24, textAlign: 'center' },
+    primaryButton: { padding: '10px 16px', background: '#2563eb', color: 'white', border: 0, borderRadius: 8, cursor: 'pointer' },
+    secondaryButton: { padding: '10px 16px', background: 'transparent', color: 'white', border: '1px solid #475569', borderRadius: 8, cursor: 'pointer' }
 };
 
 export default LiveClass;

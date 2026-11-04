@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { login } from '../../store/slices/authSlice';
@@ -21,6 +21,7 @@ const Login = () => {
     password: '',
   });
   const dispatch = useDispatch();
+  const location = useLocation();
   const navigate = useNavigate();
   const { isLoading } = useSelector((state) => state.auth);
 
@@ -57,7 +58,10 @@ const Login = () => {
         'ADMIN': '/admin/dashboard',
       };
       
-      navigate(redirectMap[role] || '/dashboard');
+      const requestedPath = new URLSearchParams(location.search).get('next');
+      const returnToNews = requestedPath === '/news'
+        || (requestedPath?.startsWith('/news/') && !requestedPath.startsWith('//'));
+      navigate(returnToNews ? requestedPath : redirectMap[role] || '/dashboard', { replace: true });
 
     } catch (error) {
       const errorMessage = error?.message || error;

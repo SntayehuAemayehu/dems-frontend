@@ -28,7 +28,7 @@ import {
   ChevronUp,
   Save, X, Upload, FileText,
   Download, Printer,CheckSquare,Square,
-  Timer, Lock, Unlock, Pencil, EyeOff
+  Timer, Lock, Unlock, Pencil, EyeOff, Newspaper
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
@@ -1424,6 +1424,7 @@ const handleBatchGenerateSchedules = async () => {
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'courses', label: 'Courses', icon: BookOpen },
+    { id: 'news', label: 'News', icon: Newspaper },
     { id: 'payments', label: 'Payments', icon: DollarSign },
     { id: 'fee-structures', label: 'Fee Structures', icon: CreditCardIcon },
     { id: 'departments', label: 'Departments', icon: Building2 },
@@ -1585,7 +1586,11 @@ const handleBatchGenerateSchedules = async () => {
             <div
               key={item.id}
               className={`sidebar-item ${activeTab === item.id ? 'active' : ''}`}
-              onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
+              onClick={() => {
+                if (item.id === 'news') navigate('/admin/news');
+                else setActiveTab(item.id);
+                setMobileMenuOpen(false);
+              }}
             >
               <item.icon size={20} />
               {item.label}

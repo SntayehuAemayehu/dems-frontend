@@ -109,6 +109,9 @@ const DeptDashboard = () => {
   const [courseToDelete, setCourseToDelete] = useState(null);
   const [showDeleteExamModal, setShowDeleteExamModal] = useState(false);
   const [examToDelete, setExamToDelete] = useState(null);
+  const [showRescheduleExamModal, setShowRescheduleExamModal] = useState(false);
+  const [examToReschedule, setExamToReschedule] = useState(null);
+  const [rescheduleForm, setRescheduleForm] = useState({ start_time: '', end_time: '' });
   const [showRejectCourseModal, setShowRejectCourseModal] = useState(false);
   const [rejectCourseId, setRejectCourseId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -786,17 +789,40 @@ const DeptDashboard = () => {
   const handleUpdateExam = async (examId, startTime, endTime) => {
     setActionLoading(true);
     try {
-      await api.put(`/exams/${examId}/`, {
-        start_time: startTime,
-        end_time: endTime
+      await api.patch(`/exams/${examId}/`, {
+        start_time: new Date(startTime).toISOString(),
+        end_time: new Date(endTime).toISOString()
       });
       toast.success('Exam schedule updated successfully!');
+      setShowRescheduleExamModal(false);
+      setExamToReschedule(null);
       await fetchData();
     } catch (error) {
       console.error('Failed to update exam:', error);
-      toast.error('Failed to update exam');
+      toast.error(error.response?.data?.detail || 'Failed to update exam schedule');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const formatForDateTimeInput = (dateValue) => {
+    if (!dateValue) return '';
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return '';
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return localDate.toISOString().slice(0, 16);
+  };
+
+  const submitReschedule = (event) => {
+    event.preventDefault();
+    const start = new Date(rescheduleForm.start_time);
+    const end = new Date(rescheduleForm.end_time);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      toast.error('End time must be later than the start time');
+      return;
+    }
+    if (examToReschedule) {
+      handleUpdateExam(examToReschedule.id, rescheduleForm.start_time, rescheduleForm.end_time);
     }
   };
 
@@ -1929,9 +1955,12 @@ const DeptDashboard = () => {
                                     <Eye size={14} /> View
                                   </button>
                                   <button onClick={() => {
-                                    const newStart = prompt('Enter new start time (YYYY-MM-DD HH:MM):', exam.start_time);
-                                    const newEnd = prompt('Enter new end time (YYYY-MM-DD HH:MM):', exam.end_time);
-                                    if (newStart && newEnd) handleUpdateExam(exam.id, newStart, newEnd);
+                                    setExamToReschedule(exam);
+                                    setRescheduleForm({
+                                      start_time: formatForDateTimeInput(exam.start_time),
+                                      end_time: formatForDateTimeInput(exam.end_time),
+                                    });
+                                    setShowRescheduleExamModal(true);
                                     setOpenActionMenu(null);
                                   }}>
                                     <Edit2 size={14} /> Reschedule
@@ -2351,6 +2380,42 @@ const DeptDashboard = () => {
       )}
 
       {/* ==================== DELETE EXAM CONFIRM MODAL ==================== */}
+      {showRescheduleExamModal && examToReschedule && (
+        <div className="modal-overlay" onClick={() => !actionLoading && setShowRescheduleExamModal(false)}>
+          <div className="modal-content" role="dialog" aria-modal="true" aria-labelledby="reschedule-exam-title" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 520 }}>
+            <h2 id="reschedule-exam-title" style={{ fontSize: 20, fontWeight: 700, margin: '0 0 8px' }}>Reschedule exam</h2>
+            <p style={{ color: '#64748b', margin: '0 0 20px' }}>{examToReschedule.title}</p>
+            <form onSubmit={submitReschedule}>
+              <label style={{ display: 'block', marginBottom: 14, color: '#334155', fontWeight: 600 }}>
+                Start date and time
+                <input
+                  type="datetime-local"
+                  required
+                  value={rescheduleForm.start_time}
+                  onChange={(event) => setRescheduleForm({ ...rescheduleForm, start_time: event.target.value })}
+                  style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 6, padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: 8 }}
+                />
+              </label>
+              <label style={{ display: 'block', marginBottom: 22, color: '#334155', fontWeight: 600 }}>
+                End date and time
+                <input
+                  type="datetime-local"
+                  required
+                  value={rescheduleForm.end_time}
+                  min={rescheduleForm.start_time || undefined}
+                  onChange={(event) => setRescheduleForm({ ...rescheduleForm, end_time: event.target.value })}
+                  style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 6, padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: 8 }}
+                />
+              </label>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                <button type="button" className="btn-secondary" disabled={actionLoading} onClick={() => setShowRescheduleExamModal(false)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={actionLoading}>{actionLoading ? 'Saving...' : 'Save schedule'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showDeleteExamModal && (
         <div className="modal-overlay" onClick={() => setShowDeleteExamModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>

@@ -1,6 +1,7 @@
 // frontend/src/pages/teacher/TeacherExams.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus, FileText, Clock, Calendar, Eye, Trash2, CheckCircle, XCircle,
   X, Edit, AlertTriangle, MoreVertical, ArrowLeft, BookOpen, Search, RefreshCw, Camera
@@ -9,6 +10,7 @@ import toast from 'react-hot-toast';
 import api, { getMediaUrl, getWebSocketUrl } from '../../api/api';
 
 const TeacherExams = () => {
+  const navigate = useNavigate();
   const [liveStreams, setLiveStreams] = useState({}); // { studentId: MediaStream }
   const liveWsRef = useRef(null);
   const livePcsRef = useRef({}); // peer connections
@@ -150,33 +152,9 @@ const TeacherExams = () => {
   };
 
   // ==================== LIVE MONITORING ====================
-  const openLiveMonitoring = async (exam, silent = false) => {
-    if (!silent) {
-      setLiveExam(exam);
-      setShowLiveMonitoring(true);
-      setLiveLoading(true);
-      setOpenMenuId(null);
-    }
-
-    try {
-      const res = await api.get(`/exams/${exam.id}/live-monitoring/`);
-      setLiveStudents(res.data.students || []);
-    } catch (err) {
-      console.error(err);
-      if (!silent) toast.error('Failed to load live students');
-      setLiveStudents([]);
-    } finally {
-      if (!silent) setLiveLoading(false);
-    }
-
-    // Only connect WebSocket if not already connected
-    if (
-      !liveWsRef.current ||
-      liveWsExamIdRef.current !== exam.id ||
-      liveWsRef.current.readyState !== WebSocket.OPEN
-    ) {
-      connectLiveWebSocket(exam.id);
-    }
+  const openLiveMonitoring = (exam) => {
+    setOpenMenuId(null);
+    navigate(`/teacher/exams/${exam.id}/live`);
   };
 
   const connectLiveWebSocket = (examId) => {
@@ -605,12 +583,7 @@ const TeacherExams = () => {
   };
 
   const openProctoringImages = (course) => {
-    setProctoringImagesCourse(course);
-    setProctoringImages([]);
-    setProctoringStudents([]);
-    setSelectedProctoringStudent(null);
-    setShowProctoringImages(true);
-    loadProctoringImages(course, 'QUIZ');
+    navigate(`/teacher/courses/${course.id}/proctoring-images`);
   };
 
   const selectProctoringStudent = (student) => {
