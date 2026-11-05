@@ -41,9 +41,11 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "dev": "vite",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
+
   },
   "browserslist": {
     "production": [
@@ -58,8 +60,10 @@
     ]
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^6.2.1",
     "autoprefixer": "^10.5.0",
     "postcss": "^8.5.15",
-    "tailwindcss": "^4.3.1"
+    "tailwindcss": "^4.3.1",
+    "vite": "^8.3.6"
   }
 }
