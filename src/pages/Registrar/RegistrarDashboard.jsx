@@ -37,8 +37,7 @@ const RegistrarDashboard = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [isUsingSampleData, setIsUsingSampleData] = useState(false);
-  const [dataSource, setDataSource] = useState('none');
+  const [documentRejectionReason, setDocumentRejectionReason] = useState('');
   
   // Modal states
   const [showVerifyModal, setShowVerifyModal] = useState(false);
@@ -67,8 +66,6 @@ const RegistrarDashboard = () => {
       setLoading(true);
       setRefreshing(true);
       setError(null);
-      setIsUsingSampleData(false);
-      
       console.log('🔄 ========================================');
       console.log('🔄 REGISTRAR: FETCHING STUDENTS');
       console.log('🔄 ========================================');
@@ -76,7 +73,6 @@ const RegistrarDashboard = () => {
       console.log('👤 Role:', user?.role);
       
       let studentsData = [];
-      let source = 'none';
       
       // ============================================================
       // ATTEMPT 1: /auth/registrar/students/
@@ -88,10 +84,8 @@ const RegistrarDashboard = () => {
         
         if (response.data && response.data.results) {
           studentsData = response.data.results;
-          source = 'registrar';
         } else if (Array.isArray(response.data)) {
           studentsData = response.data;
-          source = 'registrar';
         }
         console.log(`📊 Got ${studentsData.length} students from /auth/registrar/students/`);
       } catch (e) {
@@ -109,10 +103,8 @@ const RegistrarDashboard = () => {
           
           if (response.data && response.data.results) {
             studentsData = response.data.results;
-            source = 'users';
           } else if (Array.isArray(response.data)) {
             studentsData = response.data;
-            source = 'users';
           }
           console.log(`📊 Got ${studentsData.length} students from /auth/users/`);
         } catch (e) {
@@ -131,10 +123,8 @@ const RegistrarDashboard = () => {
           
           if (response.data && response.data.results) {
             studentsData = response.data.results;
-            source = 'students';
           } else if (Array.isArray(response.data)) {
             studentsData = response.data;
-            source = 'students';
           }
           console.log(`📊 Got ${studentsData.length} students from /students/`);
         } catch (e) {
@@ -147,7 +137,6 @@ const RegistrarDashboard = () => {
       // ============================================================
       console.log('📊 ========================================');
       console.log('📊 TOTAL STUDENTS FOUND:', studentsData.length);
-      console.log('📊 SOURCE:', source);
       console.log('📊 ========================================');
       
       if (studentsData.length > 0) {
@@ -162,6 +151,8 @@ const RegistrarDashboard = () => {
           payment_status: s.payment_status || 'PENDING',
           documents_verified: s.documents_verified || false,
           documents_submitted: s.documents_submitted || false,
+          documents_status: s.documents_status || (s.documents_verified ? 'APPROVED' : s.documents_submitted ? 'PENDING' : 'NOT_SUBMITTED'),
+          documents_rejection_reason: s.documents_rejection_reason || '',
           is_enrolled: s.is_enrolled || false,
           grade_8_certificate: s.grade_8_certificate || null,
           grade_12_certificate: s.grade_12_certificate || null,
@@ -173,14 +164,12 @@ const RegistrarDashboard = () => {
         
         setStudents(processed);
         setFilteredStudents(processed);
-        setDataSource(source);
         calculateStats(processed);
         toast.success(`✅ Loaded ${processed.length} students from database`);
       } else {
         setStudents([]);
         setFilteredStudents([]);
-        setDataSource('none');
-        setError('No students found. Click "Load Sample Data" to test.');
+        setError('No students found.');
         toast.info('No students found in database');
       }
       
@@ -193,82 +182,6 @@ const RegistrarDashboard = () => {
       setRefreshing(false);
     }
   }, [user]);
-
-  // ============ LOAD SAMPLE DATA ============
-  const loadSampleData = () => {
-    const sampleStudents = [
-      {
-        id: 1,
-        user: { full_name: 'Abebe Kebede', email: 'abebe@example.com' },
-        student_id: 'STU20240001',
-        department: 'Computer Science',
-        payment_status: 'VERIFIED',
-        documents_verified: false,
-        documents_submitted: true,
-        is_enrolled: false,
-        grade_8_certificate: 'grade8.pdf',
-        grade_12_certificate: 'grade12.pdf',
-        transcript: 'transcript.pdf',
-        other_documents: null,
-        cgpa: '3.20',
-        notification_sent: true
-      },
-      {
-        id: 2,
-        user: { full_name: 'Betelehem Tesfaye', email: 'bete@example.com' },
-        student_id: 'STU20240002',
-        department: 'Software Engineering',
-        payment_status: 'VERIFIED',
-        documents_verified: true,
-        documents_submitted: true,
-        is_enrolled: false,
-        grade_8_certificate: 'grade8.pdf',
-        grade_12_certificate: 'grade12.pdf',
-        transcript: 'transcript.pdf',
-        other_documents: null,
-        cgpa: '3.45',
-        notification_sent: true
-      },
-      {
-        id: 3,
-        user: { full_name: 'Chala Desta', email: 'chala@example.com' },
-        student_id: 'STU20240003',
-        department: 'Information Systems',
-        payment_status: 'VERIFIED',
-        documents_verified: true,
-        documents_submitted: true,
-        is_enrolled: true,
-        grade_8_certificate: 'grade8.pdf',
-        grade_12_certificate: 'grade12.pdf',
-        transcript: 'transcript.pdf',
-        other_documents: 'other.pdf',
-        cgpa: '3.78',
-        notification_sent: true
-      },
-      {
-        id: 4,
-        user: { full_name: 'Daniel Worku', email: 'daniel@example.com' },
-        student_id: 'STU20240004',
-        department: 'Computer Science',
-        payment_status: 'VERIFIED',
-        documents_verified: false,
-        documents_submitted: false,
-        is_enrolled: false,
-        grade_8_certificate: null,
-        grade_12_certificate: null,
-        transcript: null,
-        other_documents: null,
-        cgpa: '0.00',
-        notification_sent: false
-      },
-    ];
-    setStudents(sampleStudents);
-    setFilteredStudents(sampleStudents);
-    setDataSource('sample');
-    setIsUsingSampleData(true);
-    calculateStats(sampleStudents);
-    toast.success('📊 Sample data loaded for testing');
-  };
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -290,12 +203,12 @@ const RegistrarDashboard = () => {
     setStats({
       total: arr.length,
       verified: arr.filter(s => s.documents_verified === true).length,
-      pending: arr.filter(s => !s.documents_verified && s.payment_status !== 'REJECTED').length,
-      rejected: arr.filter(s => s.payment_status === 'REJECTED').length,
+      pending: arr.filter(s => s.documents_status === 'PENDING').length,
+      rejected: arr.filter(s => s.documents_status === 'REJECTED').length,
       active: arr.filter(s => s.is_enrolled === true).length,
       documents_submitted: arr.filter(s => s.documents_submitted === true).length,
       ready_for_activation: arr.filter(s => s.documents_verified === true && s.payment_status === 'VERIFIED' && !s.is_enrolled).length,
-      pending_upload: arr.filter(s => s.payment_status === 'VERIFIED' && !s.documents_submitted).length,
+      pending_upload: arr.filter(s => s.payment_status === 'VERIFIED' && s.documents_status === 'NOT_SUBMITTED').length,
       notification_sent: arr.filter(s => s.notification_sent === true).length,
     });
   };
@@ -348,6 +261,11 @@ const RegistrarDashboard = () => {
 
   // ============ VERIFY STUDENT DOCUMENTS ============
   const verifyStudentDocuments = async (studentId, action, reason = '') => {
+    if (action === 'reject' && !reason.trim()) {
+      toast.error('A rejection reason is required.');
+      return;
+    }
+
     setActionLoading(true);
     try {
       console.log(`🔍 ${action === 'verify' ? 'Verifying' : 'Rejecting'} documents for student:`, studentId);
@@ -363,6 +281,7 @@ const RegistrarDashboard = () => {
       await fetchStudents();
       setShowVerifyModal(false);
       setSelectedStudent(null);
+      setDocumentRejectionReason('');
       
     } catch (error) {
       console.error('❌ Failed to verify documents:', error);
@@ -475,8 +394,8 @@ const RegistrarDashboard = () => {
     if (status !== 'all') {
       filtered = filtered.filter(s => {
         if (status === 'verified') return s.documents_verified === true;
-        if (status === 'pending') return !s.documents_verified && s.payment_status !== 'REJECTED';
-        if (status === 'rejected') return s.payment_status === 'REJECTED';
+        if (status === 'pending') return s.documents_status === 'PENDING';
+        if (status === 'rejected') return s.documents_status === 'REJECTED';
         if (status === 'active') return s.is_enrolled === true;
         if (status === 'documents') return s.documents_submitted === true;
         if (status === 'ready') return s.documents_verified === true && s.payment_status === 'VERIFIED' && !s.is_enrolled;
@@ -540,6 +459,43 @@ const RegistrarDashboard = () => {
         }}>
           <CheckCircle size={16} />
           Verified
+        </span>
+      );
+    } else if (student.documents_status === 'REJECTED') {
+      return (
+        <span
+          title={student.documents_rejection_reason || 'Documents rejected'}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 12px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 500,
+            background: '#fee2e2',
+            color: '#b91c1c',
+          }}
+        >
+          <X size={14} />
+          Rejected
+        </span>
+      );
+    } else if (student.documents_status === 'PENDING') {
+      return (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '4px 12px',
+          borderRadius: '20px',
+          fontSize: '12px',
+          fontWeight: 500,
+          background: '#fef3c7',
+          color: '#d97706',
+        }}>
+          <Clock size={14} />
+          Pending Review
         </span>
       );
     } else if (student.documents_submitted && student.payment_status === 'VERIFIED') {
@@ -684,13 +640,7 @@ const RegistrarDashboard = () => {
               <span style={{ fontWeight: 'bold', color: '#2563eb' }}>📋 Workflow:</span> 
               <span style={{ color: '#64748b' }}> Notify → Upload → Verify → Activate</span>
             </span>
-            {dataSource === 'none' && !isUsingSampleData && (
-              <span style={{ display: 'block', color: '#dc2626', fontSize: '14px', marginTop: '4px' }}>⚠️ No data loaded</span>
-            )}
-            {isUsingSampleData && (
-              <span style={{ display: 'block', color: '#f59e0b', fontSize: '14px', marginTop: '4px' }}>⚠️ Using SAMPLE data</span>
-            )}
-            {dataSource !== 'none' && !isUsingSampleData && students.length > 0 && (
+            {students.length > 0 && (
               <span style={{ display: 'block', color: '#16a34a', fontSize: '14px', marginTop: '4px' }}>✅ {students.length} students from database</span>
             )}
             {error && (
@@ -722,23 +672,6 @@ const RegistrarDashboard = () => {
           >
             <RefreshCw size={18} className={refreshing ? 'spinning' : ''} />
             Refresh
-          </button>
-          <button
-            onClick={loadSampleData}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 20px',
-              background: '#8b5cf6',
-              border: 'none',
-              borderRadius: '8px',
-              color: 'white',
-              cursor: 'pointer',
-              transition: 'all 0.3s ease',
-            }}
-          >
-            Load Sample Data
           </button>
           <button
             style={{
@@ -1211,19 +1144,6 @@ const RegistrarDashboard = () => {
                         >
                           Refresh
                         </button>
-                        <button
-                          onClick={loadSampleData}
-                          style={{
-                            padding: '8px 20px',
-                            background: '#8b5cf6',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Load Sample Data
-                        </button>
                       </div>
                     </div>
                   </td>
@@ -1369,7 +1289,7 @@ const RegistrarDashboard = () => {
 )}
 
                         {/* 3. VERIFY DOCUMENTS - Only if docs uploaded but not verified */}
-                        {student.documents_submitted && !student.documents_verified && student.payment_status === 'VERIFIED' && (
+                        {student.documents_status === 'PENDING' && !student.documents_verified && student.payment_status === 'VERIFIED' && (
                           <button
                             onClick={() => {
                               setSelectedStudent(student);
@@ -1655,8 +1575,8 @@ const RegistrarDashboard = () => {
             setSelectedStudent(null);
             fetchStudents();
           }}
-          onVerify={(studentId, action) => {
-            verifyStudentDocuments(studentId, action);
+          onVerify={(studentId, action, reason) => {
+            return verifyStudentDocuments(studentId, action, reason || '');
           }}
         />
       )}
@@ -1691,7 +1611,10 @@ const RegistrarDashboard = () => {
                 Verify Student Documents
               </h2>
               <button
-                onClick={() => setShowVerifyModal(false)}
+                  onClick={() => {
+                    setShowVerifyModal(false);
+                    setDocumentRejectionReason('');
+                  }}
                 style={{ background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}
               >×</button>
             </div>
@@ -1727,9 +1650,33 @@ const RegistrarDashboard = () => {
               </div>
             </div>
 
+            <label style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: 600,
+              color: '#334155',
+              marginBottom: '6px',
+            }}>
+              Rejection reason (required)
+            </label>
+            <textarea
+              value={documentRejectionReason}
+              onChange={(e) => setDocumentRejectionReason(e.target.value)}
+              placeholder="Explain what needs to be corrected"
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                resize: 'vertical',
+              }}
+            />
+
             <div style={{ display: 'flex', gap: '12px' }}>
               <button
-                onClick={() => verifyStudentDocuments(selectedStudent.id, 'reject', 'Incomplete documents')}
+                onClick={() => verifyStudentDocuments(selectedStudent.id, 'reject', documentRejectionReason)}
                 disabled={actionLoading}
                 style={{
                   flex: 1,

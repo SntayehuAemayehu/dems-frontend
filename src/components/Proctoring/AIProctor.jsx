@@ -13,6 +13,7 @@ const AIProctor = ({
   onViolation,
   onAutoSubmit,
   onStatusUpdate,
+  onControlMessage,
 }) => {
   const { user } = useSelector((state) => state.auth || {});
 
@@ -36,6 +37,10 @@ const AIProctor = ({
   const createPeerConnectionRef = useRef(null);
   const createOfferRef = useRef(null);
   const liveStreamStartTimeoutRef = useRef(null);
+  const voicePcRef = useRef(null);
+  const voiceAudioRef = useRef(null);
+  const onControlMessageRef = useRef(onControlMessage);
+  onControlMessageRef.current = onControlMessage;
 
   // ==================== STATE ====================
   const [isInitializing, setIsInitializing] = useState(true);
@@ -101,7 +106,56 @@ const AIProctor = ({
         try {
           const data = JSON.parse(event.data);
 
-          if (data.type === 'user_join' && data.role === 'TEACHER') {
+          if (data.type === 'voice_offer' && data.offer && data.sender_id) {
+            voicePcRef.current?.close();
+            const peer = new RTCPeerConnection({
+              iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+              ],
+            });
+            voicePcRef.current = peer;
+            peer.ontrack = (trackEvent) => {
+              const audioStream = trackEvent.streams?.[0];
+              if (voiceAudioRef.current && audioStream) {
+                voiceAudioRef.current.srcObject = audioStream;
+                voiceAudioRef.current.play().catch((err) => console.warn('Audio playback was blocked:', err));
+              }
+            };
+            peer.onicecandidate = (candidateEvent) => {
+              if (candidateEvent.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({
+                  type: 'voice_ice_candidate',
+                  candidate: candidateEvent.candidate,
+                  target_user_id: data.sender_id,
+                  sender_id: user?.id,
+                }));
+              }
+            };
+            await peer.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await peer.createAnswer();
+            await peer.setLocalDescription(answer);
+            wsRef.current.send(JSON.stringify({
+              type: 'voice_answer',
+              answer,
+              target_user_id: data.sender_id,
+              sender_id: user?.id,
+            }));
+          }
+
+          if (data.type === 'voice_ice_candidate' && data.candidate && voicePcRef.current) {
+            await voicePcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+          }
+
+          if (data.type === 'exam_update' || data.type === 'add_time') {
+            onControlMessageRef.current?.(data);
+          }
+
+          if (data.type === 'stream_request') {
+            createPeerConnectionRef.current?.();
+          }
+
+          if (data.type === 'user_join' && ['TEACHER', 'ADMIN'].includes(data.role)) {
             console.log('Teacher joined, re-sending offer...');
             createPeerConnectionRef.current?.();
           };
@@ -396,6 +450,9 @@ const AIProctor = ({
       if (pcRef.current) {
         pcRef.current.close();
       }
+      if (voicePcRef.current) {
+        voicePcRef.current.close();
+      }
       if (wsRef.current) {
         try {
           wsRef.current.close();
@@ -430,6 +487,7 @@ const AIProctor = ({
         color: 'white',
       }}
     >
+      <audio ref={voiceAudioRef} autoPlay style={{ display: 'none' }} />
       <div style={{ position: 'relative' }}>
         <video
           ref={videoRef}

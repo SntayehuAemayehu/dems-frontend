@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { Modal } from 'antd';
 import toast from 'react-hot-toast';
 import {
     AlertCircle, Hand, HandMetal, MessageSquare, Mic, MicOff, Monitor,
@@ -625,10 +626,18 @@ const LiveClass = () => {
     };
 
     const removeParticipant = (participant) => {
-        if (!window.confirm(`Remove ${participant.user} from this live class?`)) return;
-        if (!sendSocketMessage({ type: 'remove_student', target_id: participant.user_id })) {
-            toast.error('Could not remove the student while disconnected.');
-        }
+        Modal.confirm({
+            title: 'Remove participant?',
+            content: `Remove ${participant.user} from this live class?`,
+            okText: 'Remove',
+            okButtonProps: { danger: true },
+            cancelText: 'Cancel',
+            onOk: () => {
+                if (!sendSocketMessage({ type: 'remove_student', target_id: participant.user_id })) {
+                    toast.error('Could not remove the student while disconnected.');
+                }
+            },
+        });
     };
 
     const leaveClass = () => {

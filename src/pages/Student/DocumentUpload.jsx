@@ -25,6 +25,8 @@ const DocumentUpload = () => {
   });
   const [documentsVerified, setDocumentsVerified] = useState(false);
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [documentsStatus, setDocumentsStatus] = useState('NOT_SUBMITTED');
+  const [documentsRejectionReason, setDocumentsRejectionReason] = useState('');
   
   const [files, setFiles] = useState({
     grade_8_certificate: null,
@@ -60,6 +62,10 @@ const DocumentUpload = () => {
         setHasNotification(data.notification_sent || false);
         setDocumentsVerified(data.documents_verified || false);
         setIsEnrolled(data.is_enrolled || false);
+        setDocumentsStatus(data.documents_status || (
+          data.documents_verified ? 'APPROVED' : data.documents_submitted ? 'PENDING' : 'NOT_SUBMITTED'
+        ));
+        setDocumentsRejectionReason(data.documents_rejection_reason || '');
         
         // Check existing documents
         setExistingDocuments({
@@ -69,10 +75,16 @@ const DocumentUpload = () => {
           other_documents: !!data.other_documents,
         });
         
-        // If documents already uploaded, show status
-        if (data.documents_submitted) {
+        // A rejected submission remains marked as submitted, but it can be replaced.
+        if (data.documents_status === 'PENDING') {
           toast.info('📄 Your documents have already been submitted and are pending verification.', {
             duration: 5000,
+          });
+        }
+
+        if (data.documents_status === 'REJECTED') {
+          toast.error('Your documents were rejected. Review the Registrar’s reason and upload corrected documents.', {
+            duration: 7000,
           });
         }
         
@@ -142,6 +154,11 @@ const DocumentUpload = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (documentsStatus === 'PENDING' || documentsStatus === 'APPROVED' || documentsVerified) {
+      toast.error('Documents cannot be uploaded while review is pending or after approval.');
+      return;
+    }
+
     // Check if any files are uploaded
     const hasFiles = Object.values(files).some(f => f !== null);
     if (!hasFiles) {
@@ -167,7 +184,7 @@ const DocumentUpload = () => {
     });
 
     try {
-      const response = await api.post('/auth/upload-documents/', formData, {
+      const response = await api.post('/auth/documents/upload/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           if (progressEvent.total) {
@@ -179,6 +196,24 @@ const DocumentUpload = () => {
 
       console.log('✅ Upload response:', response.data);
       toast.success('✅ Documents uploaded successfully! Waiting for verification.');
+      setDocumentsStatus('PENDING');
+      setDocumentsRejectionReason('');
+      setExistingDocuments((previous) => ({
+        ...previous,
+        ...Object.fromEntries(Object.keys(files).filter((key) => files[key]).map((key) => [key, true])),
+      }));
+      setFiles({
+        grade_8_certificate: null,
+        grade_12_certificate: null,
+        transcript: null,
+        other_documents: null,
+      });
+      setFileNames({
+        grade_8_certificate: '',
+        grade_12_certificate: '',
+        transcript: '',
+        other_documents: '',
+      });
       
       // Navigate to dashboard after successful upload
       setTimeout(() => {
@@ -262,7 +297,7 @@ const DocumentUpload = () => {
   }
 
   // If documents already verified and account active
-  if (documentsVerified && isEnrolled) {
+  if ((documentsVerified || documentsStatus === 'APPROVED') && isEnrolled) {
     return (
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px', textAlign: 'center' }}>
         <div style={{
@@ -300,7 +335,7 @@ const DocumentUpload = () => {
   }
 
   // If documents already verified but account not active
-  if (documentsVerified && !isEnrolled) {
+  if ((documentsVerified || documentsStatus === 'APPROVED') && !isEnrolled) {
     return (
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px', textAlign: 'center' }}>
         <div style={{
@@ -315,6 +350,43 @@ const DocumentUpload = () => {
           </h2>
           <p style={{ color: '#92400e', fontSize: '16px' }}>
             Your documents are verified. The Registrar will activate your account soon.
+          </p>
+          <button
+            onClick={() => navigate('/dashboard')}
+            style={{
+              marginTop: '24px',
+              padding: '12px 32px',
+              background: '#d97706',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (documentsStatus === 'PENDING') {
+    return (
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px', textAlign: 'center' }}>
+        <div style={{
+          background: '#fef3c7',
+          padding: '48px',
+          borderRadius: '16px',
+          border: '2px solid #fde68a',
+        }}>
+          <Clock size={64} color="#d97706" style={{ margin: '0 auto 16px' }} />
+          <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#92400e', marginBottom: '8px' }}>
+            Documents Pending Review
+          </h2>
+          <p style={{ color: '#92400e', fontSize: '16px' }}>
+            Your documents have been submitted and cannot be changed while the Registrar reviews them.
           </p>
           <button
             onClick={() => navigate('/dashboard')}
@@ -423,6 +495,25 @@ const DocumentUpload = () => {
               The Registrar has requested you to upload your documents. Please upload the required documents below.
             </p>
           </div>
+        </div>
+      )}
+
+      {documentsStatus === 'REJECTED' && (
+        <div style={{
+          background: '#fee2e2',
+          padding: '16px 20px',
+          borderRadius: '12px',
+          border: '1px solid #fecaca',
+          marginBottom: '24px',
+          color: '#991b1b',
+        }}>
+          <strong>Status: Rejected.</strong>
+          <span> Please correct the documents listed below and upload them again for review.</span>
+          {documentsRejectionReason && (
+            <p style={{ margin: '8px 0 0', fontSize: '14px' }}>
+              Registrar’s reason: {documentsRejectionReason}
+            </p>
+          )}
         </div>
       )}
 

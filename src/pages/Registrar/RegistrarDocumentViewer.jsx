@@ -13,6 +13,7 @@ const RegistrarDocumentViewer = ({ studentId, onClose, onVerify }) => {
   const [previewing, setPreviewing] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   useEffect(() => {
     fetchDocuments();
@@ -150,9 +151,13 @@ const RegistrarDocumentViewer = ({ studentId, onClose, onVerify }) => {
     }
   };
 
-  const handleVerify = (action) => {
+  const handleVerify = async (action) => {
+    if (action === 'reject' && !rejectionReason.trim()) {
+      toast.error('A rejection reason is required.');
+      return;
+    }
     if (onVerify) {
-      onVerify(studentId, action);
+      await onVerify(studentId, action, rejectionReason.trim());
     }
     onClose();
   };
@@ -294,12 +299,33 @@ const RegistrarDocumentViewer = ({ studentId, onClose, onVerify }) => {
             <span style={{ color: '#64748b', fontSize: '14px' }}>Status:</span>
             <span style={{
               fontWeight: 500, marginLeft: '8px',
-              color: documents.documents_verified ? '#16a34a' : '#f59e0b',
+              color: documents.documents_status === 'REJECTED'
+                ? '#b91c1c'
+                : documents.documents_verified ? '#16a34a' : '#d97706',
             }}>
-              {documents.documents_verified ? '✅ Verified' : '⏳ Pending Review'}
+              {documents.documents_status === 'REJECTED'
+                ? '❌ Rejected'
+                : documents.documents_verified
+                  ? '✅ Approved'
+                  : documents.documents_status === 'PENDING'
+                    ? '⏳ Pending Review'
+                    : 'Not Submitted'}
             </span>
           </div>
         </div>
+
+        {documents.documents_status === 'REJECTED' && documents.documents_rejection_reason && (
+          <div role="alert" style={{
+            marginBottom: 20,
+            padding: '12px 16px',
+            borderRadius: 8,
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#991b1b',
+          }}>
+            <strong>Rejection reason:</strong> {documents.documents_rejection_reason}
+          </div>
+        )}
 
         {/* Documents List */}
         <div style={{ marginBottom: '20px' }}>
@@ -382,6 +408,34 @@ const RegistrarDocumentViewer = ({ studentId, onClose, onVerify }) => {
           )}
         </div>
 
+        {documents.documents_status === 'PENDING' && !documents.documents_verified &&
+         documents.files && documents.files.length > 0 && (
+          <div style={{ marginTop: '20px' }}>
+            <label style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: 600,
+              color: '#334155',
+              marginBottom: '6px',
+            }}>
+              Rejection reason (required to reject)
+            </label>
+            <textarea
+              value={rejectionReason}
+              onChange={(event) => setRejectionReason(event.target.value)}
+              placeholder="Explain what needs to be corrected"
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                resize: 'vertical',
+              }}
+            />
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div style={{
           display: 'flex', gap: '12px', borderTop: '1px solid #e2e8f0',
@@ -393,7 +447,7 @@ const RegistrarDocumentViewer = ({ studentId, onClose, onVerify }) => {
             fontWeight: 600, cursor: 'pointer', minWidth: '100px',
           }}>Close</button>
 
-          {documents.documents_submitted && !documents.documents_verified &&
+          {documents.documents_status === 'PENDING' && !documents.documents_verified &&
            documents.files && documents.files.length > 0 && (
             <>
               <button onClick={() => handleVerify('reject')} style={{

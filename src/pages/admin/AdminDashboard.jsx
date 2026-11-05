@@ -7,9 +7,9 @@
 // FIXED: CRUD for Users, Departments, Fee Structures
 // FIXED: Password Visibility on Create User
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Settings, Users, BookOpen, RefreshCw,
   CheckCircle, XCircle, Clock, DollarSign,
@@ -27,22 +27,145 @@ import {
   ChevronDown,
   ChevronUp,
   Save, X, Upload, FileText,
-  Download, Printer,CheckSquare,Square,
-  Timer, Lock, Unlock, Pencil, EyeOff, Newspaper
+  Printer,CheckSquare,Square,
+  Timer, Lock, Unlock, Pencil, EyeOff, Newspaper, MoreVertical
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../api/api';
+import api, { getMediaUrl } from '../../api/api';
+import AdminNews from './AdminNews';
+
+const flattenActionChildren = (children) => React.Children.toArray(children).flatMap((child) => (
+  React.isValidElement(child) && child.type === React.Fragment
+    ? flattenActionChildren(child.props.children)
+    : [child]
+));
+
+const getActionText = (children) => React.Children.toArray(children).map((child) => (
+  typeof child === 'string' || typeof child === 'number'
+    ? String(child)
+    : React.isValidElement(child) ? getActionText(child.props.children) : ''
+)).join(' ').trim();
+
+const getActionLabel = (action, index) => {
+  if (!React.isValidElement(action)) return `Action ${index + 1}`;
+  if (action.props['aria-label'] || action.props.title) {
+    return action.props['aria-label'] || action.props.title;
+  }
+  const text = getActionText(action.props.children);
+  return text || `Action ${index + 1}`;
+};
+
+const CAPACITY_RANGE_LIMITS = {
+  '1-50': { min: 1, max: 50 },
+  '50-100': { min: 50, max: 100 },
+  '100-200': { min: 100, max: 200 },
+  custom: { min: 1, max: 2147483647 },
+};
+
+const AdminActionMenu = ({ children, style }) => {
+  const actions = flattenActionChildren(children);
+  if (actions.length === 1) return <div style={style}>{actions[0]}</div>;
+  if (actions.length < 2) return null;
+
+  return (
+    <details className="admin-action-menu" style={{ position: 'relative', display: 'inline-block', ...style }}>
+      <summary
+        aria-label="More actions"
+        title="More actions"
+        style={{
+          listStyle: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 36,
+          height: 36,
+          border: '1px solid #cbd5e1',
+          borderRadius: 8,
+          background: 'white',
+          color: '#334155',
+          cursor: 'pointer',
+        }}
+      >
+        <MoreVertical size={18} />
+      </summary>
+      <div
+        role="menu"
+        style={{
+          position: 'absolute',
+          zIndex: 1100,
+          top: 'calc(100% + 4px)',
+          right: 0,
+          minWidth: 180,
+          padding: 4,
+          border: '1px solid #e2e8f0',
+          borderRadius: 8,
+          background: 'white',
+          boxShadow: '0 8px 24px rgba(15, 23, 42, 0.16)',
+        }}
+      >
+        {actions.map((action, index) => {
+          if (!React.isValidElement(action) || action.type !== 'button') return action;
+          const label = getActionLabel(action, index);
+          const originalClick = action.props.onClick;
+
+          return React.cloneElement(action, {
+            key: action.key || label,
+            role: 'menuitem',
+            'aria-label': label,
+            title: label,
+            onClick: (event) => {
+              originalClick?.(event);
+              if (!event.defaultPrevented) {
+                const menu = event.currentTarget.closest('details');
+                if (menu) menu.open = false;
+              }
+            },
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              padding: '9px 10px',
+              border: 'none',
+              borderRadius: 6,
+              background: 'transparent',
+              color: action.props.style?.color || '#334155',
+              cursor: action.props.disabled ? 'not-allowed' : 'pointer',
+              textAlign: 'left',
+              opacity: action.props.disabled ? 0.55 : 1,
+            },
+            children: (
+              <>
+                {action.props.children}
+                {!getActionText(action.props.children) && <span>{label}</span>}
+              </>
+            ),
+          });
+        })}
+      </div>
+    </details>
+  );
+};
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [activeTab, setActiveTab] = useState('overview');
+  const [filterRole, setFilterRole] = useState('all');
+  const [systemLogRole, setSystemLogRole] = useState('all');
+  const [activeTab, setActiveTab] = useState(() => (
+    location.pathname === '/admin/news' ? 'news' : 'overview'
+  ));
   const [actionLoading, setActionLoading] = useState(false);
+  const [confirmation, setConfirmation] = useState(null);
+  const [showSystemLockModal, setShowSystemLockModal] = useState(false);
+  const [systemLockDraft, setSystemLockDraft] = useState('');
+  const hasLoadedData = useRef(false);
   
   // ============ SYSTEM LOCK STATE ============
   const [systemLocked, setSystemLocked] = useState(false);
@@ -94,6 +217,12 @@ const AdminDashboard = () => {
 
   const [proctorImages, setProctorImages] = useState([]);
   const [selectedProctorSession, setSelectedProctorSession] = useState(null);
+  const [proctorDepartments, setProctorDepartments] = useState([]);
+  const [proctorStudents, setProctorStudents] = useState([]);
+  const [selectedProctorDepartment, setSelectedProctorDepartment] = useState('');
+  const [selectedProctorStudent, setSelectedProctorStudent] = useState(null);
+  const [studentProctorImages, setStudentProctorImages] = useState([]);
+  const [loadingProctorDrilldown, setLoadingProctorDrilldown] = useState(false);
   // ============ BATCH PROCESSING STATE - ADD THIS ============
 const [batchMode, setBatchMode] = useState(false);
 const [selectedSchedules, setSelectedSchedules] = useState([]);
@@ -113,6 +242,8 @@ const [batchReason, setBatchReason] = useState('');
     role: 'STUDENT',
     department: '',
     headed_department: '',
+    year: 1,
+    semester: 1,
   });
 
   const [feeStructureForm, setFeeStructureForm] = useState({
@@ -155,6 +286,7 @@ const [batchReason, setBatchReason] = useState('');
     title: '',
     description: '',
     credit_hours: 3,
+    year: 1,
     semester: '1',
     capacity: 30,
     department: '',
@@ -162,8 +294,17 @@ const [batchReason, setBatchReason] = useState('');
     is_active: true,
     is_approved: false,
   });
+  const [capacityRange, setCapacityRange] = useState('1-50');
 
   // ============ FETCH FUNCTIONS ============
+
+  useEffect(() => {
+    if (location.pathname === '/admin/news') {
+      setActiveTab('news');
+    } else {
+      setActiveTab((currentTab) => currentTab === 'news' ? 'overview' : currentTab);
+    }
+  }, [location.pathname]);
 
   const fetchPaymentPeriods = useCallback(async () => {
     try {
@@ -203,48 +344,33 @@ const [batchReason, setBatchReason] = useState('');
     }
   }, []);
 
-  // ============ SYSTEM LOCK FUNCTION - FIXED TOGGLE ============
-     // ============ SYSTEM LOCK FUNCTION - FIXED ============
-  // ============ SYSTEM LOCK FUNCTION - FIXED ============
-const toggleSystemLock = async () => {
-  try {
-    // Determine current action
-    const action = systemLocked ? 'unlock' : 'lock';
-    
-    // If locking, ask for message
-    let message = systemLockMessage;
-    if (action === 'lock') {
-      const userMessage = prompt('Enter lock message (optional):', 'System is currently locked for maintenance. Please try again later.');
-      if (userMessage === null) return; // User cancelled
-      message = userMessage || 'System is currently locked for maintenance. Please try again later.';
-    } else {
-      // If unlocking, confirm first
-      if (!window.confirm('⚠️ Are you sure you want to UNLOCK the system?\n\nAll users will be able to access the system again.')) {
-        return;
-      }
-    }
-    
+  const requestConfirmation = (title, message, confirmLabel = 'Confirm') => new Promise((resolve) => {
+    setConfirmation({ title, message, confirmLabel, resolve });
+  });
+
+  const toggleSystemLock = () => {
+    setSystemLockDraft(systemLockMessage || 'System is currently locked for maintenance. Please try again later.');
+    setShowSystemLockModal(true);
+  };
+
+  const submitSystemLock = async () => {
     setLockLoading(true);
-    
-    const response = await api.post('/analytics/system-lock/', {
-      action: action,
-      message: message
-    });
-    
-    console.log('✅ System lock response:', response.data);
-    
-    setSystemLocked(response.data.is_locked);
-    setSystemLockMessage(response.data.lock_message || response.data.message);
-    toast.success(response.data.message);
-    await fetchData();
-    
-  } catch (error) {
-    console.error('Failed to toggle system lock:', error);
-    toast.error(error.response?.data?.error || 'Failed to toggle system lock');
-  } finally {
-    setLockLoading(false);
-  }
-};
+    try {
+      const response = await api.post('/analytics/system-lock/', {
+        action: systemLocked ? 'unlock' : 'lock',
+        message: systemLockDraft.trim() || 'System is currently locked for maintenance. Please try again later.',
+      });
+      setSystemLocked(response.data.is_locked);
+      setSystemLockMessage(response.data.lock_message || response.data.message);
+      setShowSystemLockModal(false);
+      toast.success(response.data.message);
+      await fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to toggle system lock');
+    } finally {
+      setLockLoading(false);
+    }
+  };
 
   // ============ GENERATE PAYMENT SCHEDULES ============
   const handleGeneratePaymentSchedules = async () => {
@@ -277,7 +403,7 @@ const toggleSystemLock = async () => {
 
   // ============ DELETE PAYMENT SCHEDULE - FIXED ============
   const handleDeletePaymentSchedule = async (scheduleId) => {
-    if (!window.confirm('Are you sure you want to delete this payment schedule? This action cannot be undone.')) return;
+    if (!(await requestConfirmation('Delete payment schedule?', 'This action cannot be undone.', 'Delete'))) return;
     
     setActionLoading(true);
     try {
@@ -294,7 +420,7 @@ const toggleSystemLock = async () => {
 
   const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!hasLoadedData.current) setLoading(true);
       setRefreshing(true);
 
       // Fetch System Lock Status
@@ -342,7 +468,7 @@ const toggleSystemLock = async () => {
       }
 
       try {
-        const logsRes = await api.get('/analytics/admin/logs/?limit=50');
+        const logsRes = await api.get('/analytics/admin/logs/?limit=500');
         setSystemLogs(Array.isArray(logsRes.data) ? logsRes.data : []);
       } catch (e) {
         setSystemLogs([]);
@@ -436,6 +562,7 @@ const toggleSystemLock = async () => {
       console.error('Failed to fetch admin data:', error);
       toast.error('Failed to load admin data');
     } finally {
+      hasLoadedData.current = true;
       setLoading(false);
       setRefreshing(false);
     }
@@ -492,7 +619,7 @@ const handleBatchDeleteSchedules = async () => {
     return;
   }
   
-  if (!window.confirm(`Are you sure you want to delete ${selectedSchedules.length} payment schedule(s)? This action cannot be undone.`)) {
+  if (!(await requestConfirmation('Delete payment schedules?', `Delete ${selectedSchedules.length} payment schedule(s)? This action cannot be undone.`, 'Delete'))) {
     return;
   }
   
@@ -746,7 +873,11 @@ const handleBatchGenerateSchedules = async () => {
     return;
   }
   
-  if (!window.confirm(`Generate payment schedules for ALL students in ${departments.find(d => d.id == selectedDepartmentForSchedule)?.name || 'selected'} department?`)) {
+  if (!(await requestConfirmation(
+    'Generate payment schedules?',
+    `Generate schedules for all students in ${departments.find(d => d.id == selectedDepartmentForSchedule)?.name || 'selected'} department?`,
+    'Generate'
+  ))) {
     return;
   }
   
@@ -795,6 +926,8 @@ const handleBatchGenerateSchedules = async () => {
         role: userForm.role,
         department: userForm.department || '',
         headed_department: userForm.headed_department || '',
+        year: Number(userForm.year) || 1,
+        semester: Number(userForm.semester) || 1,
       };
 
       console.log('📝 Creating user with data:', userData);
@@ -838,7 +971,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeleteUser = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
+    if (!(await requestConfirmation('Delete user?', 'This action cannot be undone.', 'Delete'))) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/admin/users/${userId}/`);
@@ -874,6 +1007,8 @@ const handleBatchGenerateSchedules = async () => {
       role: 'STUDENT',
       department: '',
       headed_department: '',
+      year: 1,
+      semester: 1,
     });
     setShowCreatePassword(false);
     setShowConfirmPassword(false);
@@ -915,7 +1050,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeleteCourse = async (courseId) => {
-    if (!window.confirm('Are you sure you want to delete this course?')) return;
+    if (!(await requestConfirmation('Delete course?', 'This action cannot be undone.', 'Delete'))) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/admin/courses/${courseId}/`);
@@ -945,11 +1080,13 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const resetCourseForm = () => {
+    setCapacityRange('1-50');
     setCourseForm({
       course_code: '',
       title: '',
       description: '',
       credit_hours: 3,
+      year: 1,
       semester: '1',
       capacity: 30,
       department: '',
@@ -1010,7 +1147,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeleteDepartment = async (departmentId) => {
-    if (!window.confirm('Are you sure you want to delete this department? This will affect all associated students and courses.')) return;
+    if (!(await requestConfirmation('Delete department?', 'This will affect all associated students and courses.', 'Delete'))) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/admin/departments/${departmentId}/`);
@@ -1085,7 +1222,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeleteFeeStructure = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this fee structure? This will affect payment schedules.')) return;
+    if (!(await requestConfirmation('Delete fee structure?', 'This will affect payment schedules.', 'Delete'))) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/fee-structures/${id}/`);
@@ -1149,7 +1286,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeleteBank = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this bank account?')) return;
+    if (!(await requestConfirmation('Delete bank account?', 'This action cannot be undone.', 'Delete'))) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/banks/${id}/`);
@@ -1216,7 +1353,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeletePaymentPeriod = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this payment period?')) return;
+    if (!(await requestConfirmation('Delete payment period?', 'This action cannot be undone.', 'Delete'))) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/payment-periods/${id}/`);
@@ -1309,54 +1446,126 @@ const handleBatchGenerateSchedules = async () => {
     setShowProctoringDetailModal(true);
   };
 
+  const handleProctorDepartmentChange = async (department) => {
+    setSelectedProctorDepartment(department);
+    setSelectedProctorStudent(null);
+    setProctorStudents([]);
+    setStudentProctorImages([]);
+    if (!department) return;
+
+    setLoadingProctorDrilldown(true);
+    try {
+      const response = await api.get('/proctoring/review/students/', { params: { department } });
+      setProctorStudents(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      toast.error('Failed to load students for this department');
+    } finally {
+      setLoadingProctorDrilldown(false);
+    }
+  };
+
+  const handleProctorStudentSelect = async (student) => {
+    setSelectedProctorStudent(student);
+    setStudentProctorImages([]);
+    setLoadingProctorDrilldown(true);
+    try {
+      const response = await api.get('/proctoring/review/students/', {
+        params: { department: selectedProctorDepartment, student_id: student.id },
+      });
+      setStudentProctorImages(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      toast.error('Failed to load student proctoring images');
+    } finally {
+      setLoadingProctorDrilldown(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'proctoring') return;
+    api.get('/proctoring/review/students/')
+      .then((response) => setProctorDepartments(Array.isArray(response.data) ? response.data : []))
+      .catch(() => setProctorDepartments([]));
+  }, [activeTab]);
+
   // ============ FILTERS ============
 
   const getFilteredData = () => {
     if (activeTab === 'users') {
       return users.filter(u =>
-        (u.full_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-        (u.email?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        (
+          (u.full_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+          (u.email?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        ) &&
+        (filterStatus === 'all' || (filterStatus === 'active' ? u.is_active : !u.is_active)) &&
+        (filterRole === 'all' || u.role === filterRole)
       );
     }
     if (activeTab === 'courses') {
       return courses.filter(c =>
-        (c.title?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-        (c.course_code?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        (
+          (c.title?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+          (c.course_code?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        ) &&
+        (filterStatus === 'all' || (filterStatus === 'approved' ? c.is_approved : !c.is_approved))
       );
     }
     if (activeTab === 'payments') {
       return payments.filter(p =>
-        (p.student_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-        (p.transaction_id?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        (
+          (p.student_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+          (p.transaction_id?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        ) &&
+        (filterStatus === 'all' || p.status === filterStatus)
       );
     }
     if (activeTab === 'fee-structures') {
       return feeStructures.filter(f =>
-        (f.department_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-        (f.payment_period_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        (
+          (f.department_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+          (f.payment_period_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        ) &&
+        (filterStatus === 'all' || (filterStatus === 'active' ? f.is_active : !f.is_active))
       );
     }
     if (activeTab === 'banks') {
       return banks.filter(b =>
-        (b.bank_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-        (b.account_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        (
+          (b.bank_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+          (b.account_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        ) &&
+        (filterStatus === 'all' || (filterStatus === 'active' ? b.is_active : !b.is_active))
       );
     }
     if (activeTab === 'departments') {
       return departments.filter(d =>
-        (d.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-        (d.code?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        (
+          (d.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+          (d.code?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        ) &&
+        (filterStatus === 'all' || (filterStatus === 'active' ? d.is_active : !d.is_active))
       );
     }
     if (activeTab === 'payment-periods') {
       return paymentPeriods.filter(p =>
-        (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) &&
+        (filterStatus === 'all' || (filterStatus === 'active' ? p.is_active : !p.is_active))
+      );
+    }
+    if (activeTab === 'payment-schedules') {
+      return paymentSchedules.filter(schedule =>
+        (
+          (schedule.student_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+          (schedule.department_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+          (schedule.fee_structure_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        ) &&
+        (filterStatus === 'all' || schedule.status === filterStatus)
       );
     }
     return [];
   };
 
   const filteredData = getFilteredData();
+  const filteredPaymentSchedules = activeTab === 'payment-schedules' ? filteredData : paymentSchedules;
 
   // ============ RENDER HELPERS ============
 
@@ -1587,8 +1796,10 @@ const handleBatchGenerateSchedules = async () => {
               key={item.id}
               className={`sidebar-item ${activeTab === item.id ? 'active' : ''}`}
               onClick={() => {
-                if (item.id === 'news') navigate('/admin/news');
-                else setActiveTab(item.id);
+                setActiveTab(item.id);
+                setFilterStatus('all');
+                setFilterRole('all');
+                setSearchTerm('');
                 setMobileMenuOpen(false);
               }}
             >
@@ -1650,7 +1861,7 @@ const handleBatchGenerateSchedules = async () => {
       </div>
 
       {/* Main Content */}
-      <div className="content">
+      <div className="content" style={{ display: activeTab === 'news' ? 'none' : undefined }}>
    {/* Header */}
 <div style={{
   display: 'flex',
@@ -1678,7 +1889,7 @@ const handleBatchGenerateSchedules = async () => {
       )}
     </p>
   </div>
-  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+  <AdminActionMenu style={{ alignSelf: 'flex-start' }}>
     {/* ✅ SYSTEM LOCK/UNLOCK TOGGLE - FIXED */}
     <button
       onClick={toggleSystemLock}
@@ -1799,7 +2010,7 @@ const handleBatchGenerateSchedules = async () => {
       <UserPlus size={18} />
       Add User
     </button>
-  </div>
+  </AdminActionMenu>
 </div>
 
         {/* Stats Cards */}
@@ -1911,8 +2122,42 @@ const handleBatchGenerateSchedules = async () => {
                   <option value="pending">Pending Approval</option>
                 </>
               )}
+              {['fee-structures', 'banks', 'departments', 'payment-periods'].includes(activeTab) && (
+                <>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </>
+              )}
+              {activeTab === 'payment-schedules' && (
+                <>
+                  <option value="PENDING">Pending</option>
+                  <option value="PARTIAL">Partial</option>
+                  <option value="PAID">Paid</option>
+                  <option value="OVERDUE">Overdue</option>
+                  <option value="LOCKED">Locked</option>
+                </>
+              )}
             </select>
           </div>
+          {activeTab === 'users' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Users size={18} />
+              <select
+                aria-label="Filter users by role"
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value)}
+                style={{ padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', background: 'white' }}
+              >
+                <option value="all">All roles</option>
+                <option value="ADMIN">Administrator</option>
+                <option value="TEACHER">Teacher</option>
+                <option value="STUDENT">Student</option>
+                <option value="DEPT_HEAD">Department Head</option>
+                <option value="FINANCE">Finance Officer</option>
+                <option value="REGISTRAR">Registrar</option>
+              </select>
+            </div>
+          )}
           {(activeTab === 'users' || activeTab === 'courses') && (
             <button
               onClick={() => {
@@ -2027,7 +2272,7 @@ const handleBatchGenerateSchedules = async () => {
                             <td style={{ padding: '10px 12px', fontSize: '14px', color: '#475569' }}>{u.department || '—'}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>{getStatusBadge(u.is_active)}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <AdminActionMenu>
                                 <button
                                   onClick={() => { setSelectedItem(u); setUserForm({ full_name: u.full_name, phone: u.phone || '', role: u.role, is_active: u.is_active }); setShowEditUserModal(true); }}
                                   style={{ padding: '6px', border: 'none', borderRadius: '6px', cursor: 'pointer', background: '#eff6ff', color: '#3b82f6', transition: 'all 0.3s ease' }}
@@ -2051,7 +2296,7 @@ const handleBatchGenerateSchedules = async () => {
                                 >
                                   <Trash2 size={16} />
                                 </button>
-                              </div>
+                              </AdminActionMenu>
                             </td>
                           </tr>
                         ))
@@ -2095,9 +2340,9 @@ const handleBatchGenerateSchedules = async () => {
                               )}
                             </td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <AdminActionMenu>
                                 <button
-                                  onClick={() => { setSelectedItem(c); setCourseForm({ course_code: c.course_code, title: c.title, description: c.description || '', credit_hours: c.credit_hours || 3, semester: c.semester || '1', capacity: c.capacity || 30, department: c.department || '', instructor: c.instructor || '', is_active: c.is_active, is_approved: c.is_approved }); setShowCourseModal(true); }}
+                                  onClick={() => { setSelectedItem(c); setCapacityRange(c.capacity <= 50 ? '1-50' : c.capacity <= 100 ? '50-100' : c.capacity <= 200 ? '100-200' : 'custom'); setCourseForm({ course_code: c.course_code, title: c.title, description: c.description || '', credit_hours: c.credit_hours || 3, year: c.year || 1, semester: c.semester || '1', capacity: c.capacity || 30, department: c.department || '', instructor: c.instructor || '', is_active: c.is_active, is_approved: c.is_approved }); setShowCourseModal(true); }}
                                   style={{ padding: '6px', border: 'none', borderRadius: '6px', cursor: 'pointer', background: '#eff6ff', color: '#3b82f6' }}
                                   title="Edit Course"
                                 >
@@ -2121,7 +2366,7 @@ const handleBatchGenerateSchedules = async () => {
                                 >
                                   <Trash2 size={16} />
                                 </button>
-                              </div>
+                              </AdminActionMenu>
                             </td>
                           </tr>
                         ))
@@ -2228,7 +2473,7 @@ const handleBatchGenerateSchedules = async () => {
                             <td style={{ padding: '10px 12px', fontSize: '14px', color: '#475569' }}>{fs.grace_period_days || 0} days</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>{fs.is_active ? getStatusBadge(true) : getStatusBadge(false)}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                              <div style={{ display: 'flex', gap: '6px' }}>
+                              <AdminActionMenu>
                                 <button
                                   onClick={() => { 
                                     setSelectedItem(fs); 
@@ -2255,7 +2500,7 @@ const handleBatchGenerateSchedules = async () => {
                                 >
                                   <Trash2 size={16} />
                                 </button>
-                              </div>
+                              </AdminActionMenu>
                             </td>
                           </tr>
                         ))
@@ -2301,7 +2546,7 @@ const handleBatchGenerateSchedules = async () => {
                             <td style={{ padding: '10px 12px', fontSize: '14px', color: '#475569' }}><span style={{ background: '#e2e8f0', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>{d.code}</span></td>
                             <td style={{ padding: '10px 12px', fontSize: '14px', color: '#475569' }}>{d.head_name || '—'}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                              <div style={{ display: 'flex', gap: '6px' }}>
+                              <AdminActionMenu>
                                 <button
                                   onClick={() => { setSelectedItem(d); setDepartmentForm({ name: d.name, code: d.code, description: d.description || '', head: d.head || '', established_year: d.established_year || '' }); setShowDepartmentModal(true); }}
                                   style={{ padding: '6px', border: 'none', borderRadius: '6px', cursor: 'pointer', background: '#eff6ff', color: '#3b82f6' }}
@@ -2317,7 +2562,7 @@ const handleBatchGenerateSchedules = async () => {
                                 >
                                   <Trash2 size={16} />
                                 </button>
-                              </div>
+                              </AdminActionMenu>
                             </td>
                           </tr>
                         ))
@@ -2390,7 +2635,7 @@ const handleBatchGenerateSchedules = async () => {
                 <td style={{ padding: '10px 12px', fontSize: '14px', fontFamily: 'monospace', color: '#0f172a' }}>{bank.account_number}</td>
                 <td style={{ padding: '10px 12px', fontSize: '14px' }}>{bank.is_active ? getStatusBadge(true) : getStatusBadge(false)}</td>
                 <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                  <AdminActionMenu>
                     <button
                       onClick={() => { 
                         setSelectedItem(bank); 
@@ -2418,7 +2663,7 @@ const handleBatchGenerateSchedules = async () => {
                     >
                       <Trash2 size={16} />
                     </button>
-                  </div>
+                  </AdminActionMenu>
                 </td>
               </tr>
             ))}
@@ -2488,7 +2733,7 @@ const handleBatchGenerateSchedules = async () => {
                             </td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>{period.is_active ? getStatusBadge(true) : getStatusBadge(false)}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                              <div style={{ display: 'flex', gap: '6px' }}>
+                              <AdminActionMenu>
                                 <button
                                   onClick={() => { 
                                     setSelectedItem(period); 
@@ -2514,7 +2759,7 @@ const handleBatchGenerateSchedules = async () => {
                                 >
                                   <Trash2 size={16} />
                                 </button>
-                              </div>
+                              </AdminActionMenu>
                             </td>
                           </tr>
                         ))
@@ -2545,6 +2790,7 @@ const handleBatchGenerateSchedules = async () => {
           <span style={{ fontWeight: 600, color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <CheckSquare size={18} /> Batch Mode
           </span>
+          <AdminActionMenu>
           <button
             onClick={() => {
               setBatchMode(false);
@@ -2580,6 +2826,7 @@ const handleBatchGenerateSchedules = async () => {
           >
             {selectAllSchedules ? 'Deselect All' : 'Select All'}
           </button>
+          </AdminActionMenu>
           <span style={{
             background: '#2563eb',
             color: 'white',
@@ -2741,10 +2988,10 @@ const handleBatchGenerateSchedules = async () => {
           </tr>
         </thead>
         <tbody>
-          {paymentSchedules.length === 0 ? (
+          {filteredPaymentSchedules.length === 0 ? (
             <tr><td colSpan={batchMode ? 8 : 7} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>No payment schedules found</td></tr>
           ) : (
-            paymentSchedules.map((schedule) => {
+            filteredPaymentSchedules.map((schedule) => {
               const isSelected = selectedSchedules.includes(schedule.id);
               const amount = parseFloat(schedule.amount) || 0;
               
@@ -2812,7 +3059,7 @@ const handleBatchGenerateSchedules = async () => {
                     )}
                   </td>
                   <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                    <div style={{ display: 'flex', gap: '4px' }}>
+                    <AdminActionMenu>
                       {!batchMode && (
                         <>
                           <button
@@ -2867,7 +3114,7 @@ const handleBatchGenerateSchedules = async () => {
                           )}
                         </>
                       )}
-                    </div>
+                    </AdminActionMenu>
                   </td>
                 </tr>
               );
@@ -3008,34 +3255,105 @@ const handleBatchGenerateSchedules = async () => {
                   </div>
                 </div>
 
+                <section style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
+                  <h4 style={{ margin: '0 0 12px', color: '#0f172a' }}>Browse student captures</h4>
+                  <select
+                    aria-label="Select proctoring department"
+                    value={selectedProctorDepartment}
+                    onChange={(e) => handleProctorDepartmentChange(e.target.value)}
+                    style={{ padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', minWidth: '240px', background: 'white' }}
+                  >
+                    <option value="">Select department</option>
+                    {proctorDepartments.map((department) => (
+                      <option key={department.name} value={department.name}>{department.name}</option>
+                    ))}
+                  </select>
+
+                  {selectedProctorDepartment && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
+                      {proctorStudents.map((student) => (
+                        <button
+                          key={student.id}
+                          type="button"
+                          onClick={() => handleProctorStudentSelect(student)}
+                          style={{
+                            padding: '8px 12px',
+                            border: `1px solid ${selectedProctorStudent?.id === student.id ? '#2563eb' : '#cbd5e1'}`,
+                            borderRadius: '6px',
+                            color: selectedProctorStudent?.id === student.id ? '#1d4ed8' : '#334155',
+                            background: selectedProctorStudent?.id === student.id ? '#eff6ff' : 'white',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {student.full_name}
+                        </button>
+                      ))}
+                      {!loadingProctorDrilldown && proctorStudents.length === 0 && (
+                        <span style={{ color: '#64748b', padding: '8px 0' }}>No students in this department.</span>
+                      )}
+                    </div>
+                  )}
+
+                  {loadingProctorDrilldown && <p style={{ color: '#64748b', marginBottom: 0 }}>Loading…</p>}
+                  {selectedProctorStudent && (
+                    <div style={{ marginTop: '16px' }}>
+                      <h5 style={{ margin: '0 0 10px', color: '#334155' }}>
+                        {selectedProctorStudent.full_name}'s images
+                      </h5>
+                      {studentProctorImages.length === 0 && !loadingProctorDrilldown ? (
+                        <p style={{ color: '#64748b' }}>No captured images found for this student.</p>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' }}>
+                          {studentProctorImages.map((image) => (
+                            <a
+                              key={image.id}
+                              href={getMediaUrl(image.image)}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ color: '#334155', textDecoration: 'none', fontSize: '12px' }}
+                            >
+                              <img
+                                src={getMediaUrl(image.image)}
+                                alt={`${selectedProctorStudent.full_name} proctor capture`}
+                                style={{ width: '100%', height: '110px', objectFit: 'cover', borderRadius: '6px', border: `2px solid ${image.is_suspicious ? '#dc2626' : '#e2e8f0'}` }}
+                              />
+                              <span>{image.exam_title} · {image.capture_time ? new Date(image.capture_time).toLocaleString() : '—'}</span>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </section>
+
                 {proctorSessions.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '48px', color: '#94a3b8' }}>
                     <Shield size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-                    <p>No proctoring sessions available</p>
+                    {/* <p>No proctoring sessions available</p> */}
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
                     {proctorSessions.slice(0, 10).map((session) => (
                       <div
                         key={session.id}
-                        onClick={() => handleProctorSessionClick(session)}
+                        // onClick={() => handleProctorSessionClick(session)}
                         style={{
-                          background: 'white',
-                          border: `2px solid ${session.review_status === 'FLAGGED' ? '#dc2626' : session.review_status === 'REVIEWED' ? '#22c55e' : '#f59e0b'}`,
-                          borderRadius: '8px',
-                          padding: '16px',
-                          cursor: 'pointer',
-                          transition: 'all 0.3s ease',
+                          // background: 'white',
+                          // border: `2px solid ${session.review_status === 'FLAGGED' ? '#dc2626' : session.review_status === 'REVIEWED' ? '#22c55e' : '#f59e0b'}`,
+                          // borderRadius: '8px',
+                          // padding: '16px',
+                          // cursor: 'pointer',
+                          // transition: 'all 0.3s ease',
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'}
-                        onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
+                        // onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'}
+                        // onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
+                          {/* <div>
                             <p style={{ fontWeight: 600, color: '#0f172a', margin: 0 }}>{session.student_name || 'Unknown Student'}</p>
                             <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0 0' }}>{session.exam_title || 'Unknown Exam'}</p>
-                          </div>
-                          <span style={{
+                          </div> */}
+                          {/* <span style={{
                             display: 'inline-flex',
                             padding: '4px 12px',
                             borderRadius: '20px',
@@ -3047,12 +3365,12 @@ const handleBatchGenerateSchedules = async () => {
                                    session.review_status === 'REVIEWED' ? '#16a34a' : '#d97706',
                           }}>
                             {session.review_status || 'PENDING'}
-                          </span>
+                          </span> */}
                         </div>
-                        <div style={{ marginTop: '12px', display: 'flex', gap: '16px', fontSize: '13px', color: '#64748b' }}>
+                        {/* <div style={{ marginTop: '12px', display: 'flex', gap: '16px', fontSize: '13px', color: '#64748b' }}>
                           <span>Captures: {session.total_captures || 0}</span>
                           <span>Suspicious: {session.suspicious_events || 0}</span>
-                        </div>
+                        </div> */}
                       </div>
                     ))}
                   </div>
@@ -3065,10 +3383,42 @@ const handleBatchGenerateSchedules = async () => {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#0f172a', margin: 0 }}>System Logs</h3>
+                  <select
+                    aria-label="Filter logs by user role"
+                    value={systemLogRole}
+                    onChange={async (e) => {
+                      const role = e.target.value;
+                      setSystemLogRole(role);
+                      try {
+                        const response = await api.get('/analytics/admin/logs/', {
+                          params: { limit: 500, role },
+                        });
+                        setSystemLogs(Array.isArray(response.data) ? response.data : []);
+                      } catch (error) {
+                        toast.error('Failed to load system logs');
+                      }
+                    }}
+                    style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', background: 'white' }}
+                  >
+                    <option value="all">All roles</option>
+                    <option value="ADMIN">Administrator</option>
+                    <option value="TEACHER">Teacher</option>
+                    <option value="STUDENT">Student</option>
+                    <option value="DEPT_HEAD">Department Head</option>
+                    <option value="FINANCE">Finance Officer</option>
+                    <option value="REGISTRAR">Registrar</option>
+                    <option value="SYSTEM">System</option>
+                  </select>
                   <button
-                    onClick={() => {
-                      if (window.confirm('Clear all logs?')) {
-                        api.post('/analytics/admin/logs/clear/').then(() => fetchData());
+                    onClick={async () => {
+                      if (await requestConfirmation('Clear system logs?', 'All stored system log entries will be removed.', 'Clear logs')) {
+                        try {
+                          await api.post('/analytics/admin/logs/clear/');
+                          setSystemLogs([]);
+                          toast.success('System logs cleared');
+                        } catch (error) {
+                          toast.error('Failed to clear system logs');
+                        }
                       }
                     }}
                     style={{ padding: '6px 12px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
@@ -3085,6 +3435,7 @@ const handleBatchGenerateSchedules = async () => {
                         <div>
                           <span style={{ fontWeight: 500, color: '#0f172a' }}>{log.action}</span>
                           <span style={{ color: '#64748b', marginLeft: '8px' }}>by {log.user || 'System'}</span>
+                          <span style={{ color: '#64748b', marginLeft: '8px' }}>{log.role || 'SYSTEM'}</span>
                           <span style={{
                             display: 'inline-flex',
                             padding: '2px 8px',
@@ -3134,6 +3485,11 @@ const handleBatchGenerateSchedules = async () => {
           </div>
         </div>
       </div>
+      {activeTab === 'news' && (
+        <div className="content">
+          <AdminNews />
+        </div>
+      )}
 
       {/* ============ CREATE USER MODAL - WITH PASSWORD VISIBILITY ============ */}
       {showCreateUserModal && (
@@ -3236,6 +3592,37 @@ const handleBatchGenerateSchedules = async () => {
               </div>
               
               {userForm.role === 'STUDENT' && (
+                <>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Department *</label>
+                    <select required style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}
+                      value={userForm.department} onChange={(e) => setUserForm({ ...userForm, department: e.target.value })}>
+                      <option value="">Select Department</option>
+                      {getDepartmentOptions()}
+                    </select>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                    <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155' }}>
+                      Year *
+                      <input type="number" min="1" max="6" required value={userForm.year}
+                        onChange={(e) => setUserForm({ ...userForm, year: e.target.value })}
+                        style={{ display: 'block', width: '100%', marginTop: '4px', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
+                    </label>
+                    <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155' }}>
+                      Semester *
+                      <select required value={userForm.semester}
+                        onChange={(e) => setUserForm({ ...userForm, semester: e.target.value })}
+                        style={{ display: 'block', width: '100%', marginTop: '4px', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}>
+                        <option value="1">Semester 1</option>
+                        <option value="2">Semester 2</option>
+                        <option value="3">Summer</option>
+                      </select>
+                    </label>
+                  </div>
+                </>
+              )}
+
+              {userForm.role === 'TEACHER' && (
                 <div style={{ marginBottom: '16px' }}>
                   <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Department *</label>
                   <select required style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}
@@ -3418,9 +3805,54 @@ const handleBatchGenerateSchedules = async () => {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Capacity</label>
-                  <input type="number" min="1" max="200" style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }}
-                    value={courseForm.capacity} onChange={(e) => setCourseForm({ ...courseForm, capacity: parseInt(e.target.value) })} />
+                  <label htmlFor={capacityRange === 'custom' ? 'course-capacity' : 'course-capacity-range'} style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Capacity (students)</label>
+                  {capacityRange === 'custom' ? (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        id="course-capacity"
+                        type="number"
+                        min="1"
+                        max={CAPACITY_RANGE_LIMITS.custom.max}
+                        required
+                        autoFocus
+                        placeholder="Enter any capacity"
+                        style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }}
+                        value={courseForm.capacity}
+                        onChange={(e) => setCourseForm({ ...courseForm, capacity: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCapacityRange('1-50');
+                          setCourseForm({ ...courseForm, capacity: CAPACITY_RANGE_LIMITS['1-50'].max });
+                        }}
+                        style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', background: 'white', cursor: 'pointer' }}
+                      >
+                        Presets
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      id="course-capacity-range"
+                      value={capacityRange}
+                      onChange={(e) => {
+                        const range = e.target.value;
+                        setCapacityRange(range);
+                        if (range === 'custom') {
+                          setCourseForm({ ...courseForm, capacity: '' });
+                        } else {
+                          setCourseForm({ ...courseForm, capacity: CAPACITY_RANGE_LIMITS[range].max });
+                        }
+                      }}
+                      required
+                      style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}
+                    >
+                      <option value="1-50">1-50</option>
+                      <option value="50-100">50-100</option>
+                      <option value="100-200">100-200</option>
+                      <option value="custom">Type your own</option>
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Department</label>
@@ -4048,6 +4480,51 @@ const handleBatchGenerateSchedules = async () => {
             )}
             <div style={{ display: 'flex', gap: '12px', paddingTop: '16px', marginTop: '16px', borderTop: '1px solid #e5e7eb' }}>
               <button onClick={() => setShowProctoringDetailModal(false)} style={{ flex: 1, padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', background: 'none', color: '#374151', cursor: 'pointer' }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSystemLockModal && (
+        <div role="dialog" aria-modal="true" aria-labelledby="system-lock-title" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, padding: '20px' }}>
+          <div style={{ background: 'white', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '480px' }}>
+            <h2 id="system-lock-title" style={{ margin: '0 0 12px', fontSize: '20px' }}>
+              {systemLocked ? 'Unlock system?' : 'Lock system?'}
+            </h2>
+            <p style={{ color: '#475569', margin: '0 0 16px' }}>
+              {systemLocked
+                ? 'Unlocking will restore access for all users.'
+                : 'The message below will be shown to users while the system is locked.'}
+            </p>
+            {!systemLocked && (
+              <textarea
+                aria-label="System lock message"
+                rows="3"
+                value={systemLockDraft}
+                onChange={(e) => setSystemLockDraft(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', resize: 'vertical' }}
+              />
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+              <button type="button" onClick={() => setShowSystemLockModal(false)} disabled={lockLoading} style={{ padding: '9px 14px', border: '1px solid #cbd5e1', borderRadius: '6px', background: 'white', cursor: 'pointer' }}>Cancel</button>
+              <button type="button" onClick={submitSystemLock} disabled={lockLoading} style={{ padding: '9px 14px', border: 'none', borderRadius: '6px', color: 'white', background: systemLocked ? '#16a34a' : '#dc2626', cursor: 'pointer' }}>
+                {lockLoading ? 'Saving…' : systemLocked ? 'Unlock system' : 'Lock system'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmation && (
+        <div role="dialog" aria-modal="true" aria-labelledby="confirmation-title" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3100, padding: '20px' }}>
+          <div style={{ background: 'white', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '440px' }}>
+            <h2 id="confirmation-title" style={{ margin: '0 0 10px', fontSize: '20px' }}>{confirmation.title}</h2>
+            <p style={{ margin: 0, color: '#475569' }}>{confirmation.message}</p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+              <button type="button" onClick={() => { confirmation.resolve(false); setConfirmation(null); }} style={{ padding: '9px 14px', border: '1px solid #cbd5e1', borderRadius: '6px', background: 'white', cursor: 'pointer' }}>Cancel</button>
+              <button type="button" onClick={() => { confirmation.resolve(true); setConfirmation(null); }} style={{ padding: '9px 14px', border: 'none', borderRadius: '6px', background: '#dc2626', color: 'white', cursor: 'pointer' }}>
+                {confirmation.confirmLabel}
+              </button>
             </div>
           </div>
         </div>

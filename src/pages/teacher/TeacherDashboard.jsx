@@ -17,6 +17,9 @@ import {
   ClipboardList, PenSquare, Save, X, Edit3, Star
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import api, { getAllPages } from '../../api/api';
 import '../../styles/dashboard-responsive.css';
 // ============================================================
@@ -41,10 +44,6 @@ const TeacherDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   
-  // ============================================================
-  // ✅ ADDED: Course Grades State
-  // ============================================================
-  const [courseGrades, setCourseGrades] = useState([]);
   const [selectedCourseForGrades, setSelectedCourseForGrades] = useState(null);
   const [courseStudents, setCourseStudents] = useState([]);
   const [showCourseGradesModal, setShowCourseGradesModal] = useState(false);
@@ -80,10 +79,7 @@ const TeacherDashboard = () => {
     pendingAssignments: 0,
     gradedExams: 0,
     gradedAssignments: 0,
-    totalSubmissions: 0,
-    // ✅ ADDED: Grade stats
-    avgGrade: 0,
-    passRate: 0
+    totalSubmissions: 0
   });
 
   // ============ FETCH DATA ============
@@ -110,13 +106,6 @@ const TeacherDashboard = () => {
       let gradedExams = 0;
       let gradedAssignments = 0;
       
-      // ============================================================
-      // ✅ ADDED: Fetch course grades
-      // ============================================================
-      const allCourseGrades = [];
-      let totalGrades = 0;
-      let totalPassing = 0;
-      
       for (const course of teacherCourses) {
         // Get students in this course (enrollments)
         try {
@@ -130,24 +119,6 @@ const TeacherDashboard = () => {
           totalStudents += enrollData.filter(e => e.status === 'ACTIVE').length;
         } catch (e) {
           console.warn(`Could not fetch enrollments for course ${course.id}`);
-        }
-        
-        // ============================================================
-        // ✅ ADDED: Fetch grades for this course
-        // ============================================================
-        try {
-          const gradeRes = await api.get(`/courses/teacher/course/${course.id}/grades/`);
-          if (gradeRes.data) {
-            allCourseGrades.push(gradeRes.data);
-            if (gradeRes.data.average_percentage) {
-              totalGrades += gradeRes.data.average_percentage;
-            }
-            if (gradeRes.data.pass_rate) {
-              totalPassing += gradeRes.data.pass_rate;
-            }
-          }
-        } catch (e) {
-          console.warn(`Could not fetch grades for course ${course.id}`);
         }
         
         // Get exams for this course
@@ -262,15 +233,6 @@ const TeacherDashboard = () => {
       setAssignmentSubmissions(allAssignments);
       setExamSubmissions(allSubmissions.filter(s => s.type === 'exam'));
       
-      // ============================================================
-      // ✅ ADDED: Set course grades
-      // ============================================================
-      setCourseGrades(allCourseGrades);
-      
-      // Calculate averages
-      const avgGrade = allCourseGrades.length > 0 ? totalGrades / allCourseGrades.length : 0;
-      const passRate = allCourseGrades.length > 0 ? totalPassing / allCourseGrades.length : 0;
-      
       setStats({
         totalCourses: teacherCourses.length,
         totalStudents: totalStudents,
@@ -279,9 +241,6 @@ const TeacherDashboard = () => {
         gradedExams: gradedExams,
         gradedAssignments: gradedAssignments,
         totalSubmissions: allSubmissions.length + allAssignments.length,
-        // ✅ ADDED: Grade stats
-        avgGrade: Math.round(avgGrade * 10) / 10,
-        passRate: Math.round(passRate * 10) / 10
       });
       
       console.log('✅ Teacher data loaded:', {
@@ -289,9 +248,7 @@ const TeacherDashboard = () => {
         examSubmissions: allSubmissions.length,
         assignmentSubmissions: allAssignments.length,
         pendingExams,
-        pendingAssignments,
-        avgGrade,
-        passRate
+        pendingAssignments
       });
       
     } catch (error) {
@@ -351,6 +308,66 @@ const TeacherDashboard = () => {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const getCourseGradeExportRows = () => courseStudents.map((student) => {
+    const categories = student.assessment_grades || {};
+    const formatMarks = (category) => {
+      const marks = categories[category];
+      return marks && marks.possible > 0
+        ? `${Number(marks.obtained).toFixed(1)} / ${Number(marks.possible).toFixed(1)}`
+        : '—';
+    };
+
+    return {
+      Student: student.student_name,
+      'Student ID': student.student_number || '',
+      Quiz: formatMarks('quiz'),
+      Mid: formatMarks('mid'),
+      Assignment: formatMarks('assignment'),
+      Final: formatMarks('final'),
+      Total: `${Number(student.total_marks_obtained || 0).toFixed(1)} / ${Number(student.total_marks_possible || 0).toFixed(1)}`,
+      Percentage: `${Number(student.percentage || 0).toFixed(1)}%`,
+      Grade: student.grade_letter || 'NON',
+      Status: student.status || 'ACTIVE',
+    };
+  });
+
+  const exportCourseGrades = (format) => {
+    if (!selectedCourseForGrades) return;
+    const rows = getCourseGradeExportRows();
+    const filename = `${(selectedCourseForGrades.course_code || 'course').replace(/[^\w-]/g, '_')}-grades`;
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Course Grades');
+
+    if (format === 'excel') {
+      XLSX.writeFile(workbook, `${filename}.xlsx`);
+      return;
+    }
+    if (format === 'csv') {
+      XLSX.writeFile(workbook, `${filename}.csv`, { bookType: 'csv' });
+      return;
+    }
+
+    const document = new jsPDF({ orientation: 'landscape' });
+    autoTable(document, {
+      head: [Object.keys(rows[0] || {
+        Student: '', 'Student ID': '', Quiz: '', Mid: '', Assignment: '',
+        Final: '', Total: '', Percentage: '', Grade: '', Status: '',
+      })],
+      body: rows.map((row) => Object.values(row)),
+      startY: 16,
+      styles: { fontSize: 8 },
+      didDrawPage: () => {
+        document.text(
+          `Course Grades: ${selectedCourseForGrades.course_title}`,
+          14,
+          10,
+        );
+      },
+    });
+    document.save(`${filename}.pdf`);
   };
 
   // ============ VIEW SUBMISSION DETAILS ============
@@ -643,12 +660,6 @@ const TeacherDashboard = () => {
             margin: '4px 0 0 0',
           }}>
             Manage your courses, grade exams and assignments
-            {/* ✅ ADDED: Grade stats in header */}
-            {stats.avgGrade > 0 && (
-              <span style={{ marginLeft: '12px', color: '#8b5cf6', fontWeight: 500 }}>
-                📊 Avg Grade: {stats.avgGrade}% • Pass Rate: {stats.passRate}%
-              </span>
-            )}
           </p>
         </div>
         <button
@@ -851,153 +862,6 @@ const TeacherDashboard = () => {
             <span style={{ fontSize: '14px', color: '#64748b' }}>Total Submissions</span>
           </div>
         </div>
-      </div>
-
-      {/* ============================================================ */}
-      {/* ✅ ADDED: COURSE GRADES SECTION */}
-      {/* ============================================================ */}
-      <div style={{
-        background: 'white',
-        borderRadius: '12px',
-        boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-        padding: '24px',
-        marginBottom: '24px',
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '16px',
-        }}>
-          <h2 style={{
-            fontSize: '18px',
-            fontWeight: 700,
-            color: '#0f172a',
-            margin: 0,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}>
-            <Award size={20} color="#8b5cf6" />
-            Course Grades & Performance
-          </h2>
-        </div>
-
-        {courseGrades.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>
-            <p>No grades available yet. Grade exams and assignments to see course performance.</p>
-          </div>
-        ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-            gap: '16px',
-          }}>
-            {courseGrades.map((course) => (
-              <div
-                key={course.course_id}
-                style={{
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                }}
-                onClick={() => viewCourseGrades(course.course_id)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#8b5cf6';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#e2e8f0';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                }}>
-                  <div>
-                    <h4 style={{ fontWeight: 600, color: '#0f172a', margin: 0 }}>
-                      {course.course_title}
-                    </h4>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0' }}>
-                      {course.course_code} • {course.total_students} students
-                    </p>
-                  </div>
-                  <span style={{
-                    padding: '4px 12px',
-                    borderRadius: '20px',
-                    fontSize: '12px',
-                    fontWeight: 500,
-                    background: '#dbeafe',
-                    color: '#2563eb',
-                  }}>
-                    {course.completed_students || 0} Completed
-                  </span>
-                </div>
-                
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginTop: '12px',
-                  paddingTop: '12px',
-                  borderTop: '1px solid #f1f5f9',
-                }}>
-                  <div>
-                    <span style={{ fontSize: '12px', color: '#64748b' }}>Average</span>
-                    <p style={{ fontWeight: 600, color: '#0f172a' }}>
-                      {course.average_percentage?.toFixed(1) || 'N/A'}%
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                    {Object.entries(course.grade_distribution || {}).map(([grade, count]) => (
-                      <span key={grade} style={{
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: 500,
-                        background: grade.startsWith('A') ? '#dcfce7' :
-                                  grade.startsWith('B') ? '#dbeafe' :
-                                  grade.startsWith('C') ? '#fef3c7' :
-                                  grade === 'F' ? '#fee2e2' : '#f3f4f6',
-                        color: grade.startsWith('A') ? '#166534' :
-                               grade.startsWith('B') ? '#1e40af' :
-                               grade.startsWith('C') ? '#92400e' :
-                               grade === 'F' ? '#991b1b' : '#6b7280',
-                      }}>
-                        {grade}: {count}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                
-                <button
-                  style={{
-                    width: '100%',
-                    marginTop: '12px',
-                    padding: '6px',
-                    background: '#8b5cf6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    transition: 'all 0.3s ease',
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#7c3aed'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = '#8b5cf6'}
-                >
-                  <Eye size={14} style={{ display: 'inline', marginRight: '6px' }} />
-                  View Student Grades
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* TABS */}
@@ -2408,7 +2272,39 @@ const TeacherDashboard = () => {
                       fontWeight: 600,
                       color: '#64748b',
                       textTransform: 'uppercase',
-                    }}>Marks</th>
+                    }}>Quiz</th>
+                    <th style={{
+                      padding: '8px 12px',
+                      textAlign: 'left',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: '#64748b',
+                      textTransform: 'uppercase',
+                    }}>Mid</th>
+                    <th style={{
+                      padding: '8px 12px',
+                      textAlign: 'left',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: '#64748b',
+                      textTransform: 'uppercase',
+                    }}>Assignment</th>
+                    <th style={{
+                      padding: '8px 12px',
+                      textAlign: 'left',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: '#64748b',
+                      textTransform: 'uppercase',
+                    }}>Final</th>
+                    <th style={{
+                      padding: '8px 12px',
+                      textAlign: 'left',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: '#64748b',
+                      textTransform: 'uppercase',
+                    }}>Total</th>
                     <th style={{
                       padding: '8px 12px',
                       textAlign: 'left',
@@ -2430,7 +2326,7 @@ const TeacherDashboard = () => {
                 <tbody>
                   {courseStudents.length === 0 ? (
                     <tr>
-                      <td colSpan="4" style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
                         No students enrolled
                       </td>
                     </tr>
@@ -2445,8 +2341,18 @@ const TeacherDashboard = () => {
                           <div style={{ fontWeight: 500 }}>{student.student_name}</div>
                           <div style={{ fontSize: '11px', color: '#94a3b8' }}>{student.student_number}</div>
                         </td>
-                        <td style={{ padding: '8px 12px' }}>
-                          {student.total_marks_obtained.toFixed(1)} / {student.total_marks_possible.toFixed(1)}
+                        {['quiz', 'mid', 'assignment', 'final'].map((category) => {
+                          const marks = student.assessment_grades?.[category];
+                          return (
+                            <td key={category} style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                              {marks && marks.possible > 0
+                                ? `${Number(marks.obtained).toFixed(1)} / ${Number(marks.possible).toFixed(1)}`
+                                : '—'}
+                            </td>
+                          );
+                        })}
+                        <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                          {Number(student.total_marks_obtained || 0).toFixed(1)} / {Number(student.total_marks_possible || 0).toFixed(1)}
                         </td>
                         <td style={{ padding: '8px 12px' }}>
                           <GradeBadge 

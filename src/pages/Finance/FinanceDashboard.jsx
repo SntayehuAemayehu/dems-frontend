@@ -6,11 +6,12 @@ import { useNavigate } from 'react-router-dom';
 import { 
   CheckCircle, XCircle, Clock, Eye, 
   RefreshCw, FileText, Search, Filter, Download,
-  AlertTriangle, FileImage, Plus, CheckSquare, Square,
+  AlertTriangle, FileImage, CheckSquare, Square,
   ChevronDown, ChevronUp, Send, Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
+import { downloadPaymentExport } from '../../utils/paymentExports';
 
 const FinanceDashboard = () => {
   const navigate = useNavigate();
@@ -24,7 +25,7 @@ const FinanceDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedPayment, setSelectedPayment] = useState(null);
-  const [isUsingSampleData, setIsUsingSampleData] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
   
   // ============================================================
   // BATCH PROCESSING STATE
@@ -75,7 +76,6 @@ const FinanceDashboard = () => {
     try {
       setLoading(true);
       setRefreshing(true);
-      setIsUsingSampleData(false);
       
       console.log('🔄 Fetching payments for Finance...');
       
@@ -130,7 +130,7 @@ const FinanceDashboard = () => {
       
       if (processedPayments.length === 0) {
         console.log('⚠️ No payment records found in database');
-        toast.info('No payment records found. Click "Load Sample Data" to test.');
+        toast.info('No payment records found.');
       }
       
       // Reset batch selection
@@ -199,85 +199,15 @@ const FinanceDashboard = () => {
     });
   };
 
-  // ============ LOAD SAMPLE DATA ============
-  const loadSampleData = () => {
-    const samplePayments = [
-      {
-        id: 1,
-        transaction_id: 'TXN-2024-001',
-        student_name: 'Abebe Kebede',
-        student_id: 'STU20240001',
-        amount: 5000,
-        bank_name: 'Commercial Bank of Ethiopia',
-        status: 'PENDING',
-        receipt_image: null,
-        uploaded_at: new Date().toISOString(),
-        rejection_reason: '',
-        is_rolled_back: false,
-        can_rollback: true,
-      },
-      {
-        id: 2,
-        transaction_id: 'TXN-2024-002',
-        student_name: 'Betelehem Tesfaye',
-        student_id: 'STU20240002',
-        amount: 7500,
-        bank_name: 'Telebirr',
-        status: 'PENDING',
-        receipt_image: null,
-        uploaded_at: new Date(Date.now() - 86400000).toISOString(),
-        rejection_reason: '',
-        is_rolled_back: false,
-        can_rollback: true,
-      },
-      {
-        id: 3,
-        transaction_id: 'TXN-2024-003',
-        student_name: 'Chala Desta',
-        student_id: 'STU20240003',
-        amount: 3000,
-        bank_name: 'Awash Bank',
-        status: 'PENDING',
-        receipt_image: null,
-        uploaded_at: new Date(Date.now() - 172800000).toISOString(),
-        rejection_reason: '',
-        is_rolled_back: false,
-        can_rollback: true,
-      },
-      {
-        id: 4,
-        transaction_id: 'TXN-2024-004',
-        student_name: 'Daniel Worku',
-        student_id: 'STU20240004',
-        amount: 4500,
-        bank_name: 'Dashen Bank',
-        status: 'PENDING',
-        receipt_image: null,
-        uploaded_at: new Date(Date.now() - 3600000).toISOString(),
-        rejection_reason: '',
-        is_rolled_back: false,
-        can_rollback: true,
-      },
-      {
-        id: 5,
-        transaction_id: 'TXN-2024-005',
-        student_name: 'Eden Assefa',
-        student_id: 'STU20240005',
-        amount: 6200,
-        bank_name: 'Commercial Bank of Ethiopia',
-        status: 'VERIFIED',
-        receipt_image: null,
-        uploaded_at: new Date(Date.now() - 43200000).toISOString(),
-        rejection_reason: '',
-        is_rolled_back: false,
-        can_rollback: true,
-      },
-    ];
-    setPayments(samplePayments);
-    setFilteredPayments(samplePayments);
-    calculateStats(samplePayments);
-    setIsUsingSampleData(true);
-    toast.success('📊 Sample payments loaded for testing');
+  const handleDownload = (format) => {
+    try {
+      downloadPaymentExport(filteredPayments, format);
+      toast.success(`Downloaded ${format.toUpperCase()} payment report`);
+    } catch (error) {
+      console.error('Failed to download payment report:', error);
+      toast.error('Failed to download payment report');
+    }
+    setShowExportOptions(false);
   };
 
   // ============================================================
@@ -699,16 +629,6 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
             margin: '4px 0 0 0',
           }}>
             Manage and verify student payments
-            {isUsingSampleData && (
-              <span style={{
-                display: 'block',
-                color: '#f59e0b',
-                fontSize: '14px',
-                marginTop: '4px',
-              }}>
-                ⚠️ Using sample data (no real payment records in database)
-              </span>
-            )}
           </p>
         </div>
         <div style={{
@@ -736,42 +656,72 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
             <RefreshCw size={18} className={refreshing ? 'spinning' : ''} />
             Refresh
           </button>
-          <button
-            onClick={loadSampleData}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 20px',
-              background: '#8b5cf6',
-              border: 'none',
-              borderRadius: '8px',
-              color: 'white',
-              cursor: 'pointer',
-              transition: 'all 0.3s ease',
-            }}
-          >
-            <Plus size={18} />
-            Load Sample Data
-          </button>
-          <button
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 20px',
-              background: '#2563eb',
-              border: 'none',
-              borderRadius: '8px',
-              color: 'white',
-              cursor: 'pointer',
-              transition: 'all 0.3s ease',
-            }}
-            onClick={() => toast.info('Export feature coming soon')}
-          >
-            <Download size={18} />
-            Export
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={showExportOptions}
+              disabled={filteredPayments.length === 0}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                background: '#2563eb',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                cursor: filteredPayments.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: filteredPayments.length === 0 ? 0.6 : 1,
+                transition: 'all 0.3s ease',
+              }}
+              onClick={() => setShowExportOptions((visible) => !visible)}
+            >
+              <Download size={18} />
+              Download
+              <ChevronDown size={16} />
+            </button>
+            {showExportOptions && (
+              <div role="menu" style={{
+                position: 'absolute',
+                right: 0,
+                top: 'calc(100% + 6px)',
+                zIndex: 10,
+                minWidth: '190px',
+                padding: '4px',
+                background: 'white',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                boxShadow: '0 8px 20px rgba(15, 23, 42, 0.12)',
+              }}>
+                {[
+                  ['pdf', 'PDF (.pdf)'],
+                  ['xlsx', 'Excel (.xlsx)'],
+                  ['csv', 'CSV (.csv)'],
+                ].map(([format, label]) => (
+                  <button
+                    key={format}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleDownload(format)}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '9px 12px',
+                      border: 'none',
+                      borderRadius: '5px',
+                      background: 'white',
+                      color: '#334155',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1291,7 +1241,7 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
               </tr>
             </thead>
             <tbody>
-              {filteredPayments.length === 0 && !isUsingSampleData ? (
+              {filteredPayments.length === 0 ? (
                 <tr>
                   <td colSpan={batchMode ? 7 : 6} style={{
                     textAlign: 'center',
@@ -1300,10 +1250,12 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
                   }}>
                     <FileText size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
                     <p style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}>
-                      No payment records found in database
+                      {payments.length === 0 ? 'No payment records found in database' : 'No payments match your search'}
                     </p>
                     <p style={{ fontSize: '14px', marginBottom: '16px' }}>
-                      Students need to upload payment proofs first.
+                      {payments.length === 0
+                        ? 'Students need to upload payment proofs first.'
+                        : 'Try adjusting your search or filters.'}
                     </p>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
                       <button
@@ -1320,37 +1272,7 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
                         <RefreshCw size={16} style={{ display: 'inline', marginRight: '6px' }} />
                         Refresh
                       </button>
-                      <button
-                        onClick={loadSampleData}
-                        style={{
-                          padding: '8px 20px',
-                          background: '#8b5cf6',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <Plus size={16} style={{ display: 'inline', marginRight: '6px' }} />
-                        Load Sample Data
-                      </button>
                     </div>
-                  </td>
-                </tr>
-              ) : filteredPayments.length === 0 && isUsingSampleData ? (
-                <tr>
-                  <td colSpan={batchMode ? 7 : 6} style={{
-                    textAlign: 'center',
-                    padding: '48px',
-                    color: '#94a3b8',
-                  }}>
-                    <FileText size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-                    <p style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}>
-                      No payments match your search
-                    </p>
-                    <p style={{ fontSize: '14px' }}>
-                      Try adjusting your search or filters
-                    </p>
                   </td>
                 </tr>
               ) : (

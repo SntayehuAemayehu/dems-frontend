@@ -3,13 +3,14 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSelector } from 'react-redux';
+import { Modal } from 'antd';
 import {
   MessageSquare, X, Send, Users, User, RefreshCw, ChevronLeft,
   Plus, Search, UserPlus, Loader, Trash2, Pencil, Check, CheckCheck,
   Paperclip, Image as ImageIcon, Smile, MoreVertical, ArrowDown,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api from '../../api/api';
+import api, { getAllPages } from '../../api/api';
 
 // ---------- small helpers ----------
 const sameDay = (a, b) => {
@@ -104,11 +105,33 @@ const ChatWidget = () => {
     if (!isAuthenticated || !roomId) return;
     if (!silent) setLoadingMessages(true);
     try {
-      const res = await api.get(`/chat/rooms/${roomId}/messages/`);
-      const list = Array.isArray(res.data) ? res.data : [];
+      let newMessages;
+      if (silent) {
+        const latestPage = await api.get(`/chat/rooms/${roomId}/messages/?page=1`);
+        newMessages = Array.isArray(latestPage.data)
+          ? latestPage.data
+          : latestPage.data?.results || [];
+      } else {
+        newMessages = await getAllPages(`/chat/rooms/${roomId}/messages/`);
+      }
       // newest first from backend → reverse for top-to-bottom
-      const ordered = [...list].reverse();
-      setMessages(ordered);
+      const ordered = [...newMessages].reverse();
+      if (silent) {
+        setMessages((current) => {
+          const storedMessages = current.filter((message) => !message._optimistic);
+          const optimisticMessages = current.filter((message) => message._optimistic);
+          const byId = new Map(storedMessages.map((message) => [message.id, message]));
+          ordered.forEach((message) => byId.set(message.id, message));
+          return [
+            ...[...byId.values()].sort(
+              (left, right) => new Date(left.created_at) - new Date(right.created_at),
+            ),
+            ...optimisticMessages,
+          ];
+        });
+      } else {
+        setMessages(ordered);
+      }
 
       const newest = ordered[ordered.length - 1];
       if (newest && newest.id !== lastMessageIdRef.current) {
@@ -122,7 +145,8 @@ const ChatWidget = () => {
       }
       await markMessagesAsRead(roomId);
     } catch (e) {
-      if (!silent) setMessages([]);
+      console.error('Failed to fetch conversation history:', e);
+      if (!silent) toast.error('Could not load conversation history.');
     } finally {
       if (!silent) setLoadingMessages(false);
     }
@@ -131,8 +155,7 @@ const ChatWidget = () => {
     if (!isAuthenticated || !user) return;
     setLoadingRooms(true);
     try {
-      const res = await api.get('/chat/rooms/');
-      const list = Array.isArray(res.data) ? res.data : [];
+      const list = await getAllPages('/chat/rooms/');
       setRooms(list);
       const total = list.reduce((t, r) => t + (r.unread_count || 0), 0);
       setUnreadCount(total);
@@ -249,14 +272,23 @@ const ChatWidget = () => {
 
   const deleteMessage = useCallback(async (msg) => {
     if (!msg || msg._optimistic) return;
-    if (!window.confirm('Delete this message for everyone?')) return;
-    try {
-      await api.delete(`/chat/messages/${msg.id}/`);
-      setMessages((prev) => (prev || []).filter((m) => m.id !== msg.id));
-      toast.success('Message deleted');
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to delete message');
-    }
+    Modal.confirm({
+      title: 'Delete message?',
+      content: 'Delete this message for everyone? This cannot be undone.',
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await api.delete(`/chat/messages/${msg.id}/`);
+          setMessages((prev) => (prev || []).filter((m) => m.id !== msg.id));
+          toast.success('Message deleted');
+        } catch (err) {
+          toast.error(err.response?.data?.error || 'Failed to delete message');
+          throw err;
+        }
+      },
+    });
   }, []);
 
   const saveEdit = useCallback(async (msg, newContent) => {

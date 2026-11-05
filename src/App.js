@@ -11,7 +11,6 @@ import HomePage from './pages/HomePage/HomePage';
 import NewsPage from './pages/News/NewsPage';
 import NewsDetailPage from './pages/News/NewsDetailPage';
 import TermsPolicyPage from './pages/TermsPolicyPage';
-import AdminNews from './pages/admin/AdminNews';
 import Header from './components/Header/Header';
 import ChatWidget from './components/Chat/ChatWidget';
 import { DarkModeProvider, useDarkMode } from './context/DarkModeContext';
@@ -46,11 +45,13 @@ import LiveClass from './pages/LiveClass';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import TeacherCourses from './pages/teacher/TeacherCourses';
 import TeacherExams from './pages/teacher/TeacherExams';
+import TeacherResults from './pages/teacher/TeacherResults';
 import LiveExamView from './pages/teacher/LiveExamView';
 import ProctoringImagesPage from './pages/teacher/ProctoringImagesPage';
 import Greading from './pages/teacher/Grading';
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminNews from './pages/admin/AdminNews';
 
 // Finance Pages
 import FinanceDashboard from './pages/Finance/FinanceDashboard';
@@ -207,6 +208,7 @@ const AnimatedRoutes = () => {
           <Route path="/teacher/dashboard" element={<ProtectedRoute roles={['TEACHER']}><TeacherDashboard /></ProtectedRoute>} />
           <Route path="/teacher/courses" element={<ProtectedRoute roles={['TEACHER']}><TeacherCourses /></ProtectedRoute>} />
           <Route path="/teacher/exams" element={<ProtectedRoute roles={['TEACHER']}><TeacherExams /></ProtectedRoute>} />
+          <Route path="/teacher/results" element={<ProtectedRoute roles={['TEACHER']}><TeacherResults /></ProtectedRoute>} />
           <Route path="/teacher/exams/:examId/live" element={<ProtectedRoute roles={['TEACHER']}><LiveExamView /></ProtectedRoute>} />
           <Route path="/teacher/courses/:courseId/proctoring-images" element={<ProtectedRoute roles={['TEACHER']}><ProctoringImagesPage /></ProtectedRoute>} />
           <Route path="/teacher/grade/:type/:id" element={<Grading />} />

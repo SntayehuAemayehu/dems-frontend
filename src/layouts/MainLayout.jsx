@@ -1,16 +1,16 @@
 // frontend/src/layouts/MainLayout.jsx
 // UPDATED WITH DARK MODE SUPPORT
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   LayoutDashboard, BookOpen, FileText, CreditCard, User,
-  LogOut, Menu, X, ChevronDown, GraduationCap, Video, Newspaper,
+  LogOut, Menu, X, ChevronDown, GraduationCap, Video, Newspaper, Fingerprint,
   BarChart3, Sun, Moon, MessageCircle, Sparkles,Map, Trophy, Award, TrendingUp
 } from 'lucide-react';
 import { logout } from '../store/slices/authSlice';
-import { getMediaUrl } from '../api/api';
+import api, { getMediaUrl } from '../api/api';
 import NotificationBell from '../components/common/NotificationBell';
 import { useDarkMode } from '../context/DarkModeContext';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
@@ -22,6 +22,26 @@ const MainLayout = () => {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth || {});
   const { isDarkMode, toggleDarkMode } = useDarkMode();
+  const [faceEnrolled, setFaceEnrolled] = useState(null);
+  const isStudent = user?.role?.toUpperCase() === 'STUDENT';
+
+  useEffect(() => {
+    if (!isStudent || !['/dashboard', '/enroll-face'].includes(location.pathname)) return undefined;
+
+    let active = true;
+    api.get('/auth/face-status/')
+      .then(({ data }) => {
+        if (active) setFaceEnrolled(Boolean(data?.face_enrolled));
+      })
+      .catch((error) => {
+        console.error('Could not load identity verification status:', error);
+        if (active) setFaceEnrolled(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isStudent, location.pathname]);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -55,6 +75,7 @@ const MainLayout = () => {
       { name: 'Dashboard', href: '/teacher/dashboard', icon: LayoutDashboard },
       { name: 'My Courses', href: '/teacher/courses', icon: BookOpen },
       { name: 'Exams', href: '/teacher/exams', icon: FileText },
+      { name: 'Results', href: '/teacher/results', icon: BarChart3 },
       { name: 'Live Classes', href: '/live-classes', icon: Video },
       { name: 'Profile', href: '/profile', icon: User },
     ],
@@ -266,6 +287,27 @@ const MainLayout = () => {
               </motion.div>
             );
           })}
+          {isStudent && faceEnrolled === false && (
+            <Link
+              to="/enroll-face"
+              onClick={() => setSidebarOpen(false)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0.625rem 0.75rem',
+                marginTop: '0.5rem',
+                borderRadius: '0.5rem',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: '#1d4ed8',
+                textDecoration: 'none',
+                background: isDarkMode ? 'rgba(59,130,246,0.15)' : '#eff6ff',
+              }}
+            >
+              <Fingerprint style={{ marginRight: '0.75rem', height: '1.25rem', width: '1.25rem' }} />
+              Verify your identity
+            </Link>
+          )}
         </nav>
         
         <div style={{
@@ -582,7 +624,7 @@ const MainLayout = () => {
               ? '0 4px 24px rgba(0,0,0,0.2)' 
               : '0 4px 24px rgba(0,0,0,0.04)',
           }}>
-            <Outlet />
+            <Outlet context={{ faceEnrolled }} />
           </div>
         </main>
       </div>

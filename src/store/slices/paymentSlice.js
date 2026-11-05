@@ -27,6 +27,9 @@ export const uploadPayment = createAsyncThunk(
         return rejectWithValue(errorData);
       }
       if (errorData && typeof errorData === 'object') {
+        if (errorData.error) {
+          return rejectWithValue(errorData.error);
+        }
         const firstError = Object.values(errorData)[0];
         if (Array.isArray(firstError)) {
           return rejectWithValue(firstError[0]);

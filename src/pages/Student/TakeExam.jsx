@@ -326,6 +326,17 @@ const TakeExam = () => {
     return `${m}:${sec}`;
   };
 
+  const handleLiveExamMessage = useCallback((message) => {
+    if (message.type === 'exam_update' && Array.isArray(message.questions)) {
+      setQuestions(message.questions);
+      setCurrentIndex((index) => Math.min(index, Math.max(message.questions.length - 1, 0)));
+    }
+    if (message.type === 'add_time' && Number.isFinite(Number(message.minutes))) {
+      setTimeLeft((seconds) => seconds + Number(message.minutes) * 60);
+      toast.success(`${message.minutes} minute(s) added to your exam`);
+    }
+  }, []);
+
   // ==================== SUBMIT ====================
   const handleSubmit = async (reason = 'User submitted') => {
     if (!attemptId) return;
@@ -716,6 +727,7 @@ const TakeExam = () => {
           studentId={user?.id}
           onViolation={handleViolation}
           onAutoSubmit={(data) => handleSubmit(data.reason || 'Auto submitted by proctor')}
+          onControlMessage={handleLiveExamMessage}
         />
 
         {/* Multiple face counter */}

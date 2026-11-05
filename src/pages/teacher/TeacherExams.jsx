@@ -17,6 +17,7 @@ const TeacherExams = () => {
   const { user } = useSelector((state) => state.auth || {});
   const [exams, setExams] = useState([]);
   const [courses, setCourses] = useState([]);
+  const [coursesLoaded, setCoursesLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Two-level navigation
@@ -116,11 +117,13 @@ const TeacherExams = () => {
       let data = response.data;
       if (data && data.results && Array.isArray(data.results)) data = data.results;
       else if (!Array.isArray(data)) data = [];
-      const teacherCourses = data.filter((c) => c.instructor === user?.id);
+      const teacherCourses = data.filter((c) => Number(c.instructor) === Number(user?.id));
       setCourses(teacherCourses);
     } catch (error) {
       console.error('Failed to fetch courses:', error);
       setCourses([]);
+    } finally {
+      setCoursesLoaded(true);
     }
   };
 
@@ -620,6 +623,10 @@ const TeacherExams = () => {
     const term = searchTerm.toLowerCase();
     return (c.title || '').toLowerCase().includes(term) || (c.course_code || '').toLowerCase().includes(term);
   });
+  const ownedCourseIds = new Set(courses.map((course) => Number(course.id)));
+  const assignedExams = coursesLoaded
+    ? exams.filter((exam) => !ownedCourseIds.has(Number(exam.course)))
+    : [];
 
   const getExamCountForCourse = (courseId) =>
     exams.filter((e) => Number(e.course) === Number(courseId)).length;
@@ -700,6 +707,30 @@ const TeacherExams = () => {
                 ))}
               </div>
             </>
+          )}
+          {assignedExams.length > 0 && (
+            <section style={{ marginTop: 32 }}>
+              <h2 style={{ margin: '0 0 14px', color: '#0f172a', fontSize: 21 }}>Exams assigned to you</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+                {assignedExams.map((exam) => (
+                  <article key={exam.id} style={{ padding: 18, border: '1px solid #c7d2fe', borderRadius: 10, background: '#eef2ff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12, color: '#4338ca', fontWeight: 600 }}>{exam.course_code || 'Course'}</span>
+                      {getStatusBadge(exam)}
+                    </div>
+                    <h3 style={{ margin: '10px 0 4px', color: '#0f172a' }}>{exam.title}</h3>
+                    <p style={{ margin: '0 0 14px', color: '#64748b', fontSize: 14 }}>{exam.course_title || 'Assigned exam'}</p>
+                    <button
+                      type="button"
+                      onClick={() => openLiveMonitoring(exam)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 12px', border: 0, borderRadius: 7, background: '#4f46e5', color: 'white', cursor: 'pointer' }}
+                    >
+                      <Eye size={16} /> View assigned students
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
           )}
         </>
       )}

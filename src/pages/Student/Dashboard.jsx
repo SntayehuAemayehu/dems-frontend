@@ -4,13 +4,13 @@ import { useLivePulse } from '../../hooks/useLivePulse';
 import { AnimatedCounter } from '../../components/Motion/AnimatedCounter';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import {
   BookOpen, FileText, Award, Clock, CheckCircle, 
   RefreshCw, Video, Bell, Upload, X, User,
   CreditCard, AlertCircle, LogOut, Send, Eye, Lock,
   ClipboardList, BarChart3, Home, GraduationCap,Languages, Globe, Sparkles, Map, Trophy, 
-  FileCheck, TrendingUp, MessageSquare, Settings 
+  FileCheck, TrendingUp, MessageSquare, Settings, Fingerprint
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchCourses } from '../../store/slices/courseSlice';
@@ -260,6 +260,7 @@ const StudentSidebar = ({ activeTab, onTabChange, user, unreadCount }) => {
 const Dashboard = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { faceEnrolled } = useOutletContext() || {};
   const { user } = useSelector((state) => state.auth || {});
   const { courses = [], isLoading: coursesLoading = false } = useSelector((state) => state.courses || { courses: [] });
   const { exams = [], isLoading: examsLoading = false } = useSelector((state) => state.exams || { exams: [] });
@@ -847,6 +848,26 @@ const renderLockBanner = () => {
               </div>
 
               <div className="dashboard-header-actions">
+                {faceEnrolled === false && (
+                  <Link
+                    to="/enroll-face"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '9px 14px',
+                      borderRadius: '8px',
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Fingerprint size={17} />
+                    Verify your identity
+                  </Link>
+                )}
                 {/* Notification Bell */}
                 <div style={{ position: 'relative' }}>
                   <button

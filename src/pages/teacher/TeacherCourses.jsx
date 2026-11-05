@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Link } from 'react-router-dom';
+import { Modal } from 'antd';
 import { 
   Plus, BookOpen, Users, Clock, Eye, Video, 
   Upload, FileText, Trash2, X, Calendar, 
@@ -14,7 +15,10 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchCourses } from '../../store/slices/courseSlice';
-import api from '../../api/api';
+import api, { getAllPages } from '../../api/api';
+import CourseFilePreview from '../../components/CourseFilePreview';
+import CourseAIChat from '../../components/AI/CourseAIChat';
+import { downloadCourseFile, getCourseFileName, isOfficeDocument, openCourseFile } from '../../utils/courseFiles';
 
 const TeacherCourses = () => {
   const dispatch = useDispatch();
@@ -24,10 +28,12 @@ const TeacherCourses = () => {
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false); // For View Button
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [previewFile, setPreviewFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [materials, setMaterials] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [assignmentsError, setAssignmentsError] = useState('');
   const [materialData, setMaterialData] = useState({
     title: '',
     description: '',
@@ -119,23 +125,31 @@ const TeacherCourses = () => {
 
   const fetchMaterials = async (courseId) => {
     try {
-      const response = await api.get(`/courses/${courseId}/materials/`);
-      setMaterials(Array.isArray(response.data) ? response.data : []);
+      setMaterials(await getAllPages(`/courses/${courseId}/materials/`));
     } catch (error) {
       console.error('Failed to fetch materials:', error);
       setMaterials([]);
     }
   };
 
-  const handleDeleteMaterial = async (materialId) => {
-    if (!window.confirm('Are you sure you want to delete this material?')) return;
-    try {
-      await api.delete(`/courses/materials/${materialId}/`);
-      toast.success('Material deleted');
-      fetchMaterials(selectedCourse.id);
-    } catch (error) {
-      toast.error('Failed to delete material');
-    }
+  const handleDeleteMaterial = (materialId) => {
+    Modal.confirm({
+      title: 'Delete material?',
+      content: 'Are you sure you want to delete this material? This action cannot be undone.',
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await api.delete(`/courses/materials/${materialId}/`);
+          toast.success('Material deleted');
+          fetchMaterials(selectedCourse.id);
+        } catch (error) {
+          toast.error('Failed to delete material');
+          throw error;
+        }
+      },
+    });
   };
 
   // ============ ASSIGNMENT FUNCTIONS ============
@@ -212,26 +226,36 @@ const TeacherCourses = () => {
 
   const fetchAssignments = async (courseId) => {
     setAssignmentsLoading(true);
+    setAssignmentsError('');
     try {
-      const response = await api.get(`/courses/${courseId}/assignments/`);
-      setAssignments(Array.isArray(response.data) ? response.data : []);
+      setAssignments(await getAllPages(`/courses/${courseId}/assignments/`));
     } catch (error) {
       console.error('Failed to fetch assignments:', error);
       setAssignments([]);
+      setAssignmentsError(error.response?.data?.detail || 'Could not load this course’s assignments.');
     } finally {
       setAssignmentsLoading(false);
     }
   };
 
-  const handleDeleteAssignment = async (assignmentId) => {
-    if (!window.confirm('Are you sure you want to delete this assignment?')) return;
-    try {
-      await api.delete(`/courses/assignments/${assignmentId}/`);
-      toast.success('Assignment deleted');
-      fetchAssignments(selectedCourse.id);
-    } catch (error) {
-      toast.error('Failed to delete assignment');
-    }
+  const handleDeleteAssignment = (assignmentId) => {
+    Modal.confirm({
+      title: 'Delete assignment?',
+      content: 'Are you sure you want to delete this assignment? This action cannot be undone.',
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await api.delete(`/courses/assignments/${assignmentId}/`);
+          toast.success('Assignment deleted');
+          fetchAssignments(selectedCourse.id);
+        } catch (error) {
+          toast.error('Failed to delete assignment');
+          throw error;
+        }
+      },
+    });
   };
 
   const handleFileChange = (e) => {
@@ -307,6 +331,8 @@ const TeacherCourses = () => {
 
   const openAssignmentModal = (course) => {
     setSelectedCourse(course);
+    setAssignments([]);
+    setAssignmentsError('');
     fetchAssignments(course.id);
     setAssignmentData({
       title: '',
@@ -327,6 +353,25 @@ const TeacherCourses = () => {
   const openViewModal = (course) => {
     setSelectedCourse(course);
     setShowViewModal(true);
+  };
+
+  const downloadFile = (file, filename) => {
+    downloadCourseFile(file, filename).catch((error) => {
+      console.error('Could not download course file:', error);
+      toast.error(error.response?.data?.detail || 'Could not download this file.');
+    });
+  };
+
+  const openFile = (file) => {
+    if (!file) {
+      toast.error('No file is available to open.');
+      return;
+    }
+    if (isOfficeDocument(file)) {
+      setPreviewFile({ file, title: getCourseFileName(file) });
+      return;
+    }
+    if (!openCourseFile(file)) toast.error('No file is available to open.');
   };
 
   const getMaterialIcon = (type) => {
@@ -686,6 +731,8 @@ const TeacherCourses = () => {
               </div>
             </div>
 
+            <CourseAIChat courseId={selectedCourse.id} courseTitle={selectedCourse.title} />
+
             <button
               onClick={() => setShowViewModal(false)}
               style={{
@@ -779,30 +826,33 @@ const TeacherCourses = () => {
                       borderRadius: '6px',
                       marginBottom: '6px',
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
                         {getMaterialIcon(material.material_type)}
-                        <div>
-                          <div style={{ fontWeight: 500, fontSize: '14px' }}>{material.title}</div>
-                          <div style={{ fontSize: '12px', color: '#6b7280' }}>{material.material_type}</div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: '14px', color: '#0f172a' }}>{material.title}</div>
+                          <div style={{ fontSize: '12px', color: '#6b7280' }}>{material.material_type}{material.file_extension ? ` · ${material.file_extension.toUpperCase()}` : ''}</div>
+                          {material.description && <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>{material.description}</div>}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        {material.file && (
-                          <a
-                            href={material.file}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              padding: '4px 10px',
-                              background: '#eff6ff',
-                              color: '#2563eb',
-                              borderRadius: '4px',
-                              fontSize: '12px',
-                              textDecoration: 'none',
-                            }}
-                          >
-                            View
-                          </a>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
+                        {(material.file_url || material.file) && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openFile(material.file_url || material.file)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 9px', background: '#eff6ff', color: '#1d4ed8', border: 0, borderRadius: 5, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                            >
+                              <Eye size={14} /> Open
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => downloadFile(material.file_url || material.file, material.title)}
+                              title="Download material"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 9px', background: '#f1f5f9', color: '#334155', border: 0, borderRadius: 5, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                            >
+                              <Download size={14} /> Download
+                            </button>
+                          </>
                         )}
                         <button
                           onClick={() => handleDeleteMaterial(material.id)}
@@ -1053,7 +1103,11 @@ const TeacherCourses = () => {
             </div>
 
             {/* List existing assignments */}
-            {assignments.length > 0 && (
+            {assignmentsLoading ? (
+              <p role="status" style={{ color: '#64748b', padding: '12px 0' }}>Loading posted assignments…</p>
+            ) : assignmentsError ? (
+              <p role="alert" style={{ color: '#b91c1c', padding: '12px 0' }}>{assignmentsError}</p>
+            ) : assignments.length > 0 ? (
               <div style={{ marginBottom: '16px' }}>
                 <h3 style={{
                   fontSize: '14px',
@@ -1098,41 +1152,54 @@ const TeacherCourses = () => {
                             <Video size={12} style={{ display: 'inline' }} /> Video attached
                           </div>
                         )}
+                        {previewFile && (
+                          <CourseFilePreview
+                            file={previewFile.file}
+                            title={previewFile.title}
+                            onClose={() => setPreviewFile(null)}
+                          />
+                        )}
                       </div>
-                      <div style={{ display: 'flex', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
                         {assignment.attachment && (
-                          <a
-                            href={assignment.attachment}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              padding: '4px 10px',
-                              background: '#eff6ff',
-                              color: '#2563eb',
-                              borderRadius: '4px',
-                              fontSize: '12px',
-                              textDecoration: 'none',
-                            }}
-                          >
-                            <Download size={14} />
-                          </a>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openFile(assignment.attachment)}
+                              title="Open assignment attachment in a new tab"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 9px', background: '#eff6ff', color: '#1d4ed8', border: 0, borderRadius: 5, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                            >
+                              <Eye size={14} /> Open
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => downloadFile(assignment.attachment, `${assignment.title}-attachment`)}
+                              title="Download assignment attachment"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 9px', background: '#f1f5f9', color: '#334155', border: 0, borderRadius: 5, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                            >
+                              <Download size={14} /> Download
+                            </button>
+                          </>
                         )}
                         {assignment.video_attachment && (
-                          <a
-                            href={assignment.video_attachment}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              padding: '4px 10px',
-                              background: '#dbeafe',
-                              color: '#dc2626',
-                              borderRadius: '4px',
-                              fontSize: '12px',
-                              textDecoration: 'none',
-                            }}
-                          >
-                            <Video size={14} />
-                          </a>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openFile(assignment.video_url || assignment.video_attachment)}
+                              title="Open assignment video in a new tab"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 9px', background: '#fef3c7', color: '#b45309', border: 0, borderRadius: 5, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                            >
+                              <Video size={14} /> Open
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => downloadFile(assignment.video_url || assignment.video_attachment, `${assignment.title}-video`)}
+                              title="Download assignment video"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 9px', background: '#f1f5f9', color: '#334155', border: 0, borderRadius: 5, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                            >
+                              <Download size={14} /> Download
+                            </button>
+                          </>
                         )}
                         <button
                           onClick={() => handleDeleteAssignment(assignment.id)}
@@ -1153,6 +1220,8 @@ const TeacherCourses = () => {
                   ))}
                 </div>
               </div>
+            ) : (
+              <p style={{ color: '#64748b', padding: '12px 0' }}>No assignments have been posted for this course yet.</p>
             )}
 
             {/* Create Assignment Form */}

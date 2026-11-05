@@ -11,6 +11,7 @@ const Leaderboard = () => {
   const [filteredLeaderboard, setFilteredLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [filter, setFilter] = useState('all');
   const [departments, setDepartments] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,14 +43,7 @@ const Leaderboard = () => {
       setDepartments(depts);
     } catch (error) {
       console.error('Failed to fetch departments:', error);
-      // Fallback departments
-      setDepartments([
-        { id: 1, name: 'Computer Science' },
-        { id: 2, name: 'Software Engineering' },
-        { id: 3, name: 'Information Systems' },
-        { id: 4, name: 'Data Science' },
-        { id: 5, name: 'Cyber Security' },
-      ]);
+      setDepartments([]);
     }
   };
 
@@ -57,6 +51,7 @@ const Leaderboard = () => {
     try {
       setLoading(true);
       setRefreshing(true);
+      setLoadError('');
       
       // Fetch leaderboard data
       const response = await api.get('/analytics/gamification/leaderboard/');
@@ -75,83 +70,15 @@ const Leaderboard = () => {
       
     } catch (error) {
       console.error('Failed to fetch leaderboard:', error);
+      setLeaderboard([]);
+      setFilteredLeaderboard([]);
+      calculateStats([]);
+      setLoadError('Unable to load the leaderboard. Check your connection and try again.');
       toast.error('Failed to load leaderboard');
-      
-      // ✅ FALLBACK: Load sample data for testing
-      loadSampleData();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
-
-  const loadSampleData = () => {
-    const sampleData = [
-      {
-        rank: 1,
-        student_id: 1,
-        name: 'MAMARU',
-        student_number: 'MAU2222',
-        department: 'Computer Science',
-        points: 2800,
-        level: 'Expert',
-        cgpa: 3.8
-      },
-      {
-        rank: 2,
-        student_id: 2,
-        name: 'MEKDES CS',
-        student_number: 'MAU20263434',
-        department: 'Computer Science',
-        points: 2700,
-        level: 'Expert',
-        cgpa: 3.7
-      },
-      {
-        rank: 3,
-        student_id: 3,
-        name: 'MELESE COMDILTER',
-        student_number: 'MAU20264567',
-        department: 'Computer Science',
-        points: 2400,
-        level: 'Scholar',
-        cgpa: 3.5
-      },
-      {
-        rank: 4,
-        student_id: 4,
-        name: 'Abebe Kebede',
-        student_number: 'STU20240001',
-        department: 'Software Engineering',
-        points: 2100,
-        level: 'Scholar',
-        cgpa: 3.4
-      },
-      {
-        rank: 5,
-        student_id: 5,
-        name: 'Betelehem Tesfaye',
-        student_number: 'STU20240002',
-        department: 'Information Systems',
-        points: 1800,
-        level: 'Dedicated',
-        cgpa: 3.2
-      },
-      {
-        rank: 6,
-        student_id: 6,
-        name: 'Chala Desta',
-        student_number: 'STU20240003',
-        department: 'Software Engineering',
-        points: 1500,
-        level: 'Active',
-        cgpa: 3.0
-      },
-    ];
-    setLeaderboard(sampleData);
-    filterLeaderboard(sampleData);
-    calculateStats(sampleData);
-    toast.info('📊 Sample data loaded for testing');
   };
 
   const filterLeaderboard = (data = leaderboard) => {
@@ -560,14 +487,32 @@ const Leaderboard = () => {
         }}>
           <Trophy size={64} color="#94a3b8" style={{ margin: '0 auto 16px', opacity: 0.3 }} />
           <h3 style={{ color: '#0f172a', fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>
-            No students found
+            {loadError ? 'Leaderboard unavailable' : 'No students found'}
           </h3>
           <p style={{ color: '#64748b', fontSize: '14px' }}>
-            {filter !== 'all' 
+            {loadError || (filter !== 'all'
               ? `No students in the ${filter} department yet.`
-              : 'No students on the leaderboard yet.'}
+              : 'No students on the leaderboard yet.')}
           </p>
-          {(filter !== 'all' || searchTerm) && (
+          {loadError ? (
+            <button
+              onClick={fetchLeaderboard}
+              disabled={refreshing}
+              style={{
+                marginTop: '16px',
+                padding: '8px 24px',
+                background: '#f59e0b',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: refreshing ? 'wait' : 'pointer',
+                fontSize: '14px',
+                fontWeight: 500,
+              }}
+            >
+              {refreshing ? 'Retrying...' : 'Retry'}
+            </button>
+          ) : (filter !== 'all' || searchTerm) && (
             <button
               onClick={clearFilters}
               style={{

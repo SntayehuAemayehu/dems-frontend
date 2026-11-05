@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
+import * as XLSX from 'xlsx';
 
 // Simple GradeBadge component (used in results modal)
 const GradeBadge = ({ grade, percentage, size = 'md' }) => {
@@ -830,13 +831,13 @@ const DeptDashboard = () => {
   // DOWNLOAD STUDENTS
   // ============================================================
   const downloadStudents = (format = 'csv') => {
-    if (!students || students.length === 0) {
+    if (!filteredStudents || filteredStudents.length === 0) {
       toast.error('No students to download');
       return;
     }
 
     const headers = ['Full Name', 'Student ID', 'Email', 'Department', 'Year', 'Status', 'Payment Status'];
-    const rows = students.map(s => [
+    const rows = filteredStudents.map(s => [
       s.full_name || '',
       s.student_id || '',
       s.email || '',
@@ -857,15 +858,13 @@ const DeptDashboard = () => {
       URL.revokeObjectURL(url);
       toast.success('CSV downloaded');
     } else if (format === 'excel') {
-      // Simple Excel-compatible CSV with BOM
-      const csvContent = '\uFEFF' + [headers, ...rows].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-      const blob = new Blob([csvContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `students_${departmentName || 'dept'}_${new Date().toISOString().slice(0, 10)}.xls`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Students');
+      XLSX.writeFile(
+        workbook,
+        `students_${departmentName || 'dept'}_${new Date().toISOString().slice(0, 10)}.xlsx`
+      );
       toast.success('Excel file downloaded');
     } else if (format === 'pdf') {
       // Simple printable HTML → PDF via browser print
@@ -1502,7 +1501,7 @@ const DeptDashboard = () => {
                             <FileSpreadsheet size={14} /> CSV
                           </button>
                           <button onClick={() => { downloadStudents('excel'); setOpenActionMenu(null); }}>
-                            <FileSpreadsheet size={14} /> Excel
+                            <FileSpreadsheet size={14} /> Excel (.xlsx)
                           </button>
                           <button onClick={() => { downloadStudents('pdf'); setOpenActionMenu(null); }}>
                             <FileText size={14} /> PDF

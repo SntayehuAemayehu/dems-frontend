@@ -33,6 +33,7 @@ const Payments = () => {
   const [feeAmount, setFeeAmount] = useState(null);
   const [studentDepartment, setStudentDepartment] = useState('');
   const [loadingFee, setLoadingFee] = useState(false);
+  const [paymentEligibility, setPaymentEligibility] = useState(null);
   
   // ✅ DYNAMIC BANK LIST - Loaded from backend
   const [bankAccounts, setBankAccounts] = useState([]);
@@ -61,6 +62,12 @@ useEffect(() => {
     const loadEverything = async () => {
         dispatch(fetchPayments());
         dispatch(fetchBalance());
+        api.get('/payments/eligibility/')
+          .then(({ data }) => setPaymentEligibility(data))
+          .catch(() => setPaymentEligibility({
+            can_submit: false,
+            reason: 'Payment eligibility could not be checked. Please refresh and try again.',
+          }));
         
         // 1️⃣ Fetch admin config (has phone + bank info)
         const config = await fetchPaymentConfig();
@@ -410,6 +417,11 @@ const fetchPaymentConfig = async () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!paymentEligibility?.can_submit) {
+      toast.error(paymentEligibility?.reason || 'Payment submission is currently unavailable.');
+      return;
+    }
     
     if (!formData.transaction_id) {
       toast.error('Transaction ID is required');
@@ -458,6 +470,9 @@ const fetchPaymentConfig = async () => {
       setShowUploadModal(false);
       dispatch(fetchPayments());
       dispatch(fetchBalance());
+      api.get('/payments/eligibility/')
+        .then(({ data }) => setPaymentEligibility(data))
+        .catch(() => setPaymentEligibility({ can_submit: false, reason: 'Unable to check payment eligibility.' }));
       resetForm();
     } catch (error) {
       toast.error(error || 'Upload failed');
@@ -1215,59 +1230,48 @@ const renderBankSelection = () => {
         </div>
       </div>
 
-
-<div style={{
-  // Make the background red if they owe money, green if they are paid
-  background: balance?.balance_due > 0 || balance?.payment_status !== 'VERIFIED' 
-    ? 'linear-gradient(135deg, #dc2626, #b91c1c)' // Red
-    : 'linear-gradient(135deg, #16a34a, #15803d)', // Green
-  borderRadius: '12px',
-  padding: '24px',
-  color: 'white',
-  marginBottom: '24px',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  flexWrap: 'wrap',
-  gap: '16px',
-}}>
-  <div>
-    <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>Payment Status</h2>
-    <p style={{ fontSize: '28px', fontWeight: 700, margin: '8px 0 0 0' }}>
-      {balance?.balance_due > 0 
-        ? `${balance.balance_due} ETB Due` 
-        : balance?.payment_status === 'VERIFIED' 
-          ? 'All Paid' 
-          : 'Payment Required'}
-    </p>
-    <p style={{ marginTop: '4px', opacity: 0.9 }}>
-      Status: {balance?.payment_status === 'VERIFIED' 
-        ? '✅ Verified' 
-        : balance?.payment_status === 'PENDING' 
-          ? '⏳ Pending Verification' 
-          : '❌ Unpaid'}
-    </p>
-  </div>
-  <button
-    onClick={() => setShowUploadModal(true)}
-    disabled={paymentConfig?.system_open === false}
-    style={{
-      background: 'white',
-      color: balance?.balance_due > 0 || balance?.payment_status !== 'VERIFIED' ? '#dc2626' : '#15803d',
-      padding: '12px 24px',
-      border: 'none',
-      borderRadius: '8px',
-      fontWeight: 600,
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      cursor: paymentConfig?.system_open === false ? 'not-allowed' : 'pointer',
-      opacity: paymentConfig?.system_open === false ? 0.5 : 1,
-    }}
-  >
-    <Upload size={20} /> Upload Payment
-  </button>
-</div>
+      {/* Balance Card */}
+      <div style={{
+        background: 'linear-gradient(135deg, #16a34a, #15803d)',
+        borderRadius: '12px',
+        padding: '24px',
+        color: 'white',
+        marginBottom: '24px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '16px',
+      }}>
+        <div>
+          <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>Payment Status</h2>
+          <p style={{ fontSize: '28px', fontWeight: 700, margin: '8px 0 0 0' }}>
+            {balance?.balance_due > 0 ? `${balance.balance_due} ETB Due` : 'All Paid'}
+          </p>
+          <p style={{ marginTop: '4px', opacity: 0.9 }}>
+            Status: {balance?.payment_status === 'VERIFIED' ? '✅ Verified' : '⏳ Pending Verification'}
+          </p>
+        </div>
+        <button
+          onClick={() => setShowUploadModal(true)}
+          disabled={paymentConfig?.system_open === false}
+          style={{
+            background: 'white',
+            color: '#15803d',
+            padding: '12px 24px',
+            border: 'none',
+            borderRadius: '8px',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: paymentConfig?.system_open === false ? 'not-allowed' : 'pointer',
+            opacity: paymentConfig?.system_open === false ? 0.5 : 1,
+          }}
+        >
+          <Upload size={20} /> Upload Payment
+        </button>
+      </div>
 
       {/* Payment History */}
       <div style={{
@@ -1384,6 +1388,11 @@ const renderBankSelection = () => {
                       padding: '12px 16px',
                       fontSize: '14px',
                     }}>
+                      {payment.status === 'REJECTED' && payment.rejection_reason && (
+                        <div style={{ color: '#b91c1c', fontSize: '12px', marginBottom: '8px' }}>
+                          Reason: {payment.rejection_reason}
+                        </div>
+                      )}
                       {payment.receipt_image && (
                         <button 
                           onClick={() => viewReceipt(payment)}

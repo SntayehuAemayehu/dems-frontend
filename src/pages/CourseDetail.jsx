@@ -11,7 +11,10 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchCourseDetail } from '../store/slices/courseSlice';
-import api, { getAllPages, getMediaUrl } from '../api/api';
+import api, { getAllPages } from '../api/api';
+import CourseAIChat from '../components/AI/CourseAIChat';
+import CourseFilePreview from '../components/CourseFilePreview';
+import { downloadCourseFile, getCourseFileName, isOfficeDocument, openCourseFile } from '../utils/courseFiles';
 
 const CourseDetail = () => {
   const { id } = useParams();
@@ -27,6 +30,7 @@ const CourseDetail = () => {
   const [submitting, setSubmitting] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
 
   useEffect(() => {
     dispatch(fetchCourseDetail(id));
@@ -140,12 +144,24 @@ const CourseDetail = () => {
     }
   };
 
-  const handleDownload = (material) => {
-    const fileUrl = getMediaUrl(material.file_url || material.file);
-    if (fileUrl) {
-      window.open(fileUrl, '_blank', 'noopener,noreferrer');
-    } else {
-      toast.error('No file available for download');
+  const handleOpen = (file) => {
+    if (!file) {
+      toast.error('No file available to open.');
+      return;
+    }
+    if (isOfficeDocument(file)) {
+      setPreviewFile({ file, title: getCourseFileName(file) });
+      return;
+    }
+    if (!openCourseFile(file)) toast.error('No file available to open.');
+  };
+
+  const handleDownload = async (file, filename) => {
+    try {
+      await downloadCourseFile(file, filename);
+    } catch (error) {
+      console.error('Could not download course file:', error);
+      toast.error(error.response?.data?.detail || 'Could not download this file.');
     }
   };
 
@@ -249,124 +265,41 @@ const CourseDetail = () => {
         Back to Courses
       </Link>
 
-      {/* Course Header */}
-      {/* <div style={{
-        background: 'linear-gradient(135deg, #2563eb, #1e40af)',
-        borderRadius: '16px',
-        padding: '32px',
-        color: 'white',
-        marginBottom: '24px',
+      <div style={{
+        padding: '28px 32px',
+        borderRadius: 16,
+        marginBottom: 24,
+        color: '#fff',
+        background: 'linear-gradient(120deg, #1d4ed8, #4338ca 58%, #6d28d9)',
+        boxShadow: '0 12px 30px rgba(37, 99, 235, .18)',
       }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-        }} className="course-header-content">
+        <div style={{ color: '#dbeafe', fontSize: 13, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}>
+          {course.course_code || 'Course'}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
           <div>
-            <span style={{
-              fontSize: '14px',
-              opacity: 0.8,
-            }}>{course.course_code}</span>
-            <h1 style={{
-              fontSize: '32px',
-              fontWeight: 700,
-              margin: '4px 0 8px 0',
-            }}>{course.title}</h1>
-            <p style={{
-              opacity: 0.9,
-            }}>Instructor: {course.instructor_name || 'Not assigned'}</p>
-            <div style={{
-              display: 'flex',
-              gap: '24px',
-              marginTop: '12px',
-            }} className="course-meta">
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '14px',
-              }}>
-                <BookOpen size={16} />
-                <span>{course.credit_hours} Credits</span>
-              </div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '14px',
-              }}>
-                <Users size={16} />
-                <span>{course.enrolled_count || 0} Students</span>
-              </div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '14px',
-              }}>
-                <Calendar size={16} />
-                <span>Semester {course.semester}</span>
-              </div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '14px',
-              }}>
-                <FileText size={16} />
-                <span>{assignments.length} Assignments</span>
-              </div>
-            </div>
-          </div> */}
+            <h1 style={{ margin: '8px 0', fontSize: 'clamp(24px, 4vw, 34px)', lineHeight: 1.2 }}>{course.title}</h1>
+            <p style={{ margin: 0, color: '#e0e7ff' }}>
+              {course.instructor_name ? `Instructor: ${course.instructor_name}` : 'Course materials and assignments'}
+            </p>
+          </div>
           {user?.role === 'TEACHER' && (
-            <Link
-              to={`/live-class/${course.id}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 24px',
-                background: 'white',
-                color: '#2563eb',
-                borderRadius: '8px',
-                textDecoration: 'none',
-                fontWeight: 600,
-                transition: 'all 0.3s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'none';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            >
-              <Play size={18} />
-              Start Live Class
+            <Link to={`/live-class/${course.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 16px', background: '#fff', color: '#1d4ed8', borderRadius: 9, textDecoration: 'none', fontWeight: 700 }}>
+              <Play size={17} /> Start Live Class
             </Link>
           )}
-        {/* </div>
-      </div> */}
+        </div>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 22, color: '#e0e7ff', fontSize: 14 }}>
+          {course.credit_hours != null && <span><BookOpen size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} />{course.credit_hours} credits</span>}
+          {course.semester && <span><Calendar size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} />Semester {course.semester}</span>}
+          <span><FileText size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} />{materials.length} materials</span>
+          <span><CheckCircle size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} />{assignments.length} assignments</span>
+        </div>
+      </div>
 
-      {/* Course Description
-      <div style={{
-        background: 'white',
-        borderRadius: '12px',
-        padding: '24px',
-        boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-        marginBottom: '24px',
-      }}>
-        <h2 style={{
-          fontSize: '18px',
-          fontWeight: 600,
-          marginBottom: '8px',
-        }}>Description</h2>
-        <p style={{
-          color: '#475569',
-          lineHeight: '1.6',
-        }}>{course.description || 'No description provided.'}</p>
-      </div> */}
+      {user?.role === 'STUDENT' && (
+        <CourseAIChat courseId={course.id} courseTitle={course.title} />
+      )}
 
       {/* Tabs */}
       <div style={{
@@ -529,30 +462,21 @@ const CourseDetail = () => {
                           </div>
                         </div>
                       </div>
-                      {material.file ? (
-                        <button
-                          onClick={() => handleDownload(material)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '8px 16px',
-                            background: '#2563eb',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            fontWeight: 500,
-                            transition: 'all 0.3s ease',
-                            whiteSpace: 'nowrap',
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
-                        >
-                          {/* <Download size={16} /> */}
-                          Open
-                        </button>
+                      {(material.file_url || material.file) ? (
+                        <div style={{ display: 'flex', gap: 8, marginLeft: 12, flexShrink: 0 }}>
+                          <button
+                            onClick={() => handleOpen(material.file_url || material.file)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: '#2563eb', color: '#fff', border: 0, borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}
+                          >
+                            <Eye size={16} /> Open
+                          </button>
+                          <button
+                            onClick={() => handleDownload(material.file_url || material.file, material.title)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: '#eff6ff', color: '#1d4ed8', border: 0, borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}
+                          >
+                            <Download size={16} /> Download
+                          </button>
+                        </div>
                       ) : (
                         <span style={{
                           fontSize: '13px',
@@ -693,55 +617,41 @@ const CourseDetail = () => {
                           flexWrap: 'wrap',
                         }}>
                           {assignment.attachment && (
-                            <a
-                              href={getMediaUrl(assignment.attachment)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                padding: '6px 12px',
-                                background: '#eff6ff',
-                                color: '#2563eb',
-                                borderRadius: '6px',
-                                textDecoration: 'none',
-                                fontSize: '13px',
-                                fontWeight: 500,
-                                transition: 'all 0.3s ease',
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = '#dbeafe'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = '#eff6ff'}
-                            >
-                              <FileText size={14} />
-                              Open Assignment
-                            </a>
+                            <React.Fragment key="assignment-attachment-actions">
+                              <button
+                                type="button"
+                                onClick={() => handleOpen(assignment.attachment)}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#eff6ff', color: '#2563eb', border: 0, borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                              >
+                                <Eye size={14} /> Open Attachment
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDownload(assignment.attachment, `${assignment.title}-attachment`)}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#f1f5f9', color: '#334155', border: 0, borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                              >
+                                <Download size={14} /> Download
+                              </button>
+                            </React.Fragment>
                           )}
                           
                           {assignment.video_attachment && (
-                            <a
-                              href={getMediaUrl(assignment.video_url || assignment.video_attachment)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                padding: '6px 12px',
-                                background: '#fef3c7',
-                                color: '#d97706',
-                                borderRadius: '6px',
-                                textDecoration: 'none',
-                                fontSize: '13px',
-                                fontWeight: 500,
-                                transition: 'all 0.3s ease',
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = '#fde68a'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = '#fef3c7'}
-                            >
-                              <Video size={14} />
-                              View Video
-                            </a>
+                            <React.Fragment key="assignment-video-actions">
+                              <button
+                                type="button"
+                                onClick={() => handleOpen(assignment.video_url || assignment.video_attachment)}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#fef3c7', color: '#b45309', border: 0, borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                              >
+                                <Video size={14} /> View Video
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDownload(assignment.video_url || assignment.video_attachment, `${assignment.title}-video`)}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#fff7ed', color: '#9a3412', border: 0, borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                              >
+                                <Download size={14} /> Download
+                              </button>
+                            </React.Fragment>
                           )}
                           
                           {assignment.link_url && (
@@ -1014,6 +924,13 @@ const CourseDetail = () => {
             </p>
           </div>
         </div>
+      )}
+      {previewFile && (
+        <CourseFilePreview
+          file={previewFile.file}
+          title={previewFile.title}
+          onClose={() => setPreviewFile(null)}
+        />
       )}
     </div>
   );

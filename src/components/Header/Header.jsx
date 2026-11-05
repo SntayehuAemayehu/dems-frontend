@@ -68,14 +68,14 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
       path: '/',
       icon: <Home size={17} />,
     },
+    // {
+    //   name: 'Courses',
+    //   path: '/courses',
+    //   icon: <BookOpen size={17} />,
+    // },
     {
-      name: 'Courses',
-      path: '/courses',
-      icon: <BookOpen size={17} />,
-    },
-    {
-      name: 'About Portal',
-      path: '/about',
+      name: 'About',
+      path: '/terms-and-policy',
       icon: <Info size={17} />,
     },
   ];
@@ -378,7 +378,7 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
                 {link.name}
               </NavLink>
             ))}
-            {isAuthenticated && (
+            {/* {isAuthenticated && (
               <NavLink
                 to={dashboardPath}
                 style={navLinkStyle}
@@ -387,7 +387,7 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
                 <LayoutDashboard size={17} />
                 Dashboard
               </NavLink>
-            )}
+            )} */}
           </nav>
 
           {/* Desktop Actions */}

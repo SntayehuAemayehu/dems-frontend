@@ -45,6 +45,11 @@ const HomePage = () => {
         totalExams: 0
     });
     const [latestNews, setLatestNews] = useState([]);
+    const [projectChatInput, setProjectChatInput] = useState('');
+    const [projectChatMessages, setProjectChatMessages] = useState([{
+        role: 'assistant',
+        content: "Welcome to ODEMS AI! I'm the ODEMS project assistant. Ask me how this learning platform works.",
+    }]);
 
     const colors = {
         primary: '#4f46e5',
@@ -106,6 +111,35 @@ const HomePage = () => {
 
     const openNewsDetail = newsId => {
         navigate(`/news/${newsId}`);
+    };
+
+    const askProjectAssistant = (event) => {
+        event.preventDefault();
+        const question = projectChatInput.trim();
+        if (!question) return;
+        const prompt = question.toLowerCase();
+        let answer;
+        if (/\b(what is|about|project|odems|dems)\b/.test(prompt)) {
+            answer = 'ODEMS is Mekdela Amba University’s Distance Education Management System. It brings course learning, academic activities, and student services together online.';
+        } else if (/\b(course|enroll|enrol|material|lesson)\b/.test(prompt)) {
+            answer = 'Students can browse available courses, enroll in eligible courses, and use each course page to access learning materials and assignments.';
+        } else if (/\b(teacher|instructor|teach|grade|result|mark)\b/.test(prompt)) {
+            answer = 'Teachers use ODEMS to manage their courses, share learning materials, create assignments and exams, review submissions, and see student results.';
+        } else if (/\b(exam|quiz|test|proctor)\b/.test(prompt)) {
+            answer = 'ODEMS supports online quizzes and exams. Students can find available assessments in the Exams area; exam instructions and scheduled availability are shown there.';
+        } else if (/\b(register|sign up|account|login|password)\b/.test(prompt)) {
+            answer = 'Use the Register or Login links to access ODEMS. For account or password issues, use password recovery or contact the university support team.';
+        } else if (/\b(live|class|video)\b/.test(prompt)) {
+            answer = 'ODEMS includes live classes so students and teachers can meet online from the relevant course or Live Classes area.';
+        } else {
+            answer = 'I can answer questions about the ODEMS project, courses, enrollment, exams, results, teacher tools, and live classes. What would you like to know?';
+        }
+        setProjectChatMessages((current) => [
+            ...current,
+            { role: 'user', content: question },
+            { role: 'assistant', content: answer },
+        ]);
+        setProjectChatInput('');
     };
 
     const features = [
@@ -541,6 +575,45 @@ const HomePage = () => {
                                 expandIconPosition="end"
                                 style={{ background: colors.card, borderRadius: 20, border: `1px solid ${colors.border}`, padding: '0 20px' }}
                             />
+                        </div>
+                    </RevealOnScroll>
+                </div>
+            </section>
+
+            {/* HARDCODED PROJECT ASSISTANT FOR VISITORS */}
+            <section id="odems-ai" style={sectionStyle}>
+                <div style={containerStyle}>
+                    <RevealOnScroll>
+                        <div style={{ maxWidth: 760, margin: '0 auto', padding: 24, borderRadius: 20, background: colors.card, border: `1px solid ${colors.border}`, boxShadow: '0 12px 32px rgba(15,23,42,.08)' }}>
+                            <div style={{ marginBottom: 18 }}>
+                                <Tag color="purple">ODEMS PROJECT ASSISTANT</Tag>
+                                <Title level={2} style={{ color: colors.text, margin: '12px 0 4px' }}>Welcome to ODEMS AI</Title>
+                                <Paragraph style={{ color: colors.muted, margin: 0 }}>
+                                    Ask about the ODEMS platform. This public assistant uses built-in project information and only answers questions about ODEMS.
+                                </Paragraph>
+                            </div>
+                            <div aria-live="polite" style={{ maxHeight: 280, minHeight: 120, overflowY: 'auto', padding: 14, marginBottom: 14, borderRadius: 12, background: colors.background, border: `1px solid ${colors.border}` }}>
+                                {projectChatMessages.map((message, index) => (
+                                    <div key={`${index}-${message.role}`} style={{ display: 'flex', justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: 10 }}>
+                                        <p style={{ maxWidth: '88%', margin: 0, padding: '10px 13px', borderRadius: 12, whiteSpace: 'pre-wrap', color: message.role === 'user' ? '#fff' : colors.text, background: message.role === 'user' ? colors.primary : colors.card, border: `1px solid ${message.role === 'user' ? colors.primary : colors.border}`, lineHeight: 1.55 }}>
+                                            {message.content}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                            <form onSubmit={askProjectAssistant} style={{ display: 'flex', gap: 8 }}>
+                                <input
+                                    value={projectChatInput}
+                                    onChange={(event) => setProjectChatInput(event.target.value)}
+                                    maxLength={500}
+                                    aria-label="Ask ODEMS AI about this project"
+                                    placeholder="Ask how ODEMS works..."
+                                    style={{ flex: 1, minWidth: 0, padding: '11px 13px', borderRadius: 9, border: `1px solid ${colors.border}`, color: colors.text, background: colors.surface }}
+                                />
+                                <Button type="primary" htmlType="submit" disabled={!projectChatInput.trim()} style={{ height: 'auto', borderRadius: 9, background: colors.primary }}>
+                                    Ask
+                                </Button>
+                            </form>
                         </div>
                     </RevealOnScroll>
                 </div>
