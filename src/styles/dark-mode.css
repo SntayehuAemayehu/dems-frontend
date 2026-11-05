@@ -108,3 +108,26 @@
 .dark .modal-footer {
   border-color: #2d2d44;
 }
+/* Force auth page forms to be dark */
+.dark input[type="text"],
+.dark input[type="email"],
+.dark input[type="password"],
+.dark input[type="tel"],
+.dark select,
+.dark textarea {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+/* Force the glassmorphism card to be dark */
+.dark .auth-card {
+  background: rgba(17, 24, 39, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Ensure page background is dark */
+.dark .auth-page-bg {
+  background: #030712 !important;
+}

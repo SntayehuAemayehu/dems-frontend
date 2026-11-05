@@ -20,7 +20,10 @@ import PaymentStatusBanner from '../../components/PaymentStatusBanner';
 import GradeBadge from '../../components/Grade/GradeBadge';
 import AIInsights from '../../components/AI/AIInsights'
 import LanguageSelector from '../../components/i18n/LanguageSelector';
-
+import SmartStatCard from '../../components/Motion/SmartStatCard';
+import { FadeIn, Stagger, StaggerItem, PageTransition } from '../../components/Motion/MotionPrimitives';
+import { NumberTicker } from '../../components/Motion/MotionPrimitives';
+import { motion } from 'motion/react';
 // ============================================================
 // SIDEBAR NAVIGATION COMPONENT (UNTOUCHED)
 // ============================================================
@@ -1079,49 +1082,19 @@ const renderLockBanner = () => {
           )}
 
           {/* ============ STATS GRID ============ */}
-          <div className="stats-grid-wrapper">
-            {stats.map((stat, index) => (
-              <div key={index} style={{
-                background: 'white',
-                borderRadius: '12px',
-                padding: '20px',
-                boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-                transition: 'all 0.3s ease',
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'}
-              onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 1px 3px 0 rgba(0,0,0,0.1)'}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px',
-                }}>
-                  <div style={{
-                    padding: '12px',
-                    borderRadius: '10px',
-                    background: stat.color,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <stat.icon size={24} color="white" />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{
-                      color: '#64748b',
-                      fontSize: '14px',
-                      margin: 0,
-                    }}>{stat.name}</p>
-                    <p style={{
-                      fontSize: '24px',
-                      fontWeight: 700,
-                      color: '#0f172a',
-                      margin: '4px 0 0 0',
-                    }}>{stat.value}</p>
-                  </div>
-                </div>
-              </div>
+          <Stagger className="stats-grid-wrapper">
+            {stats.map((s, i) => (
+              <StaggerItem key={i}>
+                <SmartStatCard
+                  icon={s.icon}
+                  label={s.name}
+                  value={typeof s.value === 'number' ? s.value : Number(s.value) || 0}
+                  color={s.color}
+                  trend={i === 0 ? 12 : i === 1 ? -4 : i === 2 ? 8 : 0}
+                />
+              </StaggerItem>
             ))}
-          </div>
+          </Stagger>
 
           {/* ============================================================ */}
           {/* ✅ ADDED / FIXED: COURSE GRADES SECTION */}
@@ -1159,7 +1132,7 @@ const renderLockBanner = () => {
                     borderRadius: '20px',
                     marginLeft: '8px',
                   }}>
-                    CGPA: {gradeSummary.cgpa}
+                    CGPA: <NumberTicker value={parseFloat(gradeSummary.cgpa) || 0} />
                   </span>
                 )}
               </h2>
@@ -1277,14 +1250,17 @@ const renderLockBanner = () => {
                         borderRadius: '3px',
                         overflow: 'hidden',
                       }}>
-                        <div style={{
-                          width: `${Math.min(course.percentage, 100)}%`,
-                          height: '100%',
-                          background: course.percentage >= 70 ? '#22c55e' :
-                                    course.percentage >= 50 ? '#f59e0b' : '#dc2626',
-                          borderRadius: '3px',
-                          transition: 'width 0.5s ease',
-                        }} />
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min(course.percentage, 100)}%` }}
+                          transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+                          style={{
+                            height: '100%',
+                            background: course.percentage >= 70 ? '#22c55e' :
+                                      course.percentage >= 50 ? '#f59e0b' : '#dc2626',
+                            borderRadius: '3px',
+                          }}
+                        />
                       </div>
                     </div>
                     

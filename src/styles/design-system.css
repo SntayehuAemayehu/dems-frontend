@@ -1,0 +1,183 @@
+/* ============================================================
+   DEMS DESIGN SYSTEM — tokens, surfaces, motion utilities
+   ============================================================ */
+
+:root {
+  /* Brand */
+  --dems-primary: #4f46e5;
+  --dems-primary-2: #06b6d4;
+  --dems-accent: #8b5cf6;
+  --dems-success: #10b981;
+  --dems-warning: #f59e0b;
+  --dems-danger: #ef4444;
+
+  /* Gradients */
+  --dems-grad-primary: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
+  --dems-grad-accent: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  --dems-grad-success: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+  --dems-grad-warm: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+
+  /* Surfaces (light) */
+  --dems-bg: #f8fafc;
+  --dems-surface: #ffffff;
+  --dems-surface-2: #f1f5f9;
+  --dems-border: #e2e8f0;
+  --dems-text: #0f172a;
+  --dems-muted: #64748b;
+
+  /* Shadows */
+  --dems-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --dems-shadow-sm: 0 4px 12px rgba(15, 23, 42, 0.06);
+  --dems-shadow-md: 0 10px 30px -10px rgba(15, 23, 42, 0.12);
+  --dems-shadow-lg: 0 25px 60px -15px rgba(79, 70, 229, 0.25);
+
+  /* Radius */
+  --dems-r-sm: 8px;
+  --dems-r-md: 12px;
+  --dems-r-lg: 20px;
+  --dems-r-xl: 28px;
+
+  /* Motion */
+  --dems-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dems-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dark {
+  --dems-bg: #030712;
+  --dems-surface: #111827;
+  --dems-surface-2: #1f2937;
+  --dems-border: #374151;
+  --dems-text: #f9fafb;
+  --dems-muted: #9ca3af;
+  --dems-shadow-md: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  --dems-shadow-lg: 0 25px 60px -15px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------- Motion keyframes ---------- */
+@keyframes dems-spin { to { transform: rotate(360deg); } }
+@keyframes dems-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+@keyframes dems-pulse-glow {
+  0%,100% { box-shadow: 0 0 0 0 rgba(79,70,229,.5); }
+  50%     { box-shadow: 0 0 0 14px rgba(79,70,229,0); }
+}
+@keyframes dems-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+@keyframes dems-fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes dems-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dems-scale-in { from { opacity:0; transform: scale(.92);} to{opacity:1;transform:scale(1);} }
+@keyframes dems-slide-right {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes dems-orbit {
+  from { transform: rotate(0deg) translateX(120px) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(120px) rotate(-360deg); }
+}
+@keyframes dems-gradient {
+  0%,100% { background-position: 0% 50%; }
+  50%     { background-position: 100% 50%; }
+}
+@keyframes dems-bounce-in {
+  0%   { opacity: 0; transform: scale(.3); }
+  50%  { opacity: 1; transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* ---------- Animation classes ---------- */
+.dems-spin      { animation: dems-spin 1s linear infinite; }
+.dems-float     { animation: dems-float 6s ease-in-out infinite; }
+.dems-pulse     { animation: dems-pulse-glow 2.4s ease-in-out infinite; }
+.dems-fade-up   { animation: dems-fade-up .6s var(--dems-ease) both; }
+.dems-fade-in   { animation: dems-fade-in .5s var(--dems-ease) both; }
+.dems-scale-in  { animation: dems-scale-in .45s var(--dems-spring) both; }
+.dems-slide-right { animation: dems-slide-right .5s var(--dems-ease) both; }
+.dems-bounce-in { animation: dems-bounce-in .6s var(--dems-spring) both; }
+.dems-animate-gradient {
+  background-size: 200% 200%;
+  animation: dems-gradient 8s ease infinite;
+}
+
+/* ---------- Shimmer text ---------- */
+.dems-shimmer {
+  background: linear-gradient(90deg, #4f46e5, #06b6d4, #8b5cf6, #4f46e5);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: dems-shimmer 4s linear infinite;
+}
+
+/* ---------- Glass cards ---------- */
+.dems-glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,255,255,0.4);
+}
+.dark .dems-glass {
+  background: rgba(17, 24, 39, 0.6);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+/* ---------- Interactive card ---------- */
+.dems-card {
+  position: relative;
+  border-radius: var(--dems-r-lg);
+  background: var(--dems-surface);
+  border: 1px solid var(--dems-border);
+  box-shadow: var(--dems-shadow-sm);
+  transition: transform .4s var(--dems-spring), box-shadow .4s var(--dems-ease);
+  will-change: transform;
+  overflow: hidden;
+}
+.dems-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(600px circle at var(--mx, 50%) var(--my, 50%),
+              rgba(79,70,229,0.08), transparent 40%);
+  opacity: 0;
+  transition: opacity .4s ease;
+  pointer-events: none;
+}
+.dems-card:hover::before { opacity: 1; }
+.dems-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--dems-shadow-md);
+}
+
+/* ---------- Buttons ---------- */
+.dems-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 22px; border-radius: 12px; border: none;
+  font-weight: 600; font-size: 14px; cursor: pointer;
+  transition: transform .25s var(--dems-spring), box-shadow .3s ease, opacity .2s;
+}
+.dems-btn-primary {
+  background: var(--dems-grad-primary);
+  color: white;
+  box-shadow: 0 6px 20px -4px rgba(79,70,229,.45);
+}
+.dems-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 28px -6px rgba(79,70,229,.55); }
+.dems-btn-ghost {
+  background: transparent; color: var(--dems-text);
+  border: 1px solid var(--dems-border);
+}
+.dems-btn-ghost:hover { background: var(--dems-surface-2); }
+
+/* ---------- Skeleton loader ---------- */
+.dems-skeleton {
+  background: linear-gradient(90deg, var(--dems-surface-2) 25%, var(--dems-border) 50%, var(--dems-surface-2) 75%);
+  background-size: 200% 100%;
+  animation: dems-shimmer 1.4s linear infinite;
+  border-radius: 8px;
+}
+
+/* ---------- Reveal on scroll ---------- */
+.dems-reveal { opacity: 0; transform: translateY(30px); transition: opacity .7s var(--dems-ease), transform .7s var(--dems-ease); }
+.dems-reveal.in { opacity: 1; transform: translateY(0); }

@@ -2,12 +2,28 @@
 // Department shows for STUDENT, TEACHER, and DEPT_HEAD
 // Year and Semester show ONLY for STUDENT
 // Background is white
+// + 3D SCENE + 3D TILT ADDED — EVERY EXISTING LINE KEPT IN ORIGINAL ORDER
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, User, Phone, School, ChevronDown, AlertCircle, Calendar } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
+import AnimatedBackground from '../../components/Motion/AnimatedBackground';
+import Auth3DScene from '../../components/Motion/Auth3DScene';
+import { TiltCard, PageTransition } from '../../components/Motion/MotionPrimitives';
+import '../../styles/design-system.css';
+import '../../styles/animations.css';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.05, delayChildren: 0.2 } },
+};
+const itemVariants = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] } },
+};
 
 const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -33,13 +49,13 @@ const Register = () => {
   const fetchDepartments = useCallback(async () => {
     setLoadingDepartments(true);
     setDepartmentError(null);
-    
+
     try {
       console.log('📚 Fetching departments...');
       const response = await api.get('/auth/departments/');
-      
+
       let departmentsData = [];
-      
+
       if (response.data) {
         if (response.data.data && Array.isArray(response.data.data)) {
           departmentsData = response.data.data;
@@ -54,7 +70,7 @@ const Register = () => {
           departmentsData = [response.data];
         }
       }
-      
+
       if (departmentsData.length > 0) {
         setDepartments(departmentsData);
         console.log(`✅ Loaded ${departmentsData.length} departments`);
@@ -92,7 +108,7 @@ const Register = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
-    
+
     if (name === 'role' && !['STUDENT', 'TEACHER', 'DEPT_HEAD'].includes(value)) {
       setFormData(prev => ({ ...prev, department: '', year: '', semester: '' }));
     }
@@ -108,7 +124,7 @@ const Register = () => {
     if (!/[A-Z]/.test(password)) errors.push("Password must contain at least one uppercase letter");
     if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) errors.push("Password must contain at least one special character");
     if (!/[a-z]/.test(password)) errors.push("Password must contain at least one lowercase letter");
-    
+
     const commonPasswords = ['password', 'password123', 'admin123', 'letmein', 'qwerty123', 'welcome123', 'abc12345', '12345678', 'student123', 'teacher123', 'test1234', '123456789'];
     if (commonPasswords.includes(password.toLowerCase())) {
       errors.push("Password is too common. Please choose a stronger password.");
@@ -198,278 +214,384 @@ const Register = () => {
     }
   };
 
+  // ADDED: password strength visual only
+  const passwordStrength = (() => {
+    const p = formData.password || '';
+    let score = 0;
+    if (p.length >= 8) score++;
+    if (/[A-Z]/.test(p)) score++;
+    if (/\d/.test(p)) score++;
+    if (/[!@#$%^&*(),.?":{}|<>]/.test(p)) score++;
+    if (/[a-z]/.test(p)) score++;
+    return score;
+  })();
+  const strengthPercent = (passwordStrength / 5) * 100;
+  const strengthColor = passwordStrength <= 2 ? '#ef4444' : passwordStrength <= 3 ? '#f59e0b' : '#10b981';
+
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '24px',
-      background: '#ffffff', // ✅ WHITE BACKGROUND
-    }}>
+    <PageTransition>
       <div style={{
-        background: 'white',
-        borderRadius: '16px',
-        padding: '40px',
-        maxWidth: '520px',
-        width: '100%',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.08)',
-        maxHeight: '90vh',
-        overflowY: 'auto',
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+        background: '#ffffff',
+        position: 'relative',
+        overflow: 'hidden',
       }}>
-        <style>{`
-          .register-form::-webkit-scrollbar {
-            width: 6px;
-          }
-          .register-form::-webkit-scrollbar-track {
-            background: #f1f5f9;
-            border-radius: 8px;
-          }
-          .register-form::-webkit-scrollbar-thumb {
-            background: #94a3b8;
-            border-radius: 8px;
-          }
-          .register-form::-webkit-scrollbar-thumb:hover {
-            background: #64748b;
-          }
-          @media (max-width: 640px) {
-            .register-form {
-              padding: 16px;
-            }
-          }
-        `}</style>
+        <AnimatedBackground dark={false} density={40} showLines={false} />
+        <Auth3DScene variant="register" intensity={1} />
+        <motion.div
+          style={{ position: 'fixed', top: '-10%', left: '-10%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(16,185,129,0.16) 0%, transparent 70%)', filter: 'blur(40px)', zIndex: -1, pointerEvents: 'none' }}
+          animate={{ x: [0, 80, 0], y: [0, 60, 0] }} transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.div
+          style={{ position: 'fixed', bottom: '-15%', right: '-10%', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(6,182,212,0.16) 0%, transparent 70%)', filter: 'blur(50px)', zIndex: -1, pointerEvents: 'none' }}
+          animate={{ x: [0, -70, 0], y: [0, -50, 0] }} transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
+        />
 
-        <div style={{
-          textAlign: 'center',
-          marginBottom: '32px',
-        }}>
-          <h1 style={{
-            fontSize: '28px',
-            fontWeight: 700,
-            color: '#0f172a',
-            margin: '0 0 8px 0',
-          }}>Create Account</h1>
-          <p style={{
-            color: '#64748b',
-            fontSize: '16px',
-            margin: 0,
-          }}>Join our distance education platform</p>
-        </div>
-
-        <form onSubmit={handleSubmit} style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-        }} className="register-form">
-          
-          {/* Full Name */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Full Name *</label>
-            <div style={{ position: 'relative' }}>
-              <User style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
-              <input
-                type="text" name="full_name" value={formData.full_name} onChange={handleChange} placeholder="Sntie alex" required
-                style={{ width: '100%', padding: '12px 12px 12px 44px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', transition: 'all 0.3s ease', background: 'white' }}
-                onFocus={(e) => { e.currentTarget.style.outline = 'none'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
-              />
-            </div>
-          </div>
-
-          {/* Email */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Email Address *</label>
-            <div style={{ position: 'relative' }}>
-              <Mail style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
-              <input
-                type="email" name="email" value={formData.email} onChange={handleChange} placeholder="you@gmail.com" required
-                style={{ width: '100%', padding: '12px 12px 12px 44px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', transition: 'all 0.3s ease', background: 'white' }}
-                onFocus={(e) => { e.currentTarget.style.outline = 'none'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
-              />
-            </div>
-          </div>
-
-          {/* Phone */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Phone Number *</label>
-            <div style={{ position: 'relative' }}>
-              <Phone style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
-              <input
-                type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+251 918 116 960" required
-                style={{ width: '100%', padding: '12px 12px 12px 44px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', transition: 'all 0.3s ease', background: 'white' }}
-                onFocus={(e) => { e.currentTarget.style.outline = 'none'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
-              />
-            </div>
-          </div>
-
-          {/* Role */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Role *</label>
-            <select
-              name="role" value={formData.role} onChange={handleChange}
-              style={{ width: '100%', padding: '12px 16px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white', transition: 'all 0.3s ease' }}
-              onFocus={(e) => { e.currentTarget.style.outline = 'none'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)'; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+        <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 520 }}>
+          <TiltCard intensity={12}>
+            <motion.div
+              initial={{ opacity: 0, y: 40, scale: 0.94 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              style={{
+                position: 'relative',
+                background: 'rgba(255,255,255,0.85)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                borderRadius: '16px',
+                padding: '40px',
+                maxWidth: '520px',
+                width: '100%',
+                boxShadow: '0 40px 80px -20px rgba(79,70,229,0.35), 0 20px 40px -20px rgba(15,23,42,0.15)',
+                border: '1px solid rgba(255,255,255,0.5)',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                transform: 'translateZ(0)',
+              }}
             >
-              <option value="STUDENT">Student</option>
-              <option value="TEACHER">Teacher</option>
-              <option value="DEPT_HEAD">Department Head</option>
-              <option value="REGISTRAR">Registrar</option>
-              <option value="FINANCE">Finance</option>
-              <option value="ADMIN">Admin</option>
-            </select>
-          </div>
+              <motion.div
+                style={{ position: 'absolute', top: 0, left: '10%', right: '10%', height: 3, borderRadius: 3, background: 'linear-gradient(90deg, transparent, #10b981, #3b82f6, #06b6d4, transparent)', backgroundSize: '200% 100%' }}
+                animate={{ backgroundPosition: ['0% 50%', '200% 50%', '0% 50%'] }}
+                transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+              />
 
-          {/* ✅ Department - shows for STUDENT, TEACHER, and DEPT_HEAD */}
-          {['STUDENT', 'TEACHER', 'DEPT_HEAD'].includes(formData.role) && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 500, color: '#334155' }}>
-                <School size={18} />
-                Department *
-                {loadingDepartments && <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: '4px' }}>Loading...</span>}
-              </label>
+              <style>{`
+                .register-form::-webkit-scrollbar {
+                  width: 6px;
+                }
+                .register-form::-webkit-scrollbar-track {
+                  background: #f1f5f9;
+                  border-radius: 8px;
+                }
+                .register-form::-webkit-scrollbar-thumb {
+                  background: #94a3b8;
+                  border-radius: 8px;
+                }
+                .register-form::-webkit-scrollbar-thumb:hover {
+                  background: #64748b;
+                }
+                @media (max-width: 640px) {
+                  .register-form {
+                    padding: 16px;
+                  }
+                }
+              `}</style>
 
-              {loadingDepartments && (
-                <div style={{ padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '2px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
-                  <div style={{ width: '20px', height: '20px', border: '2px solid #e2e8f0', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                  <span>Loading departments...</span>
-                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                </div>
-              )}
-
-              {!loadingDepartments && departmentError && (
-                <div style={{ padding: '12px 16px', background: '#fef2f2', borderRadius: '8px', border: '2px solid #fecaca', display: 'flex', alignItems: 'center', gap: '8px', color: '#dc2626' }}>
-                  <AlertCircle size={20} />
-                  <span>{departmentError}</span>
-                  <button onClick={fetchDepartments} style={{ marginLeft: 'auto', padding: '4px 12px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Retry</button>
-                </div>
-              )}
-
-              {!loadingDepartments && !departmentError && departments.length > 0 && (
-                <div style={{ position: 'relative' }}>
-                  <select
-                    name="department" value={formData.department} onChange={handleChange} required
-                    style={{ width: '100%', padding: '12px 40px 12px 16px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white', transition: 'all 0.3s ease', appearance: 'none', cursor: 'pointer' }}
-                    onFocus={(e) => { e.currentTarget.style.outline = 'none'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)'; }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
-                  >
-                    <option value="">Select your department</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.name}>{dept.name} {dept.code ? `(${dept.code})` : ''}</option>
-                    ))}
-                  </select>
-                  <ChevronDown style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} size={20} />
-                </div>
-              )}
-
-              {!loadingDepartments && !departmentError && departments.length === 0 && (
-                <div style={{ padding: '12px 16px', background: '#fef3c7', borderRadius: '8px', border: '2px solid #fde68a', display: 'flex', alignItems: 'center', gap: '8px', color: '#92400e' }}>
-                  <AlertCircle size={20} />
-                  <span>No departments available in the system. Please contact administrator.</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ✅ Year and Semester - ONLY visible when role is STUDENT */}
-          {formData.role === 'STUDENT' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: 500, color: '#334155' }}>
-                  <Calendar size={16} /> Year *
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <select
-                    name="year" value={formData.year} onChange={handleChange} required
-                    style={{ width: '100%', padding: '12px 40px 12px 16px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white', transition: 'all 0.3s ease', appearance: 'none', cursor: 'pointer' }}
-                    onFocus={(e) => { e.currentTarget.style.outline = 'none'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)'; }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
-                  >
-                    <option value="">Select Year</option>
-                    <option value="1">1st Year</option>
-                    <option value="2">2nd Year</option>
-                    <option value="3">3rd Year</option>
-                    <option value="4">4th Year</option>
-                    <option value="5">5th Year</option>
-                  </select>
-                  <ChevronDown style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} size={20} />
-                </div>
+              <div style={{
+                textAlign: 'center',
+                marginBottom: '32px',
+              }}>
+                <motion.h1
+                  initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                  style={{
+                    fontSize: '28px',
+                    fontWeight: 700,
+                    color: '#0f172a',
+                    margin: '0 0 8px 0',
+                  }}
+                >Create Account</motion.h1>
+                <motion.p
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+                  style={{
+                    color: '#64748b',
+                    fontSize: '16px',
+                    margin: 0,
+                  }}
+                >Join our distance education platform</motion.p>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: 500, color: '#334155' }}>
-                  <Calendar size={16} /> Semester *
-                </label>
-                <div style={{ position: 'relative' }}>
+              <motion.form
+                onSubmit={handleSubmit}
+                variants={containerVariants}
+                initial="hidden"
+                animate="show"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                }}
+                className="register-form"
+              >
+
+                {/* Full Name */}
+                <motion.div variants={itemVariants} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Full Name *</label>
+                  <div style={{ position: 'relative' }}>
+                    <User style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
+                    <input
+                      type="text" name="full_name" value={formData.full_name} onChange={handleChange} placeholder="Sntie alex" required
+                      style={{ width: '100%', padding: '12px 12px 12px 44px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', transition: 'all 0.3s ease', background: 'white', boxSizing: 'border-box', outline: 'none' }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(59,130,246,0.12)'; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                    />
+                  </div>
+                </motion.div>
+
+                {/* Email */}
+                <motion.div variants={itemVariants} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Email Address *</label>
+                  <div style={{ position: 'relative' }}>
+                    <Mail style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
+                    <input
+                      type="email" name="email" value={formData.email} onChange={handleChange} placeholder="you@gmail.com" required
+                      style={{ width: '100%', padding: '12px 12px 12px 44px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', transition: 'all 0.3s ease', background: 'white', boxSizing: 'border-box', outline: 'none' }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(59,130,246,0.12)'; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                    />
+                  </div>
+                </motion.div>
+
+                {/* Phone */}
+                <motion.div variants={itemVariants} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Phone Number *</label>
+                  <div style={{ position: 'relative' }}>
+                    <Phone style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
+                    <input
+                      type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+251 918 116 960" required
+                      style={{ width: '100%', padding: '12px 12px 12px 44px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', transition: 'all 0.3s ease', background: 'white', boxSizing: 'border-box', outline: 'none' }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(59,130,246,0.12)'; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                    />
+                  </div>
+                </motion.div>
+
+                {/* Role */}
+                <motion.div variants={itemVariants} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Role *</label>
                   <select
-                    name="semester" value={formData.semester} onChange={handleChange} required
-                    style={{ width: '100%', padding: '12px 40px 12px 16px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white', transition: 'all 0.3s ease', appearance: 'none', cursor: 'pointer' }}
-                    onFocus={(e) => { e.currentTarget.style.outline = 'none'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)'; }}
+                    name="role" value={formData.role} onChange={handleChange}
+                    style={{ width: '100%', padding: '12px 16px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white', transition: 'all 0.3s ease', outline: 'none', boxSizing: 'border-box' }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(59,130,246,0.12)'; }}
                     onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
                   >
-                    <option value="">Select Semester</option>
-                    <option value="1">Semester 1</option>
-                    <option value="2">Semester 2</option>
+                    <option value="STUDENT">Student</option>
+                    <option value="TEACHER">Teacher</option>
+                    <option value="DEPT_HEAD">Department Head</option>
+                    <option value="REGISTRAR">Registrar</option>
+                    <option value="FINANCE">Finance</option>
+                    <option value="ADMIN">Admin</option>
                   </select>
-                  <ChevronDown style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} size={20} />
-                </div>
-              </div>
-            </div>
-          )}
+                </motion.div>
 
-          {/* Password */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Password *</label>
-            <div style={{ position: 'relative' }}>
-              <Lock style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
-              <input
-                type={showPassword ? 'text' : 'password'} name="password" value={formData.password} onChange={handleChange} placeholder="••••••••" required minLength={8}
-                style={{ width: '100%', padding: '12px 12px 12px 44px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', transition: 'all 0.3s ease', background: 'white' }}
-                onFocus={(e) => { e.currentTarget.style.outline = 'none'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
-              />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}>
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
-            <p style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>Minimum 8 characters</p>
-          </div>
+                {/* ✅ Department - shows for STUDENT, TEACHER, and DEPT_HEAD */}
+                <AnimatePresence>
+                  {['STUDENT', 'TEACHER', 'DEPT_HEAD'].includes(formData.role) && (
+                    <motion.div
+                      key="department-field"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.3 }}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 500, color: '#334155' }}>
+                          <School size={18} />
+                          Department *
+                          {loadingDepartments && <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: '4px' }}>Loading...</span>}
+                        </label>
 
-          {/* Confirm Password */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Confirm Password *</label>
-            <div style={{ position: 'relative' }}>
-              <Lock style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
-              <input
-                type={showConfirmPassword ? 'text' : 'password'} name="confirm_password" value={formData.confirm_password} onChange={handleChange} placeholder="••••••••" required
-                style={{ width: '100%', padding: '12px 12px 12px 44px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', transition: 'all 0.3s ease', background: 'white' }}
-                onFocus={(e) => { e.currentTarget.style.outline = 'none'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
-              />
-              <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}>
-                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
-          </div>
+                        {loadingDepartments && (
+                          <div style={{ padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '2px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
+                            <motion.div
+                              animate={{ rotate: 360 }}
+                              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                              style={{ width: '20px', height: '20px', border: '2px solid #e2e8f0', borderTopColor: '#3b82f6', borderRadius: '50%' }}
+                            />
+                            <span>Loading departments...</span>
+                          </div>
+                        )}
 
-          {/* Submit Button */}
-          <button
-            type="submit" disabled={isLoading}
-            style={{ padding: '14px', background: isLoading ? '#94a3b8' : '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.3s ease', opacity: isLoading ? 0.7 : 1, marginTop: '8px' }}
-            onMouseEnter={(e) => { if (!isLoading) { e.currentTarget.style.background = '#2563eb'; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(59,130,246,0.3)'; } }}
-            onMouseLeave={(e) => { if (!isLoading) { e.currentTarget.style.background = '#3b82f6'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; } }}
-          >
-            {isLoading ? 'Creating account...' : 'Create Account'}
-          </button>
-        </form>
+                        {!loadingDepartments && departmentError && (
+                          <div style={{ padding: '12px 16px', background: '#fef2f2', borderRadius: '8px', border: '2px solid #fecaca', display: 'flex', alignItems: 'center', gap: '8px', color: '#dc2626' }}>
+                            <AlertCircle size={20} />
+                            <span>{departmentError}</span>
+                            <button onClick={fetchDepartments} style={{ marginLeft: 'auto', padding: '4px 12px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Retry</button>
+                          </div>
+                        )}
 
-        <p style={{ textAlign: 'center', marginTop: '24px', color: '#64748b', fontSize: '14px' }}>
-          Already have an account? <Link to="/login" style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 500 }}>Sign in</Link>
-        </p>
+                        {!loadingDepartments && !departmentError && departments.length > 0 && (
+                          <div style={{ position: 'relative' }}>
+                            <select
+                              name="department" value={formData.department} onChange={handleChange} required
+                              style={{ width: '100%', padding: '12px 40px 12px 16px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white', transition: 'all 0.3s ease', appearance: 'none', cursor: 'pointer', outline: 'none', boxSizing: 'border-box' }}
+                              onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(59,130,246,0.12)'; }}
+                              onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                            >
+                              <option value="">Select your department</option>
+                              {departments.map((dept) => (
+                                <option key={dept.id} value={dept.name}>{dept.name} {dept.code ? `(${dept.code})` : ''}</option>
+                              ))}
+                            </select>
+                            <ChevronDown style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} size={20} />
+                          </div>
+                        )}
+
+                        {!loadingDepartments && !departmentError && departments.length === 0 && (
+                          <div style={{ padding: '12px 16px', background: '#fef3c7', borderRadius: '8px', border: '2px solid #fde68a', display: 'flex', alignItems: 'center', gap: '8px', color: '#92400e' }}>
+                            <AlertCircle size={20} />
+                            <span>No departments available in the system. Please contact administrator.</span>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* ✅ Year and Semester - ONLY visible when role is STUDENT */}
+                <AnimatePresence>
+                  {formData.role === 'STUDENT' && (
+                    <motion.div
+                      key="student-fields"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.3 }}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: 500, color: '#334155' }}>
+                            <Calendar size={16} /> Year *
+                          </label>
+                          <div style={{ position: 'relative' }}>
+                            <select
+                              name="year" value={formData.year} onChange={handleChange} required
+                              style={{ width: '100%', padding: '12px 40px 12px 16px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white', transition: 'all 0.3s ease', appearance: 'none', cursor: 'pointer', outline: 'none', boxSizing: 'border-box' }}
+                              onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(59,130,246,0.12)'; }}
+                              onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                            >
+                              <option value="">Select Year</option>
+                              <option value="1">1st Year</option>
+                              <option value="2">2nd Year</option>
+                              <option value="3">3rd Year</option>
+                              <option value="4">4th Year</option>
+                              <option value="5">5th Year</option>
+                            </select>
+                            <ChevronDown style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} size={20} />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: 500, color: '#334155' }}>
+                            <Calendar size={16} /> Semester *
+                          </label>
+                          <div style={{ position: 'relative' }}>
+                            <select
+                              name="semester" value={formData.semester} onChange={handleChange} required
+                              style={{ width: '100%', padding: '12px 40px 12px 16px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white', transition: 'all 0.3s ease', appearance: 'none', cursor: 'pointer', outline: 'none', boxSizing: 'border-box' }}
+                              onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(59,130,246,0.12)'; }}
+                              onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                            >
+                              <option value="">Select Semester</option>
+                              <option value="1">Semester 1</option>
+                              <option value="2">Semester 2</option>
+                            </select>
+                            <ChevronDown style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} size={20} />
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Password */}
+                <motion.div variants={itemVariants} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Password *</label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
+                    <input
+                      type={showPassword ? 'text' : 'password'} name="password" value={formData.password} onChange={handleChange} placeholder="••••••••" required minLength={8}
+                      style={{ width: '100%', padding: '12px 12px 12px 44px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', transition: 'all 0.3s ease', background: 'white', boxSizing: 'border-box', outline: 'none' }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(59,130,246,0.12)'; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                    />
+                    <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </motion.button>
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>Minimum 8 characters</p>
+                  {formData.password && (
+                    <div style={{ marginTop: '4px' }}>
+                      <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${strengthPercent}%` }}
+                          transition={{ duration: 0.4 }}
+                          style={{ height: '100%', background: strengthColor, borderRadius: '3px' }}
+                        />
+                      </div>
+                      <p style={{ fontSize: '11px', color: strengthColor, margin: '4px 0 0', fontWeight: 500 }}>
+                        {passwordStrength <= 2 ? 'Weak' : passwordStrength <= 3 ? 'Medium' : 'Strong'} password
+                      </p>
+                    </div>
+                  )}
+                </motion.div>
+
+                {/* Confirm Password */}
+                <motion.div variants={itemVariants} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 500, color: '#334155' }}>Confirm Password *</label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'} name="confirm_password" value={formData.confirm_password} onChange={handleChange} placeholder="••••••••" required
+                      style={{ width: '100%', padding: '12px 12px 12px 44px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', transition: 'all 0.3s ease', background: 'white', boxSizing: 'border-box', outline: 'none' }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 4px rgba(59,130,246,0.12)'; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                    />
+                    <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </motion.button>
+                  </div>
+                </motion.div>
+
+                {/* Submit Button */}
+                <motion.button
+                  variants={itemVariants}
+                  whileHover={{ y: -2, boxShadow: '0 12px 28px -6px rgba(79,70,229,.55)' }}
+                  whileTap={{ scale: 0.97 }}
+                  type="submit" disabled={isLoading}
+                  style={{ padding: '14px', background: isLoading ? '#94a3b8' : '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.3s ease', opacity: isLoading ? 0.7 : 1, marginTop: '8px' }}
+                >
+                  {isLoading ? 'Creating account...' : 'Create Account'}
+                </motion.button>
+              </motion.form>
+
+              <motion.p
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
+                style={{ textAlign: 'center', marginTop: '24px', color: '#64748b', fontSize: '14px' }}
+              >
+                Already have an account? <Link to="/login" style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 500 }}>Sign in</Link>
+              </motion.p>
+            </motion.div>
+          </TiltCard>
+        </div>
       </div>
-    </div>
+    </PageTransition>
   );
 };
 

@@ -1,3 +1,4 @@
+
 // frontend/src/App.js
 // COMPLETE - WITH REAL CHAT ENABLED FOR ALL ROLES
 
@@ -75,12 +76,171 @@ import SessionTimeout from './components/SessionTimeout';
 import Grading from './pages/teacher/Grading';
 // import StartExam from './pages/Student/StartExam'; 
 // import ExamPage from './pages/Student/ExamPage';
-
+import AnimatedBackground from './components/Motion/AnimatedBackground';
+import { AnimatePresence } from 'motion/react';
+import { useLocation } from 'react-router-dom';
 
 // ✅ Small helper component for the redirect (needed because examId is not in scope)
 const RedirectToStartExam = () => {
   const { examId } = useParams();
   return <Navigate to={`/exams/${examId}/start`} replace />;
+};
+
+// ✅ NEW: Inner component that uses useLocation (must live inside <Router>)
+const AnimatedRoutes = () => {
+  const location = useLocation();
+  const { isDarkMode, toggleDarkMode } = useDarkMode(); // ← added: gives access to dark mode props
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        {/* Public Routes with Header */}
+        <Route
+          path="/"
+          element={
+            <>
+              <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
+              <HomePage />
+            </>
+          }
+        />
+        <Route
+          path="/news"
+          element={<><Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} /><NewsPage /></>}
+        />
+        <Route
+          path="/news/:newsId"
+          element={<><Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} /><NewsDetailPage /></>}
+        />
+        <Route
+          path="/terms-and-policy"
+          element={<><Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} /><TermsPolicyPage /></>}
+        />
+        <Route
+          path="/login"
+          element={
+            <>
+              <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
+              <Login />
+            </>
+          }
+        />
+        {/* ✅ ADDED ADMIN LOGIN ROUTE */}
+        <Route
+          path="/admin-login"
+          element={
+            <>
+              <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
+              <AdminLogin />
+            </>
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            <>
+              <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
+              <Register />
+            </>
+          }
+        />
+        <Route
+          path="/forgot-password"
+          element={
+            <>
+              <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
+              <ForgotPassword />
+            </>
+          }
+        />
+        <Route
+          path="/verify-otp"
+          element={
+            <>
+              <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
+              <VerifyOTP />
+            </>
+          }
+        />
+        <Route
+          path="/reset-password"
+          element={
+            <>
+              <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
+              <ResetPassword />
+            </>
+          }
+        />
+
+        {/* Protected Routes - With MainLayout */}
+        <Route element={<MainLayout />}>
+          {/* Student Routes */}
+          <Route path="/dashboard" element={<ProtectedRouteWithPayment roles={['STUDENT']}><Dashboard /></ProtectedRouteWithPayment>} />
+          <Route path="/courses" element={<ProtectedRouteWithPayment roles={['STUDENT']}><Courses /></ProtectedRouteWithPayment>} />
+          <Route path="/courses/:id" element={<ProtectedRouteWithPayment roles={['STUDENT']}><CourseDetail /></ProtectedRouteWithPayment>} />
+          <Route path="/exams" element={<ProtectedRouteWithPayment roles={['STUDENT']}><Exams /></ProtectedRouteWithPayment>} />
+          
+          {/* ✅ THE SECURE EXAM ROUTES */}
+          
+          {/* 1. View Exam Details (Read Only) */}
+          <Route path="/exams/:examId/details" element={<ProtectedRouteWithPayment roles={['STUDENT']}><ExamDetails /></ProtectedRouteWithPayment>} />
+          
+          {/* 2. SECURE START EXAM (Identity Verification Gatekeeper) */}
+          <Route path="/exams/:examId/start" element={<ProtectedRouteWithPayment roles={['STUDENT']}><TakeExam /></ProtectedRouteWithPayment>} />
+
+          {/* 3. Redirect old /take route to the new /start route */}
+          <Route
+            path="/exams/:examId/take"
+            element={<RedirectToStartExam />}
+          />
+
+          {/* Results & Others */}
+          <Route path="/results" element={<ProtectedRoute roles={['STUDENT']}><ExamResults /></ProtectedRoute>} />
+          <Route path="/payments" element={<ProtectedRoute roles={['STUDENT']}><Payments /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/live-classes" element={<ProtectedRouteWithPayment roles={['STUDENT', 'TEACHER']}><LiveClasses /></ProtectedRouteWithPayment>} />
+          <Route path="/upload-documents" element={<ProtectedRoute roles={['STUDENT']}><DocumentUpload /></ProtectedRoute>} />
+          <Route path="/assignment-results" element={<ProtectedRoute roles={['STUDENT']}><AssignmentResults /></ProtectedRoute>} />
+          <Route path="/live-class/:courseId" element={<ProtectedRouteWithPayment roles={['STUDENT', 'TEACHER']}><LiveClass /></ProtectedRouteWithPayment>} />
+          <Route path="/enroll-face" element={<ProtectedRoute roles={['STUDENT', 'TEACHER']}><EnrollFacePage /></ProtectedRoute>} />
+          
+          {/* Teacher Routes */}
+          <Route path="/teacher/dashboard" element={<ProtectedRoute roles={['TEACHER']}><TeacherDashboard /></ProtectedRoute>} />
+          <Route path="/teacher/courses" element={<ProtectedRoute roles={['TEACHER']}><TeacherCourses /></ProtectedRoute>} />
+          <Route path="/teacher/exams" element={<ProtectedRoute roles={['TEACHER']}><TeacherExams /></ProtectedRoute>} />
+          <Route path="/teacher/exams/:examId/live" element={<ProtectedRoute roles={['TEACHER']}><LiveExamView /></ProtectedRoute>} />
+          <Route path="/teacher/courses/:courseId/proctoring-images" element={<ProtectedRoute roles={['TEACHER']}><ProctoringImagesPage /></ProtectedRoute>} />
+          <Route path="/teacher/grade/:type/:id" element={<Grading />} />
+          
+          {/* Admin Routes */}
+          <Route path="/admin/dashboard" element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/news" element={<ProtectedRoute roles={['ADMIN']}><AdminNews /></ProtectedRoute>} />
+          <Route path="/admin/proctoring-review" element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
+
+          {/* Finance Routes */}
+          <Route path="/finance/dashboard" element={<ProtectedRoute roles={['FINANCE', 'ADMIN']}><FinanceDashboard /></ProtectedRoute>} />
+
+          {/* Registrar Routes */}
+          <Route path="/registrar/dashboard" element={<ProtectedRoute roles={['REGISTRAR', 'ADMIN']}><RegistrarDashboard /></ProtectedRoute>} />
+
+          {/* Department Head Routes */}
+          <Route path="/dept/dashboard" element={<ProtectedRoute roles={['DEPT_HEAD']}><DeptDashboard /></ProtectedRoute>} />
+
+          {/* AI & Gamification Routes */}
+          <Route path="/ai-insights" element={<ProtectedRoute roles={['STUDENT']}><AIInsights /></ProtectedRoute>} />
+          <Route path="/leaderboard" element={<ProtectedRoute roles={['STUDENT']}><Leaderboard /></ProtectedRoute>} />
+          <Route path="/learning-path" element={<ProtectedRoute roles={['STUDENT']}><AILearningPath /></ProtectedRoute>} />
+          <Route path="/gamification" element={<ProtectedRoute roles={['STUDENT']}><GamificationProfile /></ProtectedRoute>} />
+          <Route path="/certificates" element={<ProtectedRouteWithPayment roles={['STUDENT']}><CertificateViewer /></ProtectedRouteWithPayment>} />
+          <Route path="/predictions" element={<ProtectedRoute roles={['STUDENT']}><PerformancePrediction /></ProtectedRoute>} />
+          <Route path="/admin/analytics" element={<ProtectedRoute roles={['ADMIN']}><RealTimeDashboard /></ProtectedRoute>} />
+        </Route>
+
+        {/* ✅ CATCH-ALL MUST BE THE VERY LAST ROUTE */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+
+      </Routes>
+    </AnimatePresence>
+  );
 };
 
 
@@ -112,157 +272,12 @@ const AppContent = () => {
          
         <Router>
          <SessionTimeout> 
-          <Routes>
-            {/* Public Routes with Header */}
-            <Route
-              path="/"
-              element={
-                <>
-                  <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
-                  <HomePage />
-                </>
-              }
-            />
-            <Route
-              path="/news"
-              element={<><Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} /><NewsPage /></>}
-            />
-            <Route
-              path="/news/:newsId"
-              element={<><Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} /><NewsDetailPage /></>}
-            />
-            <Route
-              path="/terms-and-policy"
-              element={<><Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} /><TermsPolicyPage /></>}
-            />
-            <Route
-              path="/login"
-              element={
-                <>
-                  <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
-                  <Login />
-                </>
-              }
-            />
-            {/* ✅ ADDED ADMIN LOGIN ROUTE */}
-            <Route
-              path="/admin-login"
-              element={
-                <>
-                  <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
-                  <AdminLogin />
-                </>
-              }
-            />
-            <Route
-              path="/register"
-              element={
-                <>
-                  <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
-                  <Register />
-                </>
-              }
-            />
-            <Route
-              path="/forgot-password"
-              element={
-                <>
-                  <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
-                  <ForgotPassword />
-                </>
-              }
-            />
-            <Route
-              path="/verify-otp"
-              element={
-                <>
-                  <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
-                  <VerifyOTP />
-                </>
-              }
-            />
-            <Route
-              path="/reset-password"
-              element={
-                <>
-                  <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
-                  <ResetPassword />
-                </>
-              }
-            />
-
-            {/* Protected Routes - With MainLayout */}
-            <Route element={<MainLayout />}>
-              {/* Student Routes */}
-              <Route path="/dashboard" element={<ProtectedRouteWithPayment roles={['STUDENT']}><Dashboard /></ProtectedRouteWithPayment>} />
-              <Route path="/courses" element={<ProtectedRouteWithPayment roles={['STUDENT']}><Courses /></ProtectedRouteWithPayment>} />
-              <Route path="/courses/:id" element={<ProtectedRouteWithPayment roles={['STUDENT']}><CourseDetail /></ProtectedRouteWithPayment>} />
-              <Route path="/exams" element={<ProtectedRouteWithPayment roles={['STUDENT']}><Exams /></ProtectedRouteWithPayment>} />
-              
-              {/* ✅ THE SECURE EXAM ROUTES */}
-              
-              {/* 1. View Exam Details (Read Only) */}
-              <Route path="/exams/:examId/details" element={<ProtectedRouteWithPayment roles={['STUDENT']}><ExamDetails /></ProtectedRouteWithPayment>} />
-              
-              {/* 2. SECURE START EXAM (Identity Verification Gatekeeper) */}
-              <Route path="/exams/:examId/start" element={<ProtectedRouteWithPayment roles={['STUDENT']}><TakeExam /></ProtectedRouteWithPayment>} />
-
-              {/* 3. Redirect old /take route to the new /start route */}
-              <Route
-                path="/exams/:examId/take"
-                element={<RedirectToStartExam />}
-              />
- 
-              {/* Results & Others */}
-              <Route path="/results" element={<ProtectedRoute roles={['STUDENT']}><ExamResults /></ProtectedRoute>} />
-              <Route path="/payments" element={<ProtectedRoute roles={['STUDENT']}><Payments /></ProtectedRoute>} />
-              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-              <Route path="/live-classes" element={<ProtectedRouteWithPayment roles={['STUDENT', 'TEACHER']}><LiveClasses /></ProtectedRouteWithPayment>} />
-              <Route path="/upload-documents" element={<ProtectedRoute roles={['STUDENT']}><DocumentUpload /></ProtectedRoute>} />
-              <Route path="/assignment-results" element={<ProtectedRoute roles={['STUDENT']}><AssignmentResults /></ProtectedRoute>} />
-              <Route path="/live-class/:courseId" element={<ProtectedRouteWithPayment roles={['STUDENT', 'TEACHER']}><LiveClass /></ProtectedRouteWithPayment>} />
-              <Route path="/enroll-face" element={<ProtectedRoute roles={['STUDENT', 'TEACHER']}><EnrollFacePage /></ProtectedRoute>} />
-              
-              {/* Teacher Routes */}
-              <Route path="/teacher/dashboard" element={<ProtectedRoute roles={['TEACHER']}><TeacherDashboard /></ProtectedRoute>} />
-              <Route path="/teacher/courses" element={<ProtectedRoute roles={['TEACHER']}><TeacherCourses /></ProtectedRoute>} />
-              <Route path="/teacher/exams" element={<ProtectedRoute roles={['TEACHER']}><TeacherExams /></ProtectedRoute>} />
-              <Route path="/teacher/exams/:examId/live" element={<ProtectedRoute roles={['TEACHER']}><LiveExamView /></ProtectedRoute>} />
-              <Route path="/teacher/courses/:courseId/proctoring-images" element={<ProtectedRoute roles={['TEACHER']}><ProctoringImagesPage /></ProtectedRoute>} />
-              <Route path="/teacher/grade/:type/:id" element={<Grading />} />
-              
-              {/* Admin Routes */}
-              <Route path="/admin/dashboard" element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
-              <Route path="/admin/news" element={<ProtectedRoute roles={['ADMIN']}><AdminNews /></ProtectedRoute>} />
-              <Route path="/admin/proctoring-review" element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
-
-              {/* Finance Routes */}
-              <Route path="/finance/dashboard" element={<ProtectedRoute roles={['FINANCE', 'ADMIN']}><FinanceDashboard /></ProtectedRoute>} />
-
-              {/* Registrar Routes */}
-              <Route path="/registrar/dashboard" element={<ProtectedRoute roles={['REGISTRAR', 'ADMIN']}><RegistrarDashboard /></ProtectedRoute>} />
-
-              {/* Department Head Routes */}
-              <Route path="/dept/dashboard" element={<ProtectedRoute roles={['DEPT_HEAD']}><DeptDashboard /></ProtectedRoute>} />
-
-              {/* AI & Gamification Routes */}
-              <Route path="/ai-insights" element={<ProtectedRoute roles={['STUDENT']}><AIInsights /></ProtectedRoute>} />
-              <Route path="/leaderboard" element={<ProtectedRoute roles={['STUDENT']}><Leaderboard /></ProtectedRoute>} />
-              <Route path="/learning-path" element={<ProtectedRoute roles={['STUDENT']}><AILearningPath /></ProtectedRoute>} />
-              <Route path="/gamification" element={<ProtectedRoute roles={['STUDENT']}><GamificationProfile /></ProtectedRoute>} />
-              <Route path="/certificates" element={<ProtectedRouteWithPayment roles={['STUDENT']}><CertificateViewer /></ProtectedRouteWithPayment>} />
-              <Route path="/predictions" element={<ProtectedRoute roles={['STUDENT']}><PerformancePrediction /></ProtectedRoute>} />
-              <Route path="/admin/analytics" element={<ProtectedRoute roles={['ADMIN']}><RealTimeDashboard /></ProtectedRoute>} />
-            </Route>
-
-            {/* ✅ CATCH-ALL MUST BE THE VERY LAST ROUTE */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-
-          </Routes>
+          <AnimatedRoutes />
 
           {/* ============ REAL CHAT WIDGET ============ */}
           <ChatWidget />
           </SessionTimeout>
+          <AnimatedBackground dark={isDarkMode} density={60} />
         </Router>
         
       </div>

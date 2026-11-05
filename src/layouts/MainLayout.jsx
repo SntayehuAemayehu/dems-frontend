@@ -13,7 +13,7 @@ import { logout } from '../store/slices/authSlice';
 import { getMediaUrl } from '../api/api';
 import NotificationBell from '../components/common/NotificationBell';
 import { useDarkMode } from '../context/DarkModeContext';
-
+import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 const MainLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -211,54 +211,59 @@ const MainLayout = () => {
           {navItems.map((item) => {
             const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/');
             return (
-              <Link
+              <motion.div
                 key={item.name}
-                to={item.href}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '0.5rem 0.75rem',
-                  borderRadius: '0.5rem',
-                  fontSize: '0.875rem',
-                  fontWeight: 500,
-                  color: isActive ? activeColor : textMuted,
-                  textDecoration: 'none',
-                  transition: 'all 0.2s',
-                  background: isActive ? activeBg : 'transparent',
-                  position: 'relative',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = hoverBg;
-                    e.currentTarget.style.color = textColor;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = textMuted;
-                  }
-                }}
-                onClick={() => setSidebarOpen(false)}
+                whileHover={{ x: 4 }}
+                whileTap={{ scale: 0.97 }}
               >
-                <item.icon style={{
-                  marginRight: '0.75rem',
-                  height: '1.25rem',
-                  width: '1.25rem',
-                  color: isActive ? activeColor : textMuted,
-                }} />
-                {item.name}
-                {isActive && (
-                  <span style={{
-                    position: 'absolute',
-                    right: '8px',
-                    width: '4px',
-                    height: '24px',
-                    borderRadius: '2px',
-                    background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                <Link
+                  to={item.href}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: '0.5rem',
+                    fontSize: '0.875rem',
+                    fontWeight: 500,
+                    color: isActive ? activeColor : textMuted,
+                    textDecoration: 'none',
+                    transition: 'all 0.2s',
+                    background: isActive ? activeBg : 'transparent',
+                    position: 'relative',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = hoverBg;
+                      e.currentTarget.style.color = textColor;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = textMuted;
+                    }
+                  }}
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <item.icon style={{
+                    marginRight: '0.75rem',
+                    height: '1.25rem',
+                    width: '1.25rem',
+                    color: isActive ? activeColor : textMuted,
                   }} />
-                )}
-              </Link>
+                  {item.name}
+                  {isActive && (
+                    <span style={{
+                      position: 'absolute',
+                      right: '8px',
+                      width: '4px',
+                      height: '24px',
+                      borderRadius: '2px',
+                      background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                    }} />
+                  )}
+                </Link>
+              </motion.div>
             );
           })}
         </nav>
