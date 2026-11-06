@@ -81,8 +81,15 @@ export const getMediaUrl = (mediaPath) => {
     if (!mediaPath) return '';
 
     try {
-        const apiOrigin = new URL(API_BASE_URL, window.location.origin).origin;
-        return new URL(mediaPath, `${apiOrigin}/`).href;
+        // Force the base to be the backend API URL
+        const apiUrl = new URL(API_BASE_URL);
+        const backendOrigin = apiUrl.origin; // e.g., https://dems-backend.onrender.com
+        
+        // If the path already has http, return it
+        if (mediaPath.startsWith('http')) return mediaPath;
+        
+        // Ensure we construct the absolute URL correctly
+        return new URL(mediaPath, `${backendOrigin}/`).href;
     } catch {
         return mediaPath;
     }
