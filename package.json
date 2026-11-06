@@ -12,6 +12,7 @@
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.2",
     "@reduxjs/toolkit": "^2.12.0",
+    "@tailwindcss/vite": "^4.3.4",
     "@tensorflow-models/coco-ssd": "^2.2.3",
     "@tensorflow-models/face-detection": "^1.0.3",
     "@tensorflow-models/face-landmarks-detection": "^1.0.6",
@@ -45,7 +46,6 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
-
   },
   "browserslist": {
     "production": [

@@ -32,7 +32,6 @@ import { useDarkMode } from '../../context/DarkModeContext';
 import Footer from '../../components/Footer/Footer';
 import api, { getMediaUrl } from '../../api/api';
 import { FadeIn, RevealOnScroll, Stagger, StaggerItem, TiltCard} from '../../components/Motion/MotionPrimitives';
-
 const { Title, Paragraph, Text: TypographyText } = Typography;
 
 const HomePage = () => {

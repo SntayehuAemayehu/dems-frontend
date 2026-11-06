@@ -1,6 +1,7 @@
 // frontend/src/pages/Student/Dashboard.jsx
 // COMPLETE - ALL EXISTING CODE PRESERVED + LAYOUT/RESPONSIVENESS FIXES ONLY
-
+import { useLivePulse } from '../../hooks/useLivePulse';
+import { AnimatedCounter } from '../../components/Motion/AnimatedCounter';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
@@ -21,8 +22,15 @@ import GradeBadge from '../../components/Grade/GradeBadge';
 import AIInsights from '../../components/AI/AIInsights'
 import LanguageSelector from '../../components/i18n/LanguageSelector';
 import SmartStatCard from '../../components/Motion/SmartStatCard';
-import { FadeIn, Stagger, StaggerItem, PageTransition } from '../../components/Motion/MotionPrimitives';
-import { NumberTicker } from '../../components/Motion/MotionPrimitives';
+// Keep your existing motion imports
+import { 
+  FadeIn, 
+  Stagger, 
+  StaggerItem, 
+  PageTransition, 
+  NumberTicker 
+} from '../../components/Motion/MotionPrimitives';
+// Add FadeInUp and StaggerContainer for the new Live Pulse section
 import { motion } from 'motion/react';
 // ============================================================
 // SIDEBAR NAVIGATION COMPONENT (UNTOUCHED)
@@ -266,7 +274,8 @@ const Dashboard = () => {
   const [uploading, setUploading] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
-  
+    // ✅ Hook to fetch live pulse data
+  const { data, loading: pulseLoading } = useLivePulse();
   // ============================================================
   // ✅ ADDED: Course Grades State
   // ============================================================
@@ -544,7 +553,57 @@ const loadDashboardData = async () => {
     console.log('🔴 Joining live class from dashboard:', courseId);
     window.location.href = `/live-class/${courseId}`;
   };
-
+          {/* ============================================================ */}
+          {/* ✅ NEW: LIVE PULSE ANIMATED COUNTERS */}
+          {/* ============================================================ */}
+          <div style={{ marginBottom: '24px' }}>
+            <FadeIn>
+              <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={20} color="#f59e0b" />
+                Live System Pulse
+              </h2>
+            </FadeIn>
+            
+            <Stagger>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+                <StaggerItem>
+                  <AnimatedCounter 
+                    value={data?.students_online || 0} 
+                    label="Students Online" 
+                    icon="🟢" 
+                    color="green" 
+                  />
+                </StaggerItem>
+                <StaggerItem>
+                  <AnimatedCounter 
+                    value={data?.active_exams || 0} 
+                    label="Active Exams" 
+                    icon="📝" 
+                    color="blue" 
+                  />
+                </StaggerItem>
+                <StaggerItem>
+                  <AnimatedCounter 
+                    value={data?.submissions_today || 0} 
+                    label="Submissions Today" 
+                    icon="📤" 
+                    color="purple" 
+                  />
+                </StaggerItem>
+                <StaggerItem>
+                  <AnimatedCounter 
+                    value={data?.payments_last_hour || 0} 
+                    label="Payments (1h)" 
+                    icon="💳" 
+                    color="amber" 
+                  />
+                </StaggerItem>
+              </div>
+            </Stagger>
+          </div>
+          {/* ============================================================ */}
+          {/* END OF LIVE PULSE SECTION */}
+          {/* ============================================================ */}
   // ============ RENDER LOCK BANNER ============
 const renderLockBanner = () => {
   if (!isLocked) return null;

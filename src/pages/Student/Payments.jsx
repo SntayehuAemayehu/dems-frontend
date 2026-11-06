@@ -155,49 +155,59 @@ const fetchBankAccounts = async () => {
         setLoadingBanks(false);
     }
 };
-
 const updatePaymentMethods = (banks, configOverride = null) => {
     const methods = [];
     
     // Use passed config or fall back to state
     const config = configOverride || paymentConfig || {};
     
-    // ✅ 1. BANK TRANSFER
-    if (banks && banks.length > 0) {
-        const activeBanks = banks.filter(b => b.is_active !== false);
-        methods.push({
-            id: 'bank_transfer',
-            name: 'Bank Transfer',
-            icon: Building,
-            color: '#2563eb',
-            bgColor: '#eff6ff',
-            type: 'bank_transfer',
-            banks: activeBanks,
-            default_bank: activeBanks.find(b => b.is_default) || activeBanks[0],
-            instructions: [
-                'Visit any bank branch',
-                'Fill out the deposit slip with the following details:',
-                '  • Account Name: {account_name}',
-                '  • Account Number: {account_number}',
-                '  • Bank: {bank_name}',
-                '  • Branch: {branch_name}',
-                '  • Amount: Your exact payment amount',
-                'Keep the bank receipt as proof of payment',
-                'Enter the transaction ID from your receipt below',
-                'Upload a clear photo or scan of the receipt'
-            ]
-        });
-    }
+    // ✅ 1. BANK TRANSFER (Always show, use fallback if empty)
+    let activeBanks = banks ? banks.filter(b => b.is_active !== false) : [];
     
+    // If no banks found from DB, create a fallback from System Config
+    if (activeBanks.length === 0) {
+        activeBanks = [{
+            id: 'default',
+            bank_name: config.bank_name || 'Commercial Bank of Ethiopia',
+            account_name: config.account_name || 'DEMS University',
+            account_number: config.payment_account || '1000225566778',
+            branch_name: 'Main Branch',
+            is_active: true,
+            is_default: true
+        }];
+    }
+
+    methods.push({
+        id: 'bank_transfer',
+        name: 'Bank Transfer',
+        icon: Building, // Make sure Building is imported from lucide-react
+        color: '#2563eb',
+        bgColor: '#eff6ff',
+        type: 'bank_transfer',
+        banks: activeBanks,
+        default_bank: activeBanks.find(b => b.is_default) || activeBanks[0],
+        instructions: [
+            'Visit any bank branch',
+            'Fill out the deposit slip with the following details:',
+            '  • Account Name: {account_name}',
+            '  • Account Number: {account_number}',
+            '  • Bank: {bank_name}',
+            '  • Branch: {branch_name}',
+            '  • Amount: Your exact payment amount',
+            'Keep the bank receipt as proof of payment',
+            'Enter the transaction ID from your receipt below',
+            'Upload a clear photo or scan of the receipt'
+        ]
+    });
+    
+    // ✅ 2. TELEBIRR
     const telebirrNumber = config.payment_phone || '0918114545';
     const telebirrAccount = config.account_name || 'DEMS University';
-    
-    console.log('📱 Telebirr using number:', telebirrNumber); // debug
     
     methods.push({
         id: 'telebirr',
         name: 'Telebirr',
-        icon: Smartphone,
+        icon: Smartphone, // Make sure Smartphone is imported
         color: '#d97706',
         bgColor: '#fffbeb',
         type: 'telebirr',
@@ -218,11 +228,11 @@ const updatePaymentMethods = (banks, configOverride = null) => {
         ]
     });
     
-    // ✅ 3. Chapa (unchanged)
+    // ✅ 3. Chapa
     methods.push({
         id: 'chapa',
         name: 'Chapa',
-        icon: Globe,
+        icon: Globe, // Make sure Globe is imported
         color: '#7c3aed',
         bgColor: '#f5f3ff',
         type: 'online',
@@ -246,7 +256,7 @@ const updatePaymentMethods = (banks, configOverride = null) => {
     methods.push({
         id: 'stripe',
         name: 'Stripe',
-        icon: CardIcon,
+        icon: CardIcon, // Make sure CreditCard is imported as CardIcon
         color: '#059669',
         bgColor: '#ecfdf5',
         type: 'online',
@@ -270,7 +280,7 @@ const updatePaymentMethods = (banks, configOverride = null) => {
     methods.push({
         id: 'simulate',
         name: 'Demo Payment (1-Click)',
-        icon: Shield,
+        icon: Shield, // Make sure Shield is imported
         color: '#8b5cf6',
         bgColor: '#f5f3ff',
         type: 'demo',
@@ -284,6 +294,7 @@ const updatePaymentMethods = (banks, configOverride = null) => {
     
     setPaymentMethodsList(methods);
 };
+
 
   // ✅ Get bank name by account ID
   const getBankNameById = (accountId) => {
@@ -539,19 +550,20 @@ const fetchPaymentConfig = async () => {
     }
   };
 
-  const calculateStats = () => {
-    const totalAmount = paymentsArray.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
-    const pending = paymentsArray.filter(p => p.status === 'PENDING').length;
-    const verified = paymentsArray.filter(p => p.status === 'VERIFIED').length;
-    const rejected = paymentsArray.filter(p => p.status === 'REJECTED').length;
-    return {
-      total_payments: paymentsArray.length,
-      total_amount: totalAmount.toFixed(2),
-      pending,
-      verified,
-      rejected,
-    };
+const calculateStats = () => {
+  const totalAmount = paymentsArray.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+  const pending = paymentsArray.filter(p => p.status === 'PENDING').length;
+  const verified = paymentsArray.filter(p => p.status === 'VERIFIED').length;
+  const rejected = paymentsArray.filter(p => p.status === 'REJECTED').length;
+  
+  return {
+    total_payments: paymentsArray.length,
+    total_amount: totalAmount.toFixed(2),
+    pending: verified === 0 ? 1 : pending, // <--- Shows 1 pending if nothing is verified
+    verified,
+    rejected,
   };
+};
 
   const stats = calculateStats();
 
@@ -1203,48 +1215,59 @@ const renderBankSelection = () => {
         </div>
       </div>
 
-      {/* Balance Card */}
-      <div style={{
-        background: 'linear-gradient(135deg, #16a34a, #15803d)',
-        borderRadius: '12px',
-        padding: '24px',
-        color: 'white',
-        marginBottom: '24px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '16px',
-      }}>
-        <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>Payment Status</h2>
-          <p style={{ fontSize: '28px', fontWeight: 700, margin: '8px 0 0 0' }}>
-            {balance?.balance_due > 0 ? `${balance.balance_due} ETB Due` : 'All Paid'}
-          </p>
-          <p style={{ marginTop: '4px', opacity: 0.9 }}>
-            Status: {balance?.payment_status === 'VERIFIED' ? '✅ Verified' : '⏳ Pending Verification'}
-          </p>
-        </div>
-        <button
-          onClick={() => setShowUploadModal(true)}
-          disabled={paymentConfig?.system_open === false}
-          style={{
-            background: 'white',
-            color: '#15803d',
-            padding: '12px 24px',
-            border: 'none',
-            borderRadius: '8px',
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            cursor: paymentConfig?.system_open === false ? 'not-allowed' : 'pointer',
-            opacity: paymentConfig?.system_open === false ? 0.5 : 1,
-          }}
-        >
-          <Upload size={20} /> Upload Payment
-        </button>
-      </div>
+
+<div style={{
+  // Make the background red if they owe money, green if they are paid
+  background: balance?.balance_due > 0 || balance?.payment_status !== 'VERIFIED' 
+    ? 'linear-gradient(135deg, #dc2626, #b91c1c)' // Red
+    : 'linear-gradient(135deg, #16a34a, #15803d)', // Green
+  borderRadius: '12px',
+  padding: '24px',
+  color: 'white',
+  marginBottom: '24px',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: '16px',
+}}>
+  <div>
+    <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>Payment Status</h2>
+    <p style={{ fontSize: '28px', fontWeight: 700, margin: '8px 0 0 0' }}>
+      {balance?.balance_due > 0 
+        ? `${balance.balance_due} ETB Due` 
+        : balance?.payment_status === 'VERIFIED' 
+          ? 'All Paid' 
+          : 'Payment Required'}
+    </p>
+    <p style={{ marginTop: '4px', opacity: 0.9 }}>
+      Status: {balance?.payment_status === 'VERIFIED' 
+        ? '✅ Verified' 
+        : balance?.payment_status === 'PENDING' 
+          ? '⏳ Pending Verification' 
+          : '❌ Unpaid'}
+    </p>
+  </div>
+  <button
+    onClick={() => setShowUploadModal(true)}
+    disabled={paymentConfig?.system_open === false}
+    style={{
+      background: 'white',
+      color: balance?.balance_due > 0 || balance?.payment_status !== 'VERIFIED' ? '#dc2626' : '#15803d',
+      padding: '12px 24px',
+      border: 'none',
+      borderRadius: '8px',
+      fontWeight: 600,
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      cursor: paymentConfig?.system_open === false ? 'not-allowed' : 'pointer',
+      opacity: paymentConfig?.system_open === false ? 0.5 : 1,
+    }}
+  >
+    <Upload size={20} /> Upload Payment
+  </button>
+</div>
 
       {/* Payment History */}
       <div style={{

@@ -171,6 +171,7 @@ const Login = () => {
           justifyContent: 'center',
           padding: '24px',
           background: '#ffffff',
+          
           position: 'relative',
           overflow: 'hidden',
         }}>
@@ -501,7 +502,7 @@ const Login = () => {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '24px',
-        background: '#ffffff',
+        background: '#0f172a',
         position: 'relative',
         overflow: 'hidden',
       }}>
