@@ -28,7 +28,7 @@ import {
   ChevronUp,
   Save, X, Upload, FileText,
   Download, Printer,CheckSquare,Square,
-  Timer, Lock, Unlock, Pencil, EyeOff, Newspaper
+  Timer, Lock, Unlock, Pencil, EyeOff, Newspaper,Send,Check
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
@@ -43,7 +43,16 @@ const AdminDashboard = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [activeTab, setActiveTab] = useState('overview');
   const [actionLoading, setActionLoading] = useState(false);
-  
+  const [showSmsModal, setShowSmsModal] = useState(false);
+  const [smsData, setSmsData] = useState({ type: 'same', message: '', department: '' });
+  const [sendingSms, setSendingSms] = useState(false);
+  const [smsStep, setSmsStep] = useState(1); // 1: Audience, 2: Students, 3: Message
+  // Audience Filters
+  const [smsAudience, setSmsAudience] = useState('ALL'); // ALL, DEPT, YEAR
+  const [smsDeptFilter, setSmsDeptFilter] = useState('');
+  const [smsYearFilter, setSmsYearFilter] = useState('');
+  // Specific Selection
+  const [selectedStudents, setSelectedStudents] = useState([]);
   // ============ SYSTEM LOCK STATE ============
   const [systemLocked, setSystemLocked] = useState(false);
   const [systemLockMessage, setSystemLockMessage] = useState('');
@@ -104,6 +113,7 @@ const [showBatchResultsModal, setShowBatchResultsModal] = useState(false);
 const [batchAction, setBatchAction] = useState('delete');
 const [batchReason, setBatchReason] = useState('');
   // ============ FORM STATES ============
+const [isSidebarExpanded, setIsSidebarExpanded] = useState(true); 
   const [userForm, setUserForm] = useState({
     email: '',
     full_name: '',
@@ -289,6 +299,40 @@ const toggleSystemLock = async () => {
       toast.error(error.response?.data?.error || 'Failed to delete payment schedule');
     } finally {
       setActionLoading(false);
+    }
+  };
+    // ============ FETCH FUNCTIONS ============
+  
+  // ✅ ADD THIS FUNCTION FOR SMS
+  const handleSendSMS = async (e) => {
+    e.preventDefault();
+    if (selectedStudents.length === 0) {
+        toast.error("Please select at least one student.");
+        return;
+    }
+    if (!smsData.message) {
+        toast.error("Please enter a message");
+        return;
+    }
+    
+    setSendingSms(true);
+    try {
+        // We send the array of student IDs to the backend
+        const payload = {
+            type: smsData.type,
+            message: smsData.message,
+            student_ids: selectedStudents // Array of IDs
+        };
+        const response = await api.post('/notifications/send-bulk-sms/', payload);
+        toast.success(response.data.message || "SMS queued successfully!");
+        setShowSmsModal(false);
+        setSmsStep(1);
+        setSelectedStudents([]);
+        setSmsData({ type: 'same', message: '' }); 
+    } catch (error) {
+        toast.error(error.response?.data?.error || "Failed to send SMS");
+    } finally {
+        setSendingSms(false);
     }
   };
 
@@ -1419,22 +1463,43 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   // ============ SIDEBAR NAVIGATION ============
-
-  const menuItems = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'users', label: 'Users', icon: Users },
-    { id: 'courses', label: 'Courses', icon: BookOpen },
-    { id: 'news', label: 'News', icon: Newspaper },
-    { id: 'payments', label: 'Payments', icon: DollarSign },
-    { id: 'fee-structures', label: 'Fee Structures', icon: CreditCardIcon },
-    { id: 'departments', label: 'Departments', icon: Building2 },
-    { id: 'banks', label: 'Bank Accounts', icon: Banknote },
-    { id: 'payment-periods', label: 'Payment Periods', icon: Calendar },
-    { id: 'payment-schedules', label: 'Payment Schedules', icon: Calendar },
-    { id: 'proctoring', label: 'Proctoring', icon: Camera },
-    { id: 'logs', label: 'System Logs', icon: Activity },
-    { id: 'system', label: 'System Config', icon: Settings },
+  // ============ SIDEBAR NAVIGATION (UPGRADED) ============
+  const menuGroups = [
+    {
+      title: 'CORE MANAGEMENT',
+      items: [
+        { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+        { id: 'users', label: 'User Management', icon: Users },
+        { id: 'departments', label: 'Departments', icon: Building2 },
+        { id: 'courses', label: 'Courses', icon: BookOpen },
+      ]
+    },
+    {
+      title: 'FINANCIALS',
+      items: [
+        { id: 'payments', label: 'Transactions', icon: DollarSign },
+        { id: 'fee-structures', label: 'Fee Structures', icon: CreditCardIcon },
+        { id: 'banks', label: 'Bank Accounts', icon: Banknote },
+        { id: 'payment-periods', label: 'Payment Periods', icon: Calendar },
+        { id: 'payment-schedules', label: 'Payment Schedules', icon: Timer },
+      ]
+    },
+    {
+      title: 'ACADEMICS & SECURITY',
+      items: [
+        { id: 'proctoring', label: 'AI Proctoring', icon: Camera },
+        { id: 'news', label: 'News & Announcements', icon: Newspaper },
+      ]
+    },
+    {
+      title: 'SYSTEM ADMINISTRATION',
+      items: [
+        { id: 'logs', label: 'System Logs', icon: Activity },
+        { id: 'system', label: 'System Config', icon: Settings },
+      ]
+    }
   ];
+
 
   // ============ LOADING STATE ============
 
@@ -1448,88 +1513,154 @@ const handleBatchGenerateSchedules = async () => {
   }
 
   // ============ MAIN RENDER ============
-
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f1f5f9' }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+                /* 👇 NEW SMART ANIMATIONS 👇 */
+        @keyframes slideInLeft {
+          from { opacity: 0; transform: translateX(-20px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(15px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes popIn {
+          0% { transform: scale(0.9); opacity: 0; }
+          50% { transform: scale(1.05); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        /* Mobile Fixes */
         @media (max-width: 768px) {
           .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
           .admin-grid { grid-template-columns: 1fr !important; }
           .tabs-header { overflow-x: auto; flex-wrap: nowrap; }
           .tab-btn { white-space: nowrap; font-size: 13px; padding: 10px 14px; }
-          .sidebar { transform: translateX(-100%); }
-          .sidebar-open { transform: translateX(0); }
-          .content { margin-left: 0 !important; }
+          .sidebar { transform: translateX(-100%) !important; }
+          .sidebar-open { transform: translateX(0) !important; }
+          .content { margin-left: 0 !important; padding-top: 60px; }
+          .mobile-toggle { display: block !important; }
+          .overlay.show { display: block; }
         }
+
+        /* Desktop Dynamic Layout */
         @media (min-width: 769px) {
           .sidebar { transform: translateX(0); }
-          .content { margin-left: 280px; }
+          .content { 
+            /* 👇 This line tells the content to move left/right with the sidebar */
+            margin-left: ${isSidebarExpanded ? '280px' : '80px'}; 
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+          }
         }
+
+        /* Core Sidebar Styling */
         .sidebar {
           position: fixed;
           top: 0;
           left: 0;
           bottom: 0;
-          width: 280px;
-          background: #0f172a;
+          width: ${isSidebarExpanded ? '280px' : '80px'};
+          /* 👇 PROFESSIONAL DEEP NAVY GRADIENT */
+          background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
           color: white;
           z-index: 1000;
           overflow-y: auto;
-          transition: transform 0.3s ease;
+          overflow-x: hidden;
+          transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s ease;
+          /* 👇 SUBTLE SHADOW FOR DEPTH */
+          box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
+          border-right: 1px solid rgba(255, 255, 255, 0.05);
         }
         .sidebar::-webkit-scrollbar { width: 4px; }
         .sidebar::-webkit-scrollbar-track { background: #1e293b; }
         .sidebar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+
+        /* Hide/Show text smoothly */
+        .sidebar-text {
+          opacity: \${isSidebarExpanded ? '1' : '0'};
+          display: \${isSidebarExpanded ? 'block' : 'none'};
+          white-space: nowrap;
+          transition: opacity 0.3s ease;
+        }
+
+        /* Navigation Items */
         .sidebar-item {
           display: flex;
           align-items: center;
-          gap: 12px;
-          padding: 12px 20px;
+          gap: ${isSidebarExpanded ? '12px' : '0'};
+          justify-content: ${isSidebarExpanded ? 'flex-start' : 'center'};
+          padding: 12px ${isSidebarExpanded ? '20px' : '0'};
           color: #94a3b8;
           text-decoration: none;
           cursor: pointer;
-          transition: all 0.3s ease;
           border-left: 3px solid transparent;
           font-size: 14px;
+          margin: 2px 0;
+          /* 👇 NEW: Smooth transitions and slide-in animation */
+          transition: all 0.2s ease-in-out;
+          animation: slideInLeft 0.4s ease forwards;
+        }
+        
+        /* 👇 NEW: Make the icon bounce slightly on hover */
+        .sidebar-item:hover svg {
+          transform: scale(1.15) rotate(-5deg);
+          transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
         .sidebar-item:hover {
-          background: #1e293b;
+          background: rgba(255, 255, 255, 0.05); /* Soft white glow */
           color: white;
         }
         .sidebar-item.active {
-          background: #1e293b;
+          background: rgba(59, 130, 246, 0.15); /* Soft blue glow */
           color: #60a5fa;
           border-left-color: #60a5fa;
+          font-weight: 600;
         }
-        .sidebar-item svg { flex-shrink: 0; }
+        .sidebar-item:hover svg {
+          transform: scale(1.15) rotate(-5deg);
+          transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* Header / Logo Area */
         .sidebar-logo {
-          padding: 20px;
+          padding: 20px 16px;
           border-bottom: 1px solid #1e293b;
           display: flex;
           align-items: center;
-          gap: 12px;
+          justify-content: \${isSidebarExpanded ? 'space-between' : 'center'};
+          transition: all 0.3s ease;
         }
         .sidebar-logo h1 {
           font-size: 20px;
           font-weight: 700;
+          margin: 0;
           background: linear-gradient(135deg, #60a5fa, #a78bfa);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
         }
+        
         .sidebar-footer {
           position: sticky;
           bottom: 0;
-          padding: 16px 20px;
-          border-top: 1px solid #1e293b;
-          background: #0f172a;
+          padding: 16px;
+          border-top: 1px solid rgba(255, 255, 255, 0.05);
+          /* 👇 Matches the bottom of the gradient */
+          background: #1e293b; 
+          transition: all 0.3s ease;
         }
+        /* Main Content Area */
         .content {
           flex: 1;
           padding: 24px;
           min-height: 100vh;
+          overflow-x: hidden;
         }
+
+        /* Mobile Menu Button */
         .mobile-toggle {
           display: none;
           position: fixed;
@@ -1542,13 +1673,10 @@ const handleBatchGenerateSchedules = async () => {
           border-radius: 8px;
           padding: 8px;
           cursor: pointer;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        @media (max-width: 768px) {
-          .mobile-toggle { display: block; }
-          .sidebar { transform: translateX(-100%); }
-          .sidebar-open { transform: translateX(0); }
-          .content { margin-left: 0 !important; padding-top: 60px; }
-        }
+        
+        /* Mobile Overlay */
         .overlay {
           display: none;
           position: fixed;
@@ -1556,14 +1684,23 @@ const handleBatchGenerateSchedules = async () => {
           background: rgba(0,0,0,0.5);
           z-index: 999;
         }
-        .overlay.show { display: block; }
-        @media (max-width: 768px) {
-          .overlay.show { display: block; }
-        }
+        
         .spinning {
           animation: spin 1s linear infinite;
         }
+                /* 👇 SMART ANIMATED BUTTONS 👇 */
+        .smart-action-btn {
+          transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        }
+        .smart-action-btn:hover {
+          transform: translateY(-3px) scale(1.02);
+        }
+        .smart-action-btn:active {
+          transform: translateY(1px) scale(0.98);
+        }  
       `}</style>
+
+
 
       {/* Mobile Toggle */}
       <button className="mobile-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -1573,43 +1710,92 @@ const handleBatchGenerateSchedules = async () => {
 
       {/* Sidebar */}
       <div className={`sidebar ${mobileMenuOpen ? 'sidebar-open' : ''}`}>
-        <div className="sidebar-logo">
-          <GraduationCap size={32} style={{ color: '#60a5fa' }} />
-          <h1>DEMS Admin</h1>
+        <div className="sidebar-logo" style={{ justifyContent: isSidebarExpanded ? 'space-between' : 'center', padding: '20px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <GraduationCap 
+              size={32} 
+              style={{ 
+                color: '#60a5fa', 
+                flexShrink: 0,
+                filter: 'drop-shadow(0 0 8px rgba(96, 165, 250, 0.4))' // 👈 Adds a professional glow
+              }} 
+            />
+            {isSidebarExpanded && (
+              <h1 className="sidebar-text" style={{ margin: 0 }}>DEMS Admin</h1>
+            )}
+          </div>
+          
+          <button 
+            onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
+            style={{ 
+              background: '#1e293b', border: 'none', color: '#94a3b8', cursor: 'pointer',
+              display: window.innerWidth > 768 ? 'flex' : 'none', 
+              alignItems: 'center', justifyContent: 'center', padding: '6px', borderRadius: '8px', transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'white'}
+            onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+          >
+            <Menu size={18} />
+          </button>
         </div>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #1e293b' }}>
-          <p style={{ fontSize: '12px', color: '#64748b' }}>Welcome,</p>
-          <p style={{ fontWeight: 600, color: 'white' }}>{user?.full_name}</p>
-        </div>
-        <nav style={{ padding: '8px 0' }}>
-          {menuItems.map((item) => (
-            <div
-              key={item.id}
-              className={`sidebar-item ${activeTab === item.id ? 'active' : ''}`}
-              onClick={() => {
-                if (item.id === 'news') navigate('/admin/news');
-                else setActiveTab(item.id);
-                setMobileMenuOpen(false);
-              }}
-            >
-              <item.icon size={20} />
-              {item.label}
-              {item.id === 'proctoring' && proctorSessions.filter(s => s.review_status === 'FLAGGED').length > 0 && (
-                <span style={{
-                  marginLeft: 'auto',
-                  background: '#dc2626',
-                  color: 'white',
-                  fontSize: '10px',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                }}>
-                  {proctorSessions.filter(s => s.review_status === 'FLAGGED').length}
-                </span>
+        {/* Welcome Text */}
+        {isSidebarExpanded && (
+          <div className="sidebar-text" style={{ padding: '16px 20px', borderBottom: '1px solid #1e293b' }}>
+            <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Welcome,</p>
+            <p style={{ fontWeight: 600, color: 'white', margin: 0 }}>{user?.full_name || 'Admin'}</p>
+          </div>
+        )}
+
+        {/* Navigation Links */}
+        <nav style={{ padding: '8px 0', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+          {menuGroups.map((group, groupIndex) => (
+            <div key={groupIndex} style={{ marginBottom: '16px' }}>
+              
+              {isSidebarExpanded ? (
+                <div className="sidebar-text" style={{ padding: '0 24px', fontSize: '10px', fontWeight: 700, color: '#64748b', letterSpacing: '1px', marginBottom: '8px' }}>
+                  {group.title}
+                </div>
+              ) : (
+                <div style={{ height: '1px', background: '#1e293b', margin: '12px 16px' }}></div>
               )}
+              
+              {group.items.map((item) => (
+                <div
+                  key={item.id}
+                  className={`sidebar-item ${activeTab === item.id ? 'active' : ''}`}
+                  onClick={() => {
+                    if (item.id === 'news') navigate('/admin/news');
+                    else setActiveTab(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  title={!isSidebarExpanded ? item.label : ''}
+                  style={{ position: 'relative' }}
+                >
+                  <item.icon size={20} style={{ flexShrink: 0 }} />
+                  
+                  {isSidebarExpanded && (
+                    <span className="sidebar-text" style={{ flex: 1, marginLeft: '4px' }}>
+                      {item.label}
+                    </span>
+                  )}
+                  
+                  {item.id === 'proctoring' && proctorSessions.filter(s => s.review_status === 'FLAGGED').length > 0 && (
+                    isSidebarExpanded ? (
+                      <span className="sidebar-text" style={{ background: '#dc2626', color: 'white', fontSize: '10px', padding: '2px 8px', borderRadius: '12px' }}>
+                        {proctorSessions.filter(s => s.review_status === 'FLAGGED').length}
+                      </span>
+                    ) : (
+                      <span style={{ position: 'absolute', right: '16px', top: '16px', width: '8px', height: '8px', background: '#dc2626', borderRadius: '50%' }}></span>
+                    )
+                  )}
+                </div>
+              ))}
             </div>
           ))}
         </nav>
-        <div className="sidebar-footer">
+
+        {/* Logout Button */}
+        <div className="sidebar-footer" style={{ padding: '16px', borderTop: '1px solid #1e293b' }}>
           <button
             onClick={() => {
               localStorage.removeItem('access_token');
@@ -1630,7 +1816,7 @@ const handleBatchGenerateSchedules = async () => {
               fontWeight: 500,
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
+              gap: isSidebarExpanded ? '8px' : '0',
               justifyContent: 'center',
               transition: 'all 0.3s ease',
             }}
@@ -1643,8 +1829,8 @@ const handleBatchGenerateSchedules = async () => {
               e.currentTarget.style.color = '#fca5a5';
             }}
           >
-            <LogOut size={18} />
-            Logout
+            <LogOut size={18} style={{ flexShrink: 0 }} />
+            {isSidebarExpanded && <span className="sidebar-text">Logout</span>}
           </button>
         </div>
       </div>
@@ -1679,125 +1865,105 @@ const handleBatchGenerateSchedules = async () => {
     </p>
   </div>
   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-    {/* ✅ SYSTEM LOCK/UNLOCK TOGGLE - FIXED */}
+    {/* ✅ SYSTEM LOCK/UNLOCK TOGGLE */}
     <button
+      className="smart-action-btn"
       onClick={toggleSystemLock}
       disabled={lockLoading}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '10px 20px',
-        background: systemLocked ? '#22c55e' : '#dc2626',
-        border: 'none',
-        borderRadius: '8px',
-        color: 'white',
-        cursor: lockLoading ? 'not-allowed' : 'pointer',
-        transition: 'all 0.3s ease',
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: systemLocked ? '#22c55e' : '#dc2626', border: 'none', borderRadius: '8px',
+        color: 'white', cursor: lockLoading ? 'not-allowed' : 'pointer',
         opacity: lockLoading ? 0.6 : 1,
       }}
       onMouseEnter={(e) => {
-        if (!lockLoading) {
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.boxShadow = systemLocked ? '0 4px 12px rgba(34,197,94,0.4)' : '0 4px 12px rgba(220,38,38,0.4)';
-        }
+        if (!lockLoading) e.currentTarget.style.boxShadow = systemLocked ? '0 8px 20px rgba(34,197,94,0.5)' : '0 8px 20px rgba(220,38,38,0.5)';
       }}
-      onMouseLeave={(e) => {
-        if (!lockLoading) {
-          e.currentTarget.style.transform = 'none';
-          e.currentTarget.style.boxShadow = 'none';
-        }
-      }}
+      onMouseLeave={(e) => { if (!lockLoading) e.currentTarget.style.boxShadow = 'none'; }}
     >
-      {lockLoading ? (
-        <RefreshCw size={18} className="spinning" />
-      ) : systemLocked ? (
-        <Unlock size={18} />
-      ) : (
-        <Lock size={18} />
-      )}
+      {lockLoading ? <RefreshCw size={18} className="spinning" /> : systemLocked ? <Unlock size={18} /> : <Lock size={18} />}
       {lockLoading ? 'Processing...' : systemLocked ? '🔓 Unlock System' : '🔒 Lock System'}
     </button>
 
+    {/* REFRESH BUTTON */}
     <button
+      className="smart-action-btn"
       onClick={() => { setRefreshing(true); fetchData(); }}
       disabled={refreshing}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '10px 20px',
-        background: '#f1f5f9',
-        border: 'none',
-        borderRadius: '8px',
-        color: '#475569',
-        cursor: 'pointer',
-        transition: 'all 0.3s ease',
-        opacity: refreshing ? 0.6 : 1,
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px',
+        color: '#475569', cursor: 'pointer', opacity: refreshing ? 0.6 : 1,
       }}
+      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 20px rgba(148,163,184,0.3)'}
+      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
     >
       <RefreshCw size={18} className={refreshing ? 'spinning' : ''} />
       Refresh
     </button>
+
+    {/* BACKUP BUTTON */}
     <button
+      className="smart-action-btn"
       onClick={() => setShowBackupModal(true)}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '10px 20px',
-        background: '#8b5cf6',
-        border: 'none',
-        borderRadius: '8px',
-        color: 'white',
-        cursor: 'pointer',
-        transition: 'all 0.3s ease',
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: '#22c55e', border: 'none', borderRadius: '8px',
+        color: 'white', cursor: 'pointer',
       }}
-      onMouseEnter={(e) => e.currentTarget.style.background = '#16a34a'}
-      onMouseLeave={(e) => e.currentTarget.style.background = '#22c55e'}
+      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 20px rgba(34,197,94,0.5)'}
+      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
     >
       <Database size={18} />
       Backup
     </button>
+
+    {/* CONFIG BUTTON */}
     <button
+      className="smart-action-btn"
       onClick={() => setShowConfigModal(true)}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '10px 20px',
-        background: '#8b5cf6',
-        border: 'none',
-        borderRadius: '8px',
-        color: 'white',
-        cursor: 'pointer',
-        transition: 'all 0.3s ease',
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: '#2563eb', border: 'none', borderRadius: '8px',
+        color: 'white', cursor: 'pointer',
       }}
-      onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
-      onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
+      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 20px rgba(37,99,235,0.5)'}
+      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
     >
       <Settings size={18} />
       Config
     </button>
+
+    {/* ADD USER BUTTON */}
     <button
+      className="smart-action-btn"
       onClick={() => setShowCreateUserModal(true)}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '10px 20px',
-        background: '#8b5cf6',
-        border: 'none',
-        borderRadius: '8px',
-        color: 'white',
-        cursor: 'pointer',
-        transition: 'all 0.3s ease',
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: '#8b5cf6', border: 'none', borderRadius: '8px',
+        color: 'white', cursor: 'pointer',
       }}
-      onMouseEnter={(e) => e.currentTarget.style.background = '#7c3aed'}
-      onMouseLeave={(e) => e.currentTarget.style.background = '#8b5cf6'}
+      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 20px rgba(139,92,246,0.5)'}
+      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
     >
       <UserPlus size={18} />
       Add User
+    </button>
+
+    {/* SEND SMS BUTTON */}
+    <button
+      className="smart-action-btn"
+      onClick={() => setShowSmsModal(true)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: '#10b981', border: 'none', borderRadius: '8px',
+        color: 'white', cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 20px rgba(16,185,129,0.5)'}
+      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
+    >
+      <Send size={18} />
+      Send SMS
     </button>
   </div>
 </div>
@@ -1947,34 +2113,119 @@ const handleBatchGenerateSchedules = async () => {
         }}>
           <div style={{ padding: '24px' }}>
 
-            {/* OVERVIEW TAB */}
+            {/* OVERVIEW TAB - UPGRADED AMAZING UI */}
             {activeTab === 'overview' && (
               <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#0f172a', marginBottom: '16px' }}>System Overview</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Total Enrollments</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: '4px 0 0 0' }}>{stats.totalEnrollments || 0}</p>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Activity size={20} color="#3b82f6" /> Platform Analytics
+                </h3>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                  
+                  {/* Smart Card 1 */}
+                  <div style={{ 
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
+                    padding: '24px', borderRadius: '16px', color: 'white',
+                    boxShadow: '0 10px 25px -5px rgba(37, 99, 235, 0.4)',
+                    transition: 'transform 0.3s ease, box-shadow 0.3s ease', cursor: 'pointer',
+                    animation: 'fadeUp 0.6s ease-out forwards'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 20px 30px -10px rgba(37, 99, 235, 0.6)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(37, 99, 235, 0.4)'; }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Total Enrollments</p>
+                        <h2 style={{ fontSize: '32px', fontWeight: 700, margin: 0 }}>{stats.totalEnrollments || 0}</h2>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.2)', padding: '10px', borderRadius: '12px' }}>
+                        <Users size={24} />
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Active Enrollments</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: '4px 0 0 0' }}>{stats.activeEnrollments || 0}</p>
+
+                  {/* Smart Card 2 */}
+                  <div style={{ 
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                    padding: '24px', borderRadius: '16px', color: 'white',
+                    boxShadow: '0 10px 25px -5px rgba(5, 150, 105, 0.4)',
+                    transition: 'transform 0.3s ease, box-shadow 0.3s ease', cursor: 'pointer',
+                    animation: 'fadeUp 0.6s ease-out forwards'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 20px 30px -10px rgba(5, 150, 105, 0.6)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(5, 150, 105, 0.4)'; }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Active Enrollments</p>
+                        <h2 style={{ fontSize: '32px', fontWeight: 700, margin: 0 }}>{stats.activeEnrollments || 0}</h2>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.2)', padding: '10px', borderRadius: '12px' }}>
+                        <CheckCircle size={24} />
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Total Payments</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: '4px 0 0 0' }}>ETB {stats.paymentTotal?.toFixed(2) || '0.00'}</p>
+
+                  {/* Smart Card 3 */}
+                  <div style={{ 
+                    background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', 
+                    padding: '24px', borderRadius: '16px', color: 'white',
+                    boxShadow: '0 10px 25px -5px rgba(109, 40, 217, 0.4)',
+                    transition: 'transform 0.3s ease, box-shadow 0.3s ease', cursor: 'pointer',
+                    animation: 'fadeUp 0.6s ease-out forwards'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 20px 30px -10px rgba(109, 40, 217, 0.6)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(109, 40, 217, 0.4)'; }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Total Revenue</p>
+                        <h2 style={{ fontSize: '28px', fontWeight: 700, margin: 0 }}>ETB {stats.paymentTotal?.toFixed(0) || '0'}</h2>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.2)', padding: '10px', borderRadius: '12px' }}>
+                        <DollarSign size={24} />
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Total Exams</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: '4px 0 0 0' }}>{stats.totalExams || 0}</p>
+
+                  {/* Smart Card 4 */}
+                  <div style={{ 
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', 
+                    padding: '24px', borderRadius: '16px', color: 'white',
+                    boxShadow: '0 10px 25px -5px rgba(217, 119, 6, 0.4)',
+                    transition: 'transform 0.3s ease, box-shadow 0.3s ease', cursor: 'pointer',
+                    animation: 'fadeUp 0.6s ease-out forwards'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 20px 30px -10px rgba(217, 119, 6, 0.6)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(217, 119, 6, 0.4)'; }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Total Exams</p>
+                        <h2 style={{ fontSize: '32px', fontWeight: 700, margin: 0 }}>{stats.totalExams || 0}</h2>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.2)', padding: '10px', borderRadius: '12px' }}>
+                        <BookOpen size={24} />
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Published Exams</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: '4px 0 0 0' }}>{stats.publishedExams || 0}</p>
+                </div>
+
+                {/* Secondary Info Row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', background: '#f8fafc', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircle size={16} color="#10b981" /> Published Exams
+                    </p>
+                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats.publishedExams || 0}</p>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Flagged Exams</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626', margin: '4px 0 0 0' }}>{stats.flaggedExams || 0}</p>
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <AlertTriangle size={16} color="#ef4444" /> Flagged Proctoring
+                    </p>
+                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#ef4444', margin: 0 }}>{stats.flaggedExams || 0}</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Clock size={16} color="#f59e0b" /> Pending Payments
+                    </p>
+                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#f59e0b', margin: 0 }}>{stats.pendingPayments || 0}</p>
                   </div>
                 </div>
               </div>
@@ -3134,6 +3385,175 @@ const handleBatchGenerateSchedules = async () => {
           </div>
         </div>
       </div>
+      {/* ============ SMS MODAL ============ */}
+      {showSmsModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px' }} onClick={() => setShowSmsModal(false)}>
+              <div style={{ background: 'white', borderRadius: '16px', padding: '32px', maxWidth: '600px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                      <h2 style={{ fontSize: '24px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Send size={24} style={{ color: '#10b981' }} />
+                          Send Bulk SMS
+                      </h2>
+                      <button onClick={() => { setShowSmsModal(false); setSmsStep(1); }} style={{ background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+                  </div>
+
+                  {/* STEP 1: Select Audience */}
+                  {smsStep === 1 && (
+                      <div>
+                          <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Who should receive this message?</label>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer' }}>
+                                  <input type="radio" name="aud" checked={smsAudience === 'ALL'} onChange={() => setSmsAudience('ALL')} />
+                                  <strong>All Students</strong>
+                              </label>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer' }}>
+                                  <input type="radio" name="aud" checked={smsAudience === 'DEPT'} onChange={() => setSmsAudience('DEPT')} />
+                                  <strong>By Department</strong>
+                              </label>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer' }}>
+                                  <input type="radio" name="aud" checked={smsAudience === 'YEAR'} onChange={() => setSmsAudience('YEAR')} />
+                                  <strong>By Year (1st, 2nd, etc.)</strong>
+                              </label>
+                          </div>
+
+                          {smsAudience === 'DEPT' && (
+                              <div style={{ marginBottom: '24px' }}>
+                                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Select Department</label>
+                                  <select value={smsDeptFilter} onChange={(e) => setSmsDeptFilter(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                      <option value="">-- Choose Department --</option>
+                                      {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                                  </select>
+                              </div>
+                          )}
+
+                          {smsAudience === 'YEAR' && (
+                              <div style={{ marginBottom: '24px' }}>
+                                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Select Year</label>
+                                  <select value={smsYearFilter} onChange={(e) => setSmsYearFilter(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                      <option value="">-- Choose Year --</option>
+                                      <option value="1">1st Year</option>
+                                      <option value="2">2nd Year</option>
+                                      <option value="3">3rd Year</option>
+                                      <option value="4">4th Year</option>
+                                      <option value="5">5th Year</option>
+                                  </select>
+                              </div>
+                          )}
+
+                          <button onClick={() => setSmsStep(2)} style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
+                              Next: Select Students →
+                          </button>
+                      </div>
+                  )}
+
+                  {/* STEP 2: Select Specific Students */}
+                  {smsStep === 2 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                              <label style={{ fontSize: '14px', fontWeight: 600 }}>Select Recipients</label>
+                              <button 
+                                  onClick={() => {
+                                      const eligible = users.filter(u => {
+                                          if (u.role !== 'STUDENT' || !u.phone) return false;
+                                          if (smsAudience === 'DEPT' && smsDeptFilter && u.department !== smsDeptFilter) return false;
+                                          if (smsAudience === 'YEAR' && smsYearFilter && u.year !== parseInt(smsYearFilter)) return false;
+                                          return true;
+                                      });
+                                      setSelectedStudents(eligible.map(u => u.id));
+                                  }}
+                                  style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
+                              >
+                                  Select All Eligible
+                              </button>
+                          </div>
+
+                          <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px', maxHeight: '300px', marginBottom: '20px' }}>
+                              {users
+                                  .filter(u => {
+                                      if (u.role !== 'STUDENT') return false;
+                                      if (smsAudience === 'DEPT' && smsDeptFilter && u.department !== smsDeptFilter) return false;
+                                      if (smsAudience === 'YEAR' && smsYearFilter && u.year !== parseInt(smsYearFilter)) return false;
+                                      return true;
+                                  })
+                                  .map(u => (
+                                      <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', opacity: u.phone ? 1 : 0.5 }}>
+                                          <input 
+                                              type="checkbox" 
+                                              checked={selectedStudents.includes(u.id)}
+                                              disabled={!u.phone}
+                                              onChange={(e) => {
+                                                  if (e.target.checked) setSelectedStudents(prev => [...prev, u.id]);
+                                                  else setSelectedStudents(prev => prev.filter(id => id !== u.id));
+                                              }}
+                                          />
+                                          <div>
+                                              <div style={{ fontWeight: 500, fontSize: '14px' }}>{u.full_name}</div>
+                                              <div style={{ fontSize: '12px', color: '#64748b' }}>
+                                                  {u.phone ? `📱 ${u.phone}` : '❌ No phone number'}
+                                              </div>
+                                          </div>
+                                      </label>
+                                  ))}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                              <button onClick={() => setSmsStep(1)} style={{ flex: 1, padding: '12px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'white', cursor: 'pointer' }}>
+                                  ← Back
+                              </button>
+                              <button onClick={() => setSmsStep(3)} disabled={selectedStudents.length === 0} style={{ flex: 1, padding: '12px', background: selectedStudents.length ? '#2563eb' : '#94a3b8', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: selectedStudents.length ? 'pointer' : 'not-allowed' }}>
+                                  Next: Compose ({selectedStudents.length}) →
+                              </button>
+                          </div>
+                      </div>
+                  )}
+
+                  {/* STEP 3: Compose Message */}
+                  {smsStep === 3 && (
+                      <form onSubmit={handleSendSMS} style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                          
+                          <div style={{ padding: '12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', marginBottom: '16px', color: '#166534', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <Check size={16} /> Sending to {selectedStudents.length} selected student(s).
+                          </div>
+
+                          <div style={{ marginBottom: '16px' }}>
+                              <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Message Type</label>
+                              <select
+                                  value={smsData.type}
+                                  onChange={(e) => setSmsData({ ...smsData, type: e.target.value })}
+                                  style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px' }}
+                              >
+                                  <option value="same">Same Message (Bulk to All)</option>
+                                  <option value="personal">Personalized (Adds "Hi [Name]")</option>
+                              </select>
+                          </div>
+
+                          <div style={{ marginBottom: '24px', flex: 1 }}>
+                              <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Message *</label>
+                              <textarea
+                                  required
+                                  rows="5"
+                                  placeholder="Type your message here..."
+                                  value={smsData.message}
+                                  onChange={(e) => setSmsData({ ...smsData, message: e.target.value })}
+                                  style={{ width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', resize: 'vertical' }}
+                              />
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                              <button type="button" onClick={() => setSmsStep(2)} style={{ flex: 1, padding: '12px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'white', cursor: 'pointer' }}>
+                                  ← Back
+                              </button>
+                              <button type="submit" disabled={sendingSms || !smsData.message} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '8px', background: '#10b981', color: 'white', fontWeight: 600, cursor: (sendingSms || !smsData.message) ? 'not-allowed' : 'pointer', opacity: (sendingSms || !smsData.message) ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                  <Send size={18} /> {sendingSms ? 'Sending...' : 'Send SMS'}
+                              </button>
+                          </div>
+                      </form>
+                  )}
+
+              </div>
+          </div>
+      )}
 
       {/* ============ CREATE USER MODAL - WITH PASSWORD VISIBILITY ============ */}
       {showCreateUserModal && (
@@ -3899,14 +4319,27 @@ const handleBatchGenerateSchedules = async () => {
         </div>
       )}
 
-      {/* CONFIG MODAL */}
+      {/* ============ UPGRADED CONFIG MODAL (COMPLETE) ============ */}
       {showConfigModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowConfigModal(false)}>
-          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>System Configuration</h2>
-              <button onClick={() => setShowConfigModal(false)} style={{ background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }} onClick={() => setShowConfigModal(false)}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', maxWidth: '700px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} onClick={(e) => e.stopPropagation()}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Settings size={20} style={{ color: '#3b82f6' }} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '20px', fontWeight: 700, margin: 0, color: '#0f172a' }}>System Configuration</h2>
+                  <p style={{ fontSize: '13px', color: '#64748b', margin: '2px 0 0 0' }}>Manage global platform settings</p>
+                </div>
+              </div>
+              <button onClick={() => setShowConfigModal(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}>
+                <X size={18} />
+              </button>
             </div>
+
             <form onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
@@ -3928,80 +4361,105 @@ const handleBatchGenerateSchedules = async () => {
               };
               updateConfig(data);
             }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              
+              {/* Section 1: General System */}
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#334155', marginBottom: '16px' }}>General System</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>System Status</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="checkbox" name="system_open" defaultChecked={systemConfig.system_open} /> System Open
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>System Status</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <input type="checkbox" name="system_open" defaultChecked={systemConfig.system_open} style={{ width: '16px', height: '16px', accentColor: '#3b82f6' }} /> 
+                    <span style={{ fontSize: '14px', fontWeight: 500 }}>System Open</span>
                   </label>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Maintenance Mode</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="checkbox" name="maintenance_mode" defaultChecked={systemConfig.maintenance_mode} /> Enable Maintenance
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Maintenance Mode</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <input type="checkbox" name="maintenance_mode" defaultChecked={systemConfig.maintenance_mode} style={{ width: '16px', height: '16px', accentColor: '#f59e0b' }} /> 
+                    <span style={{ fontSize: '14px', fontWeight: 500 }}>Enable Maintenance</span>
                   </label>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Session Timeout (min)</label>
-                  <input type="number" name="session_timeout" defaultValue={systemConfig.session_timeout} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Session Timeout (minutes)</label>
+                  <input type="number" name="session_timeout" defaultValue={systemConfig.session_timeout} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Max File Size (MB)</label>
-                  <input type="number" name="max_file_size" defaultValue={systemConfig.max_file_size} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Max File Size (MB)</label>
+                  <input type="number" name="max_file_size" defaultValue={systemConfig.max_file_size} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
                 </div>
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Student ID Format</label>
-                <input type="text" name="student_id_format" defaultValue={systemConfig.student_id_format || 'STU{year}{seq:06d}'} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
-                <p style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>Use {'{year}'} for year, {'{seq}'} for sequence number, {'{dept}'} for department code.</p>
+              {/* Maintenance Message */}
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Maintenance Message (Shown to users)</label>
+                <textarea name="maintenance_message" rows="2" defaultValue={systemConfig.maintenance_message || 'System is currently under maintenance. Please check back later.'} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', resize: 'vertical', outline: 'none' }} />
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Payment Account Number</label>
-                <input type="text" name="payment_account" defaultValue={systemConfig.payment_account} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
+              {/* Section 2: Identification */}
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#334155', marginBottom: '16px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>Identification</h3>
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Student ID Format</label>
+                <input type="text" name="student_id_format" defaultValue={systemConfig.student_id_format || 'STU{year}{seq:06d}'} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', fontFamily: 'monospace', outline: 'none' }} />
+                <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '6px' }}>Variables available: {'{year}'}, {'{seq}'}, {'{dept}'}</p>
               </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Payment Phone Number</label>
-                <input type="text" name="payment_phone" defaultValue={systemConfig.payment_phone} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Bank Name</label>
-                <input type="text" name="bank_name" defaultValue={systemConfig.bank_name || 'Commercial Bank of Ethiopia'} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Account Name</label>
-                <input type="text" name="account_name" defaultValue={systemConfig.account_name || 'DEMS University'} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Default Payment Period</label>
-                <select name="default_payment_period" defaultValue={systemConfig.default_payment_period || 'QUARTERLY'} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}>
-                  <option value="MONTHLY">Monthly</option>
-                  <option value="QUARTERLY">Quarterly (3 months)</option>
-                  <option value="SEMESTER">Semester (6 months)</option>
-                  <option value="YEARLY">Yearly</option>
-                </select>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+
+              {/* Section 3: Finance & Payments */}
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#334155', marginBottom: '16px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>Finance & Payments</h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Default Penalty/Day (ETB)</label>
-                  <input type="number" step="0.01" name="default_penalty_per_day" defaultValue={systemConfig.default_penalty_per_day || 10} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Payment Account Number</label>
+                  <input type="text" name="payment_account" defaultValue={systemConfig.payment_account} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Default Grace Period (days)</label>
-                  <input type="number" name="default_grace_period" defaultValue={systemConfig.default_grace_period || 10} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Payment Phone Number</label>
+                  <input type="text" name="payment_phone" defaultValue={systemConfig.payment_phone} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Bank Name</label>
+                  <input type="text" name="bank_name" defaultValue={systemConfig.bank_name || 'Commercial Bank of Ethiopia'} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Account Name</label>
+                  <input type="text" name="account_name" defaultValue={systemConfig.account_name || 'DEMS University'} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
                 </div>
               </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Payment Instructions</label>
-                <textarea name="payment_instructions" rows="3" style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', resize: 'vertical' }} defaultValue={systemConfig.payment_instructions || 'Please make payment to the above account and upload the receipt for verification.'} />
+
+              {/* Default Payment Settings */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Default Payment Period</label>
+                  <select name="default_payment_period" defaultValue={systemConfig.default_payment_period || 'QUARTERLY'} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none', background: 'white' }}>
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="QUARTERLY">Quarterly (3 months)</option>
+                    <option value="SEMESTER">Semester (6 months)</option>
+                    <option value="YEARLY">Yearly</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Default Penalty/Day (ETB)</label>
+                  <input type="number" step="0.01" name="default_penalty_per_day" defaultValue={systemConfig.default_penalty_per_day || 10} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Default Grace Period (days)</label>
+                  <input type="number" name="default_grace_period" defaultValue={systemConfig.default_grace_period || 10} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                <button type="button" onClick={() => setShowConfigModal(false)} style={{ flex: 1, padding: '12px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'none', color: '#374151', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                <button type="submit" disabled={actionLoading} style={{ flex: 1, padding: '12px', border: 'none', borderRadius: '8px', background: '#2563eb', color: 'white', fontWeight: 600, cursor: actionLoading ? 'not-allowed' : 'pointer', opacity: actionLoading ? 0.6 : 1 }}>
+
+              {/* Payment Instructions */}
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Payment Instructions</label>
+                <textarea name="payment_instructions" rows="3" style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', resize: 'vertical', outline: 'none' }} defaultValue={systemConfig.payment_instructions || 'Please make payment to the above account and upload the receipt for verification.'} />
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+                <button type="button" onClick={() => setShowConfigModal(false)} style={{ padding: '10px 24px', border: '1px solid #cbd5e1', borderRadius: '8px', background: 'white', color: '#475569', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.background = 'white'}>Cancel</button>
+                <button type="submit" disabled={actionLoading} style={{ padding: '10px 24px', border: 'none', borderRadius: '8px', background: '#2563eb', color: 'white', fontWeight: 600, cursor: actionLoading ? 'not-allowed' : 'pointer', opacity: actionLoading ? 0.7 : 1, transition: 'all 0.2s' }} onMouseEnter={(e) => { if(!actionLoading) e.currentTarget.style.background = '#1d4ed8' }} onMouseLeave={(e) => { if(!actionLoading) e.currentTarget.style.background = '#2563eb' }}>
                   {actionLoading ? 'Saving...' : 'Save Configuration'}
                 </button>
               </div>
+
             </form>
           </div>
         </div>
