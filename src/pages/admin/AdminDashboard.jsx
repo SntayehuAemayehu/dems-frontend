@@ -1528,7 +1528,22 @@ const handleBatchGenerateSchedules = async () => {
           from { opacity: 0; transform: translateY(15px); }
           to { opacity: 1; transform: translateY(0); }
         }
-
+        /* 👇 NEW: Smart Card Animations 👇 */
+        .analytics-card {
+          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease !important;
+          opacity: 0; /* Start hidden */
+          animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        
+        .analytics-card:hover {
+          transform: translateY(-8px) scale(1.02) !important;
+        }
+        
+        /* Staggered delays for waterfall effect */
+        .card-delay-1 { animation-delay: 0.1s; }
+        .card-delay-2 { animation-delay: 0.2s; }
+        .card-delay-3 { animation-delay: 0.3s; }
+        .card-delay-4 { animation-delay: 0.4s; }
         @keyframes popIn {
           0% { transform: scale(0.9); opacity: 0; }
           50% { transform: scale(1.05); }
@@ -2122,16 +2137,13 @@ const handleBatchGenerateSchedules = async () => {
                 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '32px' }}>
                   
-                  {/* Smart Card 1 */}
-                  <div style={{ 
+                  {/* Smart Card 1 - Blue */}
+                  <div className="analytics-card card-delay-1" style={{ 
                     background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
                     padding: '24px', borderRadius: '16px', color: 'white',
                     boxShadow: '0 10px 25px -5px rgba(37, 99, 235, 0.4)',
-                    transition: 'transform 0.3s ease, box-shadow 0.3s ease', cursor: 'pointer',
-                    animation: 'fadeUp 0.6s ease-out forwards'
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 20px 30px -10px rgba(37, 99, 235, 0.6)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(37, 99, 235, 0.4)'; }}>
+                    cursor: 'pointer'
+                  }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Total Enrollments</p>
@@ -2143,16 +2155,13 @@ const handleBatchGenerateSchedules = async () => {
                     </div>
                   </div>
 
-                  {/* Smart Card 2 */}
-                  <div style={{ 
+                  {/* Smart Card 2 - Green */}
+                  <div className="analytics-card card-delay-2" style={{ 
                     background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
                     padding: '24px', borderRadius: '16px', color: 'white',
                     boxShadow: '0 10px 25px -5px rgba(5, 150, 105, 0.4)',
-                    transition: 'transform 0.3s ease, box-shadow 0.3s ease', cursor: 'pointer',
-                    animation: 'fadeUp 0.6s ease-out forwards'
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 20px 30px -10px rgba(5, 150, 105, 0.6)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(5, 150, 105, 0.4)'; }}>
+                    cursor: 'pointer'
+                  }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Active Enrollments</p>
@@ -2164,16 +2173,13 @@ const handleBatchGenerateSchedules = async () => {
                     </div>
                   </div>
 
-                  {/* Smart Card 3 */}
-                  <div style={{ 
+                  {/* Smart Card 3 - Purple */}
+                  <div className="analytics-card card-delay-3" style={{ 
                     background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', 
                     padding: '24px', borderRadius: '16px', color: 'white',
                     boxShadow: '0 10px 25px -5px rgba(109, 40, 217, 0.4)',
-                    transition: 'transform 0.3s ease, box-shadow 0.3s ease', cursor: 'pointer',
-                    animation: 'fadeUp 0.6s ease-out forwards'
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 20px 30px -10px rgba(109, 40, 217, 0.6)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(109, 40, 217, 0.4)'; }}>
+                    cursor: 'pointer'
+                  }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Total Revenue</p>
@@ -2185,16 +2191,13 @@ const handleBatchGenerateSchedules = async () => {
                     </div>
                   </div>
 
-                  {/* Smart Card 4 */}
-                  <div style={{ 
+                  {/* Smart Card 4 - Orange */}
+                  <div className="analytics-card card-delay-4" style={{ 
                     background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', 
                     padding: '24px', borderRadius: '16px', color: 'white',
                     boxShadow: '0 10px 25px -5px rgba(217, 119, 6, 0.4)',
-                    transition: 'transform 0.3s ease, box-shadow 0.3s ease', cursor: 'pointer',
-                    animation: 'fadeUp 0.6s ease-out forwards'
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 20px 30px -10px rgba(217, 119, 6, 0.6)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(217, 119, 6, 0.4)'; }}>
+                    cursor: 'pointer'
+                  }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Total Exams</p>
@@ -2208,7 +2211,12 @@ const handleBatchGenerateSchedules = async () => {
                 </div>
 
                 {/* Secondary Info Row */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', background: '#f8fafc', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                <div style={{ 
+                  display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', 
+                  background: '#f8fafc', padding: '24px', borderRadius: '16px', 
+                  border: '1px solid #e2e8f0', 
+                  animation: 'fadeUp 1s ease-out forwards' 
+                }}>
                   <div>
                     <p style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <CheckCircle size={16} color="#10b981" /> Published Exams

@@ -302,6 +302,8 @@ const resolveBatchTarget = async (type, value) => {
         .fade-in { animation: fadeIn 0.3s ease-out; }
         .slide-in { animation: slideIn 0.3s ease-out; }
         .pulse { animation: pulse 2s ease-in-out infinite; }
+        
+        /* Outer Batch Card (the main big box) */
         .batch-card {
           transition: all 0.3s ease;
           border: 2px solid #e2e8f0;
@@ -323,6 +325,21 @@ const resolveBatchTarget = async (type, value) => {
           background: ${styles.text};
           color: white;
         }
+        
+        /* 👇 NEW 3D ANIMATIONS FOR THE INNER CARDS 👇 */
+        .batch-inner-card {
+          transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        }
+        .batch-inner-card:hover {
+          transform: translateY(-6px) scale(1.03) !important;
+          box-shadow: 0 12px 24px -6px rgba(0,0,0,0.15) !important;
+          border-color: ${styles.border} !important;
+        }
+        .batch-inner-card:active {
+          transform: translateY(1px) scale(0.98) !important;
+        }
+        /* 👆 END OF NEW 3D ANIMATIONS 👆 */
+        
         .stat-number {
           font-size: 28px;
           font-weight: 700;
@@ -431,7 +448,7 @@ const resolveBatchTarget = async (type, value) => {
           {batchTypes.map((type) => (
             <div
               key={type.value}
-              className={`batch-card ${batchType === type.value ? 'selected' : ''}`}
+              className={`batch-card batch-inner-card ${batchType === type.value ? 'selected' : ''}`}
               onClick={() => {
                 setBatchType(type.value);
                 setBatchValue('');
