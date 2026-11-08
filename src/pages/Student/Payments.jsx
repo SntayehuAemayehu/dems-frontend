@@ -93,6 +93,44 @@ useEffect(() => {
     
     loadEverything();
 }, [dispatch]);
+  // ✅ NEW: Catch the Chapa return URL and verify
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const chapaRef = urlParams.get('ref') || localStorage.getItem('pending_chapa_ref');
+    
+    if (chapaRef) {
+      const verifyChapa = async () => {
+        setUploading(true);
+        try {
+          const response = await api.post('/payments/verify/', {
+            transaction_id: chapaRef,
+            method: 'chapa'
+          });
+          
+          if (response.data.success) {
+            toast.success('✅ Chapa Payment Verified!');
+            setCurrentStep(4); // Jump to the final "Review & Submit" step
+            setSelectedMethodDetails({ id: 'chapa', name: 'Chapa', color: '#7c3aed' });
+            setFormData(prev => ({ ...prev, transaction_id: chapaRef, amount: response.data.amount }));
+            
+            // Refresh history and balance
+            dispatch(fetchPayments());
+            dispatch(fetchBalance());
+          } else {
+            toast.error(response.data.message || 'Payment pending or failed');
+          }
+        } catch (error) {
+          toast.error('Failed to verify Chapa payment');
+        } finally {
+          setUploading(false);
+          localStorage.removeItem('pending_chapa_ref');
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      };
+      
+      verifyChapa();
+    }
+  }, []); // Run once on mount
 // ✅ SAFETY NET: whenever paymentConfig changes (e.g., after admin update + refresh),
 // rebuild the payment methods so Telebirr picks up the fresh number
 useEffect(() => {
@@ -360,15 +398,40 @@ const fetchPaymentConfig = async () => {
   };
 
   const paymentsArray = Array.isArray(payments) ? payments : [];
-
-  const handleMethodSelect = (methodId) => {
+  const handleMethodSelect = async (methodId) => {
     const method = paymentMethodsList.find(m => m.id === methodId);
-    
     if (!method) return;
-    
+
+    // ✅ 1. IF CHAPA: Trigger the real Chapa redirect immediately
+    if (methodId === 'chapa') {
+      setUploading(true);
+      try {
+        const response = await api.post('/payments/initialize/', {
+          method: 'chapa',
+          amount: formData.amount || feeAmount?.amount || 1000, // Use the amount
+        });
+        
+        if (response.data.success && response.data.checkout_url) {
+          toast.success('Redirecting to Chapa Payment Gateway...');
+          // Save reference to localStorage to verify when we return
+          localStorage.setItem('pending_chapa_ref', response.data.reference);
+          // Real redirect
+          window.location.href = response.data.checkout_url;
+          return; // Stop execution
+        } else {
+          toast.error(response.data.error || 'Chapa initialization failed');
+        }
+      } catch (error) {
+        toast.error(error.response?.data?.error || 'Failed to connect to Chapa');
+      } finally {
+        setUploading(false);
+      }
+      return; // Stop here, do not open the manual steps
+    }
+
+    // ✅ 2. FOR OTHER METHODS (Bank, Telebirr): Keep your existing manual flow
     setSelectedMethodDetails(method);
     
-    // ✅ If bank transfer, set default bank
     if (methodId === 'bank_transfer' && method.banks && method.banks.length > 0) {
       const defaultBank = method.banks.find(b => b.is_default) || method.banks[0];
       setFormData({ 
@@ -386,6 +449,7 @@ const fetchPaymentConfig = async () => {
       });
     }
   };
+
 
   // ✅ Handle bank selection change
   const handleBankChange = (e) => {
@@ -1913,10 +1977,17 @@ const renderBankSelection = () => {
                     <span style={{ color: '#64748b', fontSize: '13px' }}>Amount</span>
                     <span style={{ fontWeight: 700, fontSize: '13px', color: '#2563eb' }}>ETB {formData.amount}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-                    <span style={{ color: '#64748b', fontSize: '13px' }}>Receipt</span>
-                    <span style={{ fontWeight: 500, fontSize: '13px', color: '#22c55e' }}><CheckCircle size={14} style={{ display: 'inline', marginRight: '4px' }} /> Uploaded</span>
-                  </div>
+                                {selectedMethodDetails?.id !== 'chapa' ? (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                      <span style={{ color: '#64748b', fontSize: '13px' }}>Receipt</span>
+                      <span style={{ fontWeight: 500, fontSize: '13px', color: '#22c55e' }}><CheckCircle size={14} style={{ display: 'inline', marginRight: '4px' }} /> Uploaded</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                      <span style={{ color: '#64748b', fontSize: '13px' }}>Status</span>
+                      <span style={{ fontWeight: 500, fontSize: '13px', color: '#22c55e' }}><CheckCircle size={14} style={{ display: 'inline', marginRight: '4px' }} /> Paid via Chapa</span>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{
