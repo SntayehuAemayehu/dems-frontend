@@ -398,40 +398,14 @@ const fetchPaymentConfig = async () => {
   };
 
   const paymentsArray = Array.isArray(payments) ? payments : [];
-  const handleMethodSelect = async (methodId) => {
+  const handleMethodSelect = (methodId) => {
     const method = paymentMethodsList.find(m => m.id === methodId);
     if (!method) return;
-
-    // ✅ 1. IF CHAPA: Trigger the real Chapa redirect immediately
-    if (methodId === 'chapa') {
-      setUploading(true);
-      try {
-        const response = await api.post('/payments/initialize/', {
-          method: 'chapa',
-          amount: formData.amount || feeAmount?.amount || 1000, // Use the amount
-        });
-        
-        if (response.data.success && response.data.checkout_url) {
-          toast.success('Redirecting to Chapa Payment Gateway...');
-          // Save reference to localStorage to verify when we return
-          localStorage.setItem('pending_chapa_ref', response.data.reference);
-          // Real redirect
-          window.location.href = response.data.checkout_url;
-          return; // Stop execution
-        } else {
-          toast.error(response.data.error || 'Chapa initialization failed');
-        }
-      } catch (error) {
-        toast.error(error.response?.data?.error || 'Failed to connect to Chapa');
-      } finally {
-        setUploading(false);
-      }
-      return; // Stop here, do not open the manual steps
-    }
-
-    // ✅ 2. FOR OTHER METHODS (Bank, Telebirr): Keep your existing manual flow
+    
+    // ✅ Just set the selected method so the UI shows the instructions
     setSelectedMethodDetails(method);
     
+    // Set form data for Bank/Telebirr
     if (methodId === 'bank_transfer' && method.banks && method.banks.length > 0) {
       const defaultBank = method.banks.find(b => b.is_default) || method.banks[0];
       setFormData({ 
@@ -449,6 +423,7 @@ const fetchPaymentConfig = async () => {
       });
     }
   };
+  
 
 
   // ✅ Handle bank selection change
@@ -1686,14 +1661,40 @@ const renderBankSelection = () => {
                         </div>
                       ))}
                     </div>
-
                     <button
                       className="btn-primary"
                       style={{ marginTop: '8px' }}
-                      onClick={() => setCurrentStep(1)}
+                      onClick={async () => {
+                        if (selectedMethodDetails?.id === 'chapa') {
+                          // ✅ Trigger Chapa Redirect here
+                          setUploading(true);
+                          try {
+                            const response = await api.post('/payments/initialize/', {
+                              method: 'chapa',
+                              amount: formData.amount || feeAmount?.amount || 1000,
+                            });
+                            
+                            if (response.data.success && response.data.checkout_url) {
+                              toast.success('Redirecting to Chapa...');
+                              localStorage.setItem('pending_chapa_ref', response.data.reference);
+                              window.location.href = response.data.checkout_url;
+                            } else {
+                              toast.error(response.data.error || 'Failed to initialize Chapa');
+                            }
+                          } catch (error) {
+                            toast.error('Failed to connect to Chapa');
+                          } finally {
+                            setUploading(false);
+                          }
+                        } else {
+                          // ✅ For Bank, Telebirr, etc., just go to the next step
+                          setCurrentStep(1);
+                        }
+                      }}
                     >
-                      Next Step <ArrowRight size={18} />
+                      {uploading && selectedMethodDetails?.id === 'chapa' ? 'Redirecting...' : 'Next Step'} <ArrowRight size={18} />
                     </button>
+                    
                   </div>
                 )}
               </div>
