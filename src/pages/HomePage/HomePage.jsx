@@ -254,6 +254,20 @@ const HomePage = () => {
                     transform: translateY(-2px);
                     box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
                 }
+                               /* 👇 NEW 3D STATS CARD ANIMATION 👇 */
+                .dems-stat-card {
+                    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+                }
+                .dems-stat-card:hover {
+                    transform: translateY(-8px) scale(1.05);
+                    box-shadow: 0 20px 30px -10px rgba(79, 70, 229, 0.2);
+                    background: rgba(79, 70, 229, 0.03);
+                    border-radius: 16px;
+                }
+                /* 👆 END OF STATS CARD ANIMATION 👆 */
+
+
+
                 @keyframes demsShimmer {
                     0% { background-position: -200% center; }
                     100% { background-position: 200% center; }
@@ -346,7 +360,7 @@ const HomePage = () => {
                         <Col xs={24} lg={11}>
                             <FadeIn delay={0.2}>
                                 <TiltCard intensity={12}>
-                                    <Card bordered={false} style={{ ...cardStyle, padding: 'clamp(16px, 4vw, 28px)' , borderRadius: 28, position: 'relative', overflow: 'hidden' }}>
+                                    <Card variant="borderless" style={{ ...cardStyle, padding: 'clamp(16px, 4vw, 28px)' , borderRadius: 28, position: 'relative', overflow: 'hidden' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 24 }}>
                                             <div style={{
                                                 width: 68,
@@ -425,12 +439,12 @@ const HomePage = () => {
                             ].map((item, index) => (
                                 <Col xs={12} md={6} key={index}>
                                     <StaggerItem>
-                                        <div style={{ textAlign: 'center', padding: '12px' }}>
+                                        <div className="dems-stat-card" style={{ textAlign: 'center', padding: '20px 12px', borderRadius: 16, cursor: 'pointer' }}>
                                             <Statistic
                                                 title={<span style={{ color: colors.muted, fontWeight: 600, fontSize: 14 }}>{item.title}</span>}
                                                 value={item.value}
                                                 prefix={item.icon}
-                                                valueStyle={{ color: colors.primary, fontWeight: 800, fontSize: 'clamp(1.5rem, 3vw, 2.5rem)' }}
+                                                styles={{ content: { color: colors.primary, fontWeight: 800, fontSize: 'clamp(1.5rem, 3vw, 2.5rem)' } }}
                                             />
                                         </div>
                                     </StaggerItem>
@@ -458,7 +472,7 @@ const HomePage = () => {
                             {features.map((feature, index) => (
                                 <Col xs={24} sm={12} lg={8} key={index}>
                                     <StaggerItem>
-                                        <Card bordered={false} className="dems-feature-card" style={cardStyle}>
+                                        <Card variant="borderless" className="dems-feature-card" style={cardStyle}>
                                             <div style={{
                                                 width: 60,
                                                 height: 60,
