@@ -7,9 +7,9 @@
 // FIXED: CRUD for Users, Departments, Fee Structures
 // FIXED: Password Visibility on Create User
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Settings, Users, BookOpen, RefreshCw,
   CheckCircle, XCircle, Clock, DollarSign,
@@ -27,146 +27,32 @@ import {
   ChevronDown,
   ChevronUp,
   Save, X, Upload, FileText,
-  Printer,CheckSquare,Square,
-  Timer, Lock, Unlock, Pencil, EyeOff, Newspaper, MoreVertical
+  Download, Printer,CheckSquare,Square,
+  Timer, Lock, Unlock, Pencil, EyeOff, Newspaper,Send,Check
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api, { getMediaUrl } from '../../api/api';
-import AdminNews from './AdminNews';
-
-const flattenActionChildren = (children) => React.Children.toArray(children).flatMap((child) => (
-  React.isValidElement(child) && child.type === React.Fragment
-    ? flattenActionChildren(child.props.children)
-    : [child]
-));
-
-const getActionText = (children) => React.Children.toArray(children).map((child) => (
-  typeof child === 'string' || typeof child === 'number'
-    ? String(child)
-    : React.isValidElement(child) ? getActionText(child.props.children) : ''
-)).join(' ').trim();
-
-const getActionLabel = (action, index) => {
-  if (!React.isValidElement(action)) return `Action ${index + 1}`;
-  if (action.props['aria-label'] || action.props.title) {
-    return action.props['aria-label'] || action.props.title;
-  }
-  const text = getActionText(action.props.children);
-  return text || `Action ${index + 1}`;
-};
-
-const CAPACITY_RANGE_LIMITS = {
-  '1-50': { min: 1, max: 50 },
-  '50-100': { min: 50, max: 100 },
-  '100-200': { min: 100, max: 200 },
-  custom: { min: 1, max: 2147483647 },
-};
-
-const AdminActionMenu = ({ children, style }) => {
-  const actions = flattenActionChildren(children);
-  if (actions.length === 1) return <div style={style}>{actions[0]}</div>;
-  if (actions.length < 2) return null;
-
-  return (
-    <details className="admin-action-menu" style={{ position: 'relative', display: 'inline-block', ...style }}>
-      <summary
-        aria-label="More actions"
-        title="More actions"
-        style={{
-          listStyle: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 36,
-          height: 36,
-          border: '1px solid #cbd5e1',
-          borderRadius: 8,
-          background: 'white',
-          color: '#334155',
-          cursor: 'pointer',
-        }}
-      >
-        <MoreVertical size={18} />
-      </summary>
-      <div
-        role="menu"
-        style={{
-          position: 'absolute',
-          zIndex: 1100,
-          top: 'calc(100% + 4px)',
-          right: 0,
-          minWidth: 180,
-          padding: 4,
-          border: '1px solid #e2e8f0',
-          borderRadius: 8,
-          background: 'white',
-          boxShadow: '0 8px 24px rgba(15, 23, 42, 0.16)',
-        }}
-      >
-        {actions.map((action, index) => {
-          if (!React.isValidElement(action) || action.type !== 'button') return action;
-          const label = getActionLabel(action, index);
-          const originalClick = action.props.onClick;
-
-          return React.cloneElement(action, {
-            key: action.key || label,
-            role: 'menuitem',
-            'aria-label': label,
-            title: label,
-            onClick: (event) => {
-              originalClick?.(event);
-              if (!event.defaultPrevented) {
-                const menu = event.currentTarget.closest('details');
-                if (menu) menu.open = false;
-              }
-            },
-            style: {
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              width: '100%',
-              padding: '9px 10px',
-              border: 'none',
-              borderRadius: 6,
-              background: 'transparent',
-              color: action.props.style?.color || '#334155',
-              cursor: action.props.disabled ? 'not-allowed' : 'pointer',
-              textAlign: 'left',
-              opacity: action.props.disabled ? 0.55 : 1,
-            },
-            children: (
-              <>
-                {action.props.children}
-                {!getActionText(action.props.children) && <span>{label}</span>}
-              </>
-            ),
-          });
-        })}
-      </div>
-    </details>
-  );
-};
+import api from '../../api/api';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [filterRole, setFilterRole] = useState('all');
-  const [systemLogRole, setSystemLogRole] = useState('all');
-  const [activeTab, setActiveTab] = useState(() => (
-    location.pathname === '/admin/news' ? 'news' : 'overview'
-  ));
+  const [activeTab, setActiveTab] = useState('overview');
   const [actionLoading, setActionLoading] = useState(false);
-  const [confirmation, setConfirmation] = useState(null);
-  const [showSystemLockModal, setShowSystemLockModal] = useState(false);
-  const [systemLockDraft, setSystemLockDraft] = useState('');
-  const hasLoadedData = useRef(false);
-  
+  const [showSmsModal, setShowSmsModal] = useState(false);
+  const [smsData, setSmsData] = useState({ type: 'same', message: '', department: '' });
+  const [sendingSms, setSendingSms] = useState(false);
+  const [smsStep, setSmsStep] = useState(1); // 1: Audience, 2: Students, 3: Message
+  // Audience Filters
+  const [smsAudience, setSmsAudience] = useState('ALL'); // ALL, DEPT, YEAR
+  const [smsDeptFilter, setSmsDeptFilter] = useState('');
+  const [smsYearFilter, setSmsYearFilter] = useState('');
+  // Specific Selection
+  const [selectedStudents, setSelectedStudents] = useState([]);
   // ============ SYSTEM LOCK STATE ============
   const [systemLocked, setSystemLocked] = useState(false);
   const [systemLockMessage, setSystemLockMessage] = useState('');
@@ -217,12 +103,6 @@ const AdminDashboard = () => {
 
   const [proctorImages, setProctorImages] = useState([]);
   const [selectedProctorSession, setSelectedProctorSession] = useState(null);
-  const [proctorDepartments, setProctorDepartments] = useState([]);
-  const [proctorStudents, setProctorStudents] = useState([]);
-  const [selectedProctorDepartment, setSelectedProctorDepartment] = useState('');
-  const [selectedProctorStudent, setSelectedProctorStudent] = useState(null);
-  const [studentProctorImages, setStudentProctorImages] = useState([]);
-  const [loadingProctorDrilldown, setLoadingProctorDrilldown] = useState(false);
   // ============ BATCH PROCESSING STATE - ADD THIS ============
 const [batchMode, setBatchMode] = useState(false);
 const [selectedSchedules, setSelectedSchedules] = useState([]);
@@ -233,6 +113,7 @@ const [showBatchResultsModal, setShowBatchResultsModal] = useState(false);
 const [batchAction, setBatchAction] = useState('delete');
 const [batchReason, setBatchReason] = useState('');
   // ============ FORM STATES ============
+const [isSidebarExpanded, setIsSidebarExpanded] = useState(true); 
   const [userForm, setUserForm] = useState({
     email: '',
     full_name: '',
@@ -242,8 +123,6 @@ const [batchReason, setBatchReason] = useState('');
     role: 'STUDENT',
     department: '',
     headed_department: '',
-    year: 1,
-    semester: 1,
   });
 
   const [feeStructureForm, setFeeStructureForm] = useState({
@@ -286,7 +165,6 @@ const [batchReason, setBatchReason] = useState('');
     title: '',
     description: '',
     credit_hours: 3,
-    year: 1,
     semester: '1',
     capacity: 30,
     department: '',
@@ -294,17 +172,8 @@ const [batchReason, setBatchReason] = useState('');
     is_active: true,
     is_approved: false,
   });
-  const [capacityRange, setCapacityRange] = useState('1-50');
 
   // ============ FETCH FUNCTIONS ============
-
-  useEffect(() => {
-    if (location.pathname === '/admin/news') {
-      setActiveTab('news');
-    } else {
-      setActiveTab((currentTab) => currentTab === 'news' ? 'overview' : currentTab);
-    }
-  }, [location.pathname]);
 
   const fetchPaymentPeriods = useCallback(async () => {
     try {
@@ -344,33 +213,48 @@ const [batchReason, setBatchReason] = useState('');
     }
   }, []);
 
-  const requestConfirmation = (title, message, confirmLabel = 'Confirm') => new Promise((resolve) => {
-    setConfirmation({ title, message, confirmLabel, resolve });
-  });
-
-  const toggleSystemLock = () => {
-    setSystemLockDraft(systemLockMessage || 'System is currently locked for maintenance. Please try again later.');
-    setShowSystemLockModal(true);
-  };
-
-  const submitSystemLock = async () => {
-    setLockLoading(true);
-    try {
-      const response = await api.post('/analytics/system-lock/', {
-        action: systemLocked ? 'unlock' : 'lock',
-        message: systemLockDraft.trim() || 'System is currently locked for maintenance. Please try again later.',
-      });
-      setSystemLocked(response.data.is_locked);
-      setSystemLockMessage(response.data.lock_message || response.data.message);
-      setShowSystemLockModal(false);
-      toast.success(response.data.message);
-      await fetchData();
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to toggle system lock');
-    } finally {
-      setLockLoading(false);
+  // ============ SYSTEM LOCK FUNCTION - FIXED TOGGLE ============
+     // ============ SYSTEM LOCK FUNCTION - FIXED ============
+  // ============ SYSTEM LOCK FUNCTION - FIXED ============
+const toggleSystemLock = async () => {
+  try {
+    // Determine current action
+    const action = systemLocked ? 'unlock' : 'lock';
+    
+    // If locking, ask for message
+    let message = systemLockMessage;
+    if (action === 'lock') {
+      const userMessage = prompt('Enter lock message (optional):', 'System is currently locked for maintenance. Please try again later.');
+      if (userMessage === null) return; // User cancelled
+      message = userMessage || 'System is currently locked for maintenance. Please try again later.';
+    } else {
+      // If unlocking, confirm first
+      if (!window.confirm('⚠️ Are you sure you want to UNLOCK the system?\n\nAll users will be able to access the system again.')) {
+        return;
+      }
     }
-  };
+    
+    setLockLoading(true);
+    
+    const response = await api.post('/analytics/system-lock/', {
+      action: action,
+      message: message
+    });
+    
+    console.log('✅ System lock response:', response.data);
+    
+    setSystemLocked(response.data.is_locked);
+    setSystemLockMessage(response.data.lock_message || response.data.message);
+    toast.success(response.data.message);
+    await fetchData();
+    
+  } catch (error) {
+    console.error('Failed to toggle system lock:', error);
+    toast.error(error.response?.data?.error || 'Failed to toggle system lock');
+  } finally {
+    setLockLoading(false);
+  }
+};
 
   // ============ GENERATE PAYMENT SCHEDULES ============
   const handleGeneratePaymentSchedules = async () => {
@@ -403,7 +287,7 @@ const [batchReason, setBatchReason] = useState('');
 
   // ============ DELETE PAYMENT SCHEDULE - FIXED ============
   const handleDeletePaymentSchedule = async (scheduleId) => {
-    if (!(await requestConfirmation('Delete payment schedule?', 'This action cannot be undone.', 'Delete'))) return;
+    if (!window.confirm('Are you sure you want to delete this payment schedule? This action cannot be undone.')) return;
     
     setActionLoading(true);
     try {
@@ -417,10 +301,44 @@ const [batchReason, setBatchReason] = useState('');
       setActionLoading(false);
     }
   };
+    // ============ FETCH FUNCTIONS ============
+  
+  // ✅ ADD THIS FUNCTION FOR SMS
+  const handleSendSMS = async (e) => {
+    e.preventDefault();
+    if (selectedStudents.length === 0) {
+        toast.error("Please select at least one student.");
+        return;
+    }
+    if (!smsData.message) {
+        toast.error("Please enter a message");
+        return;
+    }
+    
+    setSendingSms(true);
+    try {
+        // We send the array of student IDs to the backend
+        const payload = {
+            type: smsData.type,
+            message: smsData.message,
+            student_ids: selectedStudents // Array of IDs
+        };
+        const response = await api.post('/notifications/send-bulk-sms/', payload);
+        toast.success(response.data.message || "SMS queued successfully!");
+        setShowSmsModal(false);
+        setSmsStep(1);
+        setSelectedStudents([]);
+        setSmsData({ type: 'same', message: '' }); 
+    } catch (error) {
+        toast.error(error.response?.data?.error || "Failed to send SMS");
+    } finally {
+        setSendingSms(false);
+    }
+  };
 
   const fetchData = useCallback(async () => {
     try {
-      if (!hasLoadedData.current) setLoading(true);
+      setLoading(true);
       setRefreshing(true);
 
       // Fetch System Lock Status
@@ -468,7 +386,7 @@ const [batchReason, setBatchReason] = useState('');
       }
 
       try {
-        const logsRes = await api.get('/analytics/admin/logs/?limit=500');
+        const logsRes = await api.get('/analytics/admin/logs/?limit=50');
         setSystemLogs(Array.isArray(logsRes.data) ? logsRes.data : []);
       } catch (e) {
         setSystemLogs([]);
@@ -562,7 +480,6 @@ const [batchReason, setBatchReason] = useState('');
       console.error('Failed to fetch admin data:', error);
       toast.error('Failed to load admin data');
     } finally {
-      hasLoadedData.current = true;
       setLoading(false);
       setRefreshing(false);
     }
@@ -619,7 +536,7 @@ const handleBatchDeleteSchedules = async () => {
     return;
   }
   
-  if (!(await requestConfirmation('Delete payment schedules?', `Delete ${selectedSchedules.length} payment schedule(s)? This action cannot be undone.`, 'Delete'))) {
+  if (!window.confirm(`Are you sure you want to delete ${selectedSchedules.length} payment schedule(s)? This action cannot be undone.`)) {
     return;
   }
   
@@ -873,11 +790,7 @@ const handleBatchGenerateSchedules = async () => {
     return;
   }
   
-  if (!(await requestConfirmation(
-    'Generate payment schedules?',
-    `Generate schedules for all students in ${departments.find(d => d.id == selectedDepartmentForSchedule)?.name || 'selected'} department?`,
-    'Generate'
-  ))) {
+  if (!window.confirm(`Generate payment schedules for ALL students in ${departments.find(d => d.id == selectedDepartmentForSchedule)?.name || 'selected'} department?`)) {
     return;
   }
   
@@ -926,8 +839,6 @@ const handleBatchGenerateSchedules = async () => {
         role: userForm.role,
         department: userForm.department || '',
         headed_department: userForm.headed_department || '',
-        year: Number(userForm.year) || 1,
-        semester: Number(userForm.semester) || 1,
       };
 
       console.log('📝 Creating user with data:', userData);
@@ -971,7 +882,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeleteUser = async (userId) => {
-    if (!(await requestConfirmation('Delete user?', 'This action cannot be undone.', 'Delete'))) return;
+    if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/admin/users/${userId}/`);
@@ -1007,8 +918,6 @@ const handleBatchGenerateSchedules = async () => {
       role: 'STUDENT',
       department: '',
       headed_department: '',
-      year: 1,
-      semester: 1,
     });
     setShowCreatePassword(false);
     setShowConfirmPassword(false);
@@ -1050,7 +959,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeleteCourse = async (courseId) => {
-    if (!(await requestConfirmation('Delete course?', 'This action cannot be undone.', 'Delete'))) return;
+    if (!window.confirm('Are you sure you want to delete this course?')) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/admin/courses/${courseId}/`);
@@ -1080,13 +989,11 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const resetCourseForm = () => {
-    setCapacityRange('1-50');
     setCourseForm({
       course_code: '',
       title: '',
       description: '',
       credit_hours: 3,
-      year: 1,
       semester: '1',
       capacity: 30,
       department: '',
@@ -1147,7 +1054,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeleteDepartment = async (departmentId) => {
-    if (!(await requestConfirmation('Delete department?', 'This will affect all associated students and courses.', 'Delete'))) return;
+    if (!window.confirm('Are you sure you want to delete this department? This will affect all associated students and courses.')) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/admin/departments/${departmentId}/`);
@@ -1222,7 +1129,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeleteFeeStructure = async (id) => {
-    if (!(await requestConfirmation('Delete fee structure?', 'This will affect payment schedules.', 'Delete'))) return;
+    if (!window.confirm('Are you sure you want to delete this fee structure? This will affect payment schedules.')) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/fee-structures/${id}/`);
@@ -1286,7 +1193,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeleteBank = async (id) => {
-    if (!(await requestConfirmation('Delete bank account?', 'This action cannot be undone.', 'Delete'))) return;
+    if (!window.confirm('Are you sure you want to delete this bank account?')) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/banks/${id}/`);
@@ -1353,7 +1260,7 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   const handleDeletePaymentPeriod = async (id) => {
-    if (!(await requestConfirmation('Delete payment period?', 'This action cannot be undone.', 'Delete'))) return;
+    if (!window.confirm('Are you sure you want to delete this payment period?')) return;
     setActionLoading(true);
     try {
       await api.delete(`/analytics/payment-periods/${id}/`);
@@ -1446,126 +1353,54 @@ const handleBatchGenerateSchedules = async () => {
     setShowProctoringDetailModal(true);
   };
 
-  const handleProctorDepartmentChange = async (department) => {
-    setSelectedProctorDepartment(department);
-    setSelectedProctorStudent(null);
-    setProctorStudents([]);
-    setStudentProctorImages([]);
-    if (!department) return;
-
-    setLoadingProctorDrilldown(true);
-    try {
-      const response = await api.get('/proctoring/review/students/', { params: { department } });
-      setProctorStudents(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      toast.error('Failed to load students for this department');
-    } finally {
-      setLoadingProctorDrilldown(false);
-    }
-  };
-
-  const handleProctorStudentSelect = async (student) => {
-    setSelectedProctorStudent(student);
-    setStudentProctorImages([]);
-    setLoadingProctorDrilldown(true);
-    try {
-      const response = await api.get('/proctoring/review/students/', {
-        params: { department: selectedProctorDepartment, student_id: student.id },
-      });
-      setStudentProctorImages(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      toast.error('Failed to load student proctoring images');
-    } finally {
-      setLoadingProctorDrilldown(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activeTab !== 'proctoring') return;
-    api.get('/proctoring/review/students/')
-      .then((response) => setProctorDepartments(Array.isArray(response.data) ? response.data : []))
-      .catch(() => setProctorDepartments([]));
-  }, [activeTab]);
-
   // ============ FILTERS ============
 
   const getFilteredData = () => {
     if (activeTab === 'users') {
       return users.filter(u =>
-        (
-          (u.full_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-          (u.email?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-        ) &&
-        (filterStatus === 'all' || (filterStatus === 'active' ? u.is_active : !u.is_active)) &&
-        (filterRole === 'all' || u.role === filterRole)
+        (u.full_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (u.email?.toLowerCase() || '').includes(searchTerm.toLowerCase())
       );
     }
     if (activeTab === 'courses') {
       return courses.filter(c =>
-        (
-          (c.title?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-          (c.course_code?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-        ) &&
-        (filterStatus === 'all' || (filterStatus === 'approved' ? c.is_approved : !c.is_approved))
+        (c.title?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (c.course_code?.toLowerCase() || '').includes(searchTerm.toLowerCase())
       );
     }
     if (activeTab === 'payments') {
       return payments.filter(p =>
-        (
-          (p.student_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-          (p.transaction_id?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-        ) &&
-        (filterStatus === 'all' || p.status === filterStatus)
+        (p.student_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (p.transaction_id?.toLowerCase() || '').includes(searchTerm.toLowerCase())
       );
     }
     if (activeTab === 'fee-structures') {
       return feeStructures.filter(f =>
-        (
-          (f.department_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-          (f.payment_period_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-        ) &&
-        (filterStatus === 'all' || (filterStatus === 'active' ? f.is_active : !f.is_active))
+        (f.department_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (f.payment_period_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
       );
     }
     if (activeTab === 'banks') {
       return banks.filter(b =>
-        (
-          (b.bank_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-          (b.account_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-        ) &&
-        (filterStatus === 'all' || (filterStatus === 'active' ? b.is_active : !b.is_active))
+        (b.bank_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (b.account_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
       );
     }
     if (activeTab === 'departments') {
       return departments.filter(d =>
-        (
-          (d.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-          (d.code?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-        ) &&
-        (filterStatus === 'all' || (filterStatus === 'active' ? d.is_active : !d.is_active))
+        (d.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (d.code?.toLowerCase() || '').includes(searchTerm.toLowerCase())
       );
     }
     if (activeTab === 'payment-periods') {
       return paymentPeriods.filter(p =>
-        (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) &&
-        (filterStatus === 'all' || (filterStatus === 'active' ? p.is_active : !p.is_active))
-      );
-    }
-    if (activeTab === 'payment-schedules') {
-      return paymentSchedules.filter(schedule =>
-        (
-          (schedule.student_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-          (schedule.department_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-          (schedule.fee_structure_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-        ) &&
-        (filterStatus === 'all' || schedule.status === filterStatus)
+        (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
       );
     }
     return [];
   };
 
   const filteredData = getFilteredData();
-  const filteredPaymentSchedules = activeTab === 'payment-schedules' ? filteredData : paymentSchedules;
 
   // ============ RENDER HELPERS ============
 
@@ -1628,22 +1463,43 @@ const handleBatchGenerateSchedules = async () => {
   };
 
   // ============ SIDEBAR NAVIGATION ============
-
-  const menuItems = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'users', label: 'Users', icon: Users },
-    { id: 'courses', label: 'Courses', icon: BookOpen },
-    { id: 'news', label: 'News', icon: Newspaper },
-    { id: 'payments', label: 'Payments', icon: DollarSign },
-    { id: 'fee-structures', label: 'Fee Structures', icon: CreditCardIcon },
-    { id: 'departments', label: 'Departments', icon: Building2 },
-    { id: 'banks', label: 'Bank Accounts', icon: Banknote },
-    { id: 'payment-periods', label: 'Payment Periods', icon: Calendar },
-    { id: 'payment-schedules', label: 'Payment Schedules', icon: Calendar },
-    { id: 'proctoring', label: 'Proctoring', icon: Camera },
-    { id: 'logs', label: 'System Logs', icon: Activity },
-    { id: 'system', label: 'System Config', icon: Settings },
+  // ============ SIDEBAR NAVIGATION (UPGRADED) ============
+  const menuGroups = [
+    {
+      title: 'CORE MANAGEMENT',
+      items: [
+        { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+        { id: 'users', label: 'User Management', icon: Users },
+        { id: 'departments', label: 'Departments', icon: Building2 },
+        { id: 'courses', label: 'Courses', icon: BookOpen },
+      ]
+    },
+    {
+      title: 'FINANCIALS',
+      items: [
+        { id: 'payments', label: 'Transactions', icon: DollarSign },
+        { id: 'fee-structures', label: 'Fee Structures', icon: CreditCardIcon },
+        { id: 'banks', label: 'Bank Accounts', icon: Banknote },
+        { id: 'payment-periods', label: 'Payment Periods', icon: Calendar },
+        { id: 'payment-schedules', label: 'Payment Schedules', icon: Timer },
+      ]
+    },
+    {
+      title: 'ACADEMICS & SECURITY',
+      items: [
+        { id: 'proctoring', label: 'AI Proctoring', icon: Camera },
+        { id: 'news', label: 'News & Announcements', icon: Newspaper },
+      ]
+    },
+    {
+      title: 'SYSTEM ADMINISTRATION',
+      items: [
+        { id: 'logs', label: 'System Logs', icon: Activity },
+        { id: 'system', label: 'System Config', icon: Settings },
+      ]
+    }
   ];
+
 
   // ============ LOADING STATE ============
 
@@ -1657,88 +1513,169 @@ const handleBatchGenerateSchedules = async () => {
   }
 
   // ============ MAIN RENDER ============
-
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f1f5f9' }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+                /* 👇 NEW SMART ANIMATIONS 👇 */
+        @keyframes slideInLeft {
+          from { opacity: 0; transform: translateX(-20px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(15px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        /* 👇 NEW: Smart Card Animations 👇 */
+        .analytics-card {
+          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease !important;
+          opacity: 0; /* Start hidden */
+          animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        
+        .analytics-card:hover {
+          transform: translateY(-8px) scale(1.02) !important;
+        }
+        
+        /* Staggered delays for waterfall effect */
+        .card-delay-1 { animation-delay: 0.1s; }
+        .card-delay-2 { animation-delay: 0.2s; }
+        .card-delay-3 { animation-delay: 0.3s; }
+        .card-delay-4 { animation-delay: 0.4s; }
+        @keyframes popIn {
+          0% { transform: scale(0.9); opacity: 0; }
+          50% { transform: scale(1.05); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        /* Mobile Fixes */
         @media (max-width: 768px) {
           .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
           .admin-grid { grid-template-columns: 1fr !important; }
           .tabs-header { overflow-x: auto; flex-wrap: nowrap; }
           .tab-btn { white-space: nowrap; font-size: 13px; padding: 10px 14px; }
-          .sidebar { transform: translateX(-100%); }
-          .sidebar-open { transform: translateX(0); }
-          .content { margin-left: 0 !important; }
+          .sidebar { transform: translateX(-100%) !important; }
+          .sidebar-open { transform: translateX(0) !important; }
+          .content { margin-left: 0 !important; padding-top: 60px; }
+          .mobile-toggle { display: block !important; }
+          .overlay.show { display: block; }
         }
+
+        /* Desktop Dynamic Layout */
         @media (min-width: 769px) {
           .sidebar { transform: translateX(0); }
-          .content { margin-left: 280px; }
+          .content { 
+            /* 👇 This line tells the content to move left/right with the sidebar */
+            margin-left: ${isSidebarExpanded ? '280px' : '80px'}; 
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+          }
         }
+
+        /* Core Sidebar Styling */
         .sidebar {
           position: fixed;
           top: 0;
           left: 0;
           bottom: 0;
-          width: 280px;
-          background: #0f172a;
+          width: ${isSidebarExpanded ? '280px' : '80px'};
+          /* 👇 PROFESSIONAL DEEP NAVY GRADIENT */
+          background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
           color: white;
           z-index: 1000;
           overflow-y: auto;
-          transition: transform 0.3s ease;
+          overflow-x: hidden;
+          transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s ease;
+          /* 👇 SUBTLE SHADOW FOR DEPTH */
+          box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
+          border-right: 1px solid rgba(255, 255, 255, 0.05);
         }
         .sidebar::-webkit-scrollbar { width: 4px; }
         .sidebar::-webkit-scrollbar-track { background: #1e293b; }
         .sidebar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+
+        /* Hide/Show text smoothly */
+        .sidebar-text {
+          opacity: \${isSidebarExpanded ? '1' : '0'};
+          display: \${isSidebarExpanded ? 'block' : 'none'};
+          white-space: nowrap;
+          transition: opacity 0.3s ease;
+        }
+
+        /* Navigation Items */
         .sidebar-item {
           display: flex;
           align-items: center;
-          gap: 12px;
-          padding: 12px 20px;
+          gap: ${isSidebarExpanded ? '12px' : '0'};
+          justify-content: ${isSidebarExpanded ? 'flex-start' : 'center'};
+          padding: 12px ${isSidebarExpanded ? '20px' : '0'};
           color: #94a3b8;
           text-decoration: none;
           cursor: pointer;
-          transition: all 0.3s ease;
           border-left: 3px solid transparent;
           font-size: 14px;
+          margin: 2px 0;
+          /* 👇 NEW: Smooth transitions and slide-in animation */
+          transition: all 0.2s ease-in-out;
+          animation: slideInLeft 0.4s ease forwards;
+        }
+        
+        /* 👇 NEW: Make the icon bounce slightly on hover */
+        .sidebar-item:hover svg {
+          transform: scale(1.15) rotate(-5deg);
+          transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
         .sidebar-item:hover {
-          background: #1e293b;
+          background: rgba(255, 255, 255, 0.05); /* Soft white glow */
           color: white;
         }
         .sidebar-item.active {
-          background: #1e293b;
+          background: rgba(59, 130, 246, 0.15); /* Soft blue glow */
           color: #60a5fa;
           border-left-color: #60a5fa;
+          font-weight: 600;
         }
-        .sidebar-item svg { flex-shrink: 0; }
+        .sidebar-item:hover svg {
+          transform: scale(1.15) rotate(-5deg);
+          transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* Header / Logo Area */
         .sidebar-logo {
-          padding: 20px;
+          padding: 20px 16px;
           border-bottom: 1px solid #1e293b;
           display: flex;
           align-items: center;
-          gap: 12px;
+          justify-content: \${isSidebarExpanded ? 'space-between' : 'center'};
+          transition: all 0.3s ease;
         }
         .sidebar-logo h1 {
           font-size: 20px;
           font-weight: 700;
+          margin: 0;
           background: linear-gradient(135deg, #60a5fa, #a78bfa);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
         }
+        
         .sidebar-footer {
           position: sticky;
           bottom: 0;
-          padding: 16px 20px;
-          border-top: 1px solid #1e293b;
-          background: #0f172a;
+          padding: 16px;
+          border-top: 1px solid rgba(255, 255, 255, 0.05);
+          /* 👇 Matches the bottom of the gradient */
+          background: #1e293b; 
+          transition: all 0.3s ease;
         }
+        /* Main Content Area */
         .content {
           flex: 1;
           padding: 24px;
           min-height: 100vh;
+          overflow-x: hidden;
         }
+
+        /* Mobile Menu Button */
         .mobile-toggle {
           display: none;
           position: fixed;
@@ -1751,13 +1688,10 @@ const handleBatchGenerateSchedules = async () => {
           border-radius: 8px;
           padding: 8px;
           cursor: pointer;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        @media (max-width: 768px) {
-          .mobile-toggle { display: block; }
-          .sidebar { transform: translateX(-100%); }
-          .sidebar-open { transform: translateX(0); }
-          .content { margin-left: 0 !important; padding-top: 60px; }
-        }
+        
+        /* Mobile Overlay */
         .overlay {
           display: none;
           position: fixed;
@@ -1765,14 +1699,23 @@ const handleBatchGenerateSchedules = async () => {
           background: rgba(0,0,0,0.5);
           z-index: 999;
         }
-        .overlay.show { display: block; }
-        @media (max-width: 768px) {
-          .overlay.show { display: block; }
-        }
+        
         .spinning {
           animation: spin 1s linear infinite;
         }
+                /* 👇 SMART ANIMATED BUTTONS 👇 */
+        .smart-action-btn {
+          transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        }
+        .smart-action-btn:hover {
+          transform: translateY(-3px) scale(1.02);
+        }
+        .smart-action-btn:active {
+          transform: translateY(1px) scale(0.98);
+        }  
       `}</style>
+
+
 
       {/* Mobile Toggle */}
       <button className="mobile-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -1782,45 +1725,92 @@ const handleBatchGenerateSchedules = async () => {
 
       {/* Sidebar */}
       <div className={`sidebar ${mobileMenuOpen ? 'sidebar-open' : ''}`}>
-        <div className="sidebar-logo">
-          <GraduationCap size={32} style={{ color: '#60a5fa' }} />
-          <h1>DEMS Admin</h1>
+        <div className="sidebar-logo" style={{ justifyContent: isSidebarExpanded ? 'space-between' : 'center', padding: '20px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <GraduationCap 
+              size={32} 
+              style={{ 
+                color: '#60a5fa', 
+                flexShrink: 0,
+                filter: 'drop-shadow(0 0 8px rgba(96, 165, 250, 0.4))' // 👈 Adds a professional glow
+              }} 
+            />
+            {isSidebarExpanded && (
+              <h1 className="sidebar-text" style={{ margin: 0 }}>DEMS Admin</h1>
+            )}
+          </div>
+          
+          <button 
+            onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
+            style={{ 
+              background: '#1e293b', border: 'none', color: '#94a3b8', cursor: 'pointer',
+              display: window.innerWidth > 768 ? 'flex' : 'none', 
+              alignItems: 'center', justifyContent: 'center', padding: '6px', borderRadius: '8px', transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'white'}
+            onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+          >
+            <Menu size={18} />
+          </button>
         </div>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #1e293b' }}>
-          <p style={{ fontSize: '12px', color: '#64748b' }}>Welcome,</p>
-          <p style={{ fontWeight: 600, color: 'white' }}>{user?.full_name}</p>
-        </div>
-        <nav style={{ padding: '8px 0' }}>
-          {menuItems.map((item) => (
-            <div
-              key={item.id}
-              className={`sidebar-item ${activeTab === item.id ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab(item.id);
-                setFilterStatus('all');
-                setFilterRole('all');
-                setSearchTerm('');
-                setMobileMenuOpen(false);
-              }}
-            >
-              <item.icon size={20} />
-              {item.label}
-              {item.id === 'proctoring' && proctorSessions.filter(s => s.review_status === 'FLAGGED').length > 0 && (
-                <span style={{
-                  marginLeft: 'auto',
-                  background: '#dc2626',
-                  color: 'white',
-                  fontSize: '10px',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                }}>
-                  {proctorSessions.filter(s => s.review_status === 'FLAGGED').length}
-                </span>
+        {/* Welcome Text */}
+        {isSidebarExpanded && (
+          <div className="sidebar-text" style={{ padding: '16px 20px', borderBottom: '1px solid #1e293b' }}>
+            <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Welcome,</p>
+            <p style={{ fontWeight: 600, color: 'white', margin: 0 }}>{user?.full_name || 'Admin'}</p>
+          </div>
+        )}
+
+        {/* Navigation Links */}
+        <nav style={{ padding: '8px 0', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+          {menuGroups.map((group, groupIndex) => (
+            <div key={groupIndex} style={{ marginBottom: '16px' }}>
+              
+              {isSidebarExpanded ? (
+                <div className="sidebar-text" style={{ padding: '0 24px', fontSize: '10px', fontWeight: 700, color: '#64748b', letterSpacing: '1px', marginBottom: '8px' }}>
+                  {group.title}
+                </div>
+              ) : (
+                <div style={{ height: '1px', background: '#1e293b', margin: '12px 16px' }}></div>
               )}
+              
+              {group.items.map((item) => (
+                <div
+                  key={item.id}
+                  className={`sidebar-item ${activeTab === item.id ? 'active' : ''}`}
+                  onClick={() => {
+                    if (item.id === 'news') navigate('/admin/news');
+                    else setActiveTab(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  title={!isSidebarExpanded ? item.label : ''}
+                  style={{ position: 'relative' }}
+                >
+                  <item.icon size={20} style={{ flexShrink: 0 }} />
+                  
+                  {isSidebarExpanded && (
+                    <span className="sidebar-text" style={{ flex: 1, marginLeft: '4px' }}>
+                      {item.label}
+                    </span>
+                  )}
+                  
+                  {item.id === 'proctoring' && proctorSessions.filter(s => s.review_status === 'FLAGGED').length > 0 && (
+                    isSidebarExpanded ? (
+                      <span className="sidebar-text" style={{ background: '#dc2626', color: 'white', fontSize: '10px', padding: '2px 8px', borderRadius: '12px' }}>
+                        {proctorSessions.filter(s => s.review_status === 'FLAGGED').length}
+                      </span>
+                    ) : (
+                      <span style={{ position: 'absolute', right: '16px', top: '16px', width: '8px', height: '8px', background: '#dc2626', borderRadius: '50%' }}></span>
+                    )
+                  )}
+                </div>
+              ))}
             </div>
           ))}
         </nav>
-        <div className="sidebar-footer">
+
+        {/* Logout Button */}
+        <div className="sidebar-footer" style={{ padding: '16px', borderTop: '1px solid #1e293b' }}>
           <button
             onClick={() => {
               localStorage.removeItem('access_token');
@@ -1841,7 +1831,7 @@ const handleBatchGenerateSchedules = async () => {
               fontWeight: 500,
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
+              gap: isSidebarExpanded ? '8px' : '0',
               justifyContent: 'center',
               transition: 'all 0.3s ease',
             }}
@@ -1854,14 +1844,14 @@ const handleBatchGenerateSchedules = async () => {
               e.currentTarget.style.color = '#fca5a5';
             }}
           >
-            <LogOut size={18} />
-            Logout
+            <LogOut size={18} style={{ flexShrink: 0 }} />
+            {isSidebarExpanded && <span className="sidebar-text">Logout</span>}
           </button>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="content" style={{ display: activeTab === 'news' ? 'none' : undefined }}>
+      <div className="content">
    {/* Header */}
 <div style={{
   display: 'flex',
@@ -1889,128 +1879,108 @@ const handleBatchGenerateSchedules = async () => {
       )}
     </p>
   </div>
-  <AdminActionMenu style={{ alignSelf: 'flex-start' }}>
-    {/* ✅ SYSTEM LOCK/UNLOCK TOGGLE - FIXED */}
+  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+    {/* ✅ SYSTEM LOCK/UNLOCK TOGGLE */}
     <button
+      className="smart-action-btn"
       onClick={toggleSystemLock}
       disabled={lockLoading}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '10px 20px',
-        background: systemLocked ? '#22c55e' : '#dc2626',
-        border: 'none',
-        borderRadius: '8px',
-        color: 'white',
-        cursor: lockLoading ? 'not-allowed' : 'pointer',
-        transition: 'all 0.3s ease',
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: systemLocked ? '#22c55e' : '#dc2626', border: 'none', borderRadius: '8px',
+        color: 'white', cursor: lockLoading ? 'not-allowed' : 'pointer',
         opacity: lockLoading ? 0.6 : 1,
       }}
       onMouseEnter={(e) => {
-        if (!lockLoading) {
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.boxShadow = systemLocked ? '0 4px 12px rgba(34,197,94,0.4)' : '0 4px 12px rgba(220,38,38,0.4)';
-        }
+        if (!lockLoading) e.currentTarget.style.boxShadow = systemLocked ? '0 8px 20px rgba(34,197,94,0.5)' : '0 8px 20px rgba(220,38,38,0.5)';
       }}
-      onMouseLeave={(e) => {
-        if (!lockLoading) {
-          e.currentTarget.style.transform = 'none';
-          e.currentTarget.style.boxShadow = 'none';
-        }
-      }}
+      onMouseLeave={(e) => { if (!lockLoading) e.currentTarget.style.boxShadow = 'none'; }}
     >
-      {lockLoading ? (
-        <RefreshCw size={18} className="spinning" />
-      ) : systemLocked ? (
-        <Unlock size={18} />
-      ) : (
-        <Lock size={18} />
-      )}
+      {lockLoading ? <RefreshCw size={18} className="spinning" /> : systemLocked ? <Unlock size={18} /> : <Lock size={18} />}
       {lockLoading ? 'Processing...' : systemLocked ? '🔓 Unlock System' : '🔒 Lock System'}
     </button>
 
+    {/* REFRESH BUTTON */}
     <button
+      className="smart-action-btn"
       onClick={() => { setRefreshing(true); fetchData(); }}
       disabled={refreshing}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '10px 20px',
-        background: '#f1f5f9',
-        border: 'none',
-        borderRadius: '8px',
-        color: '#475569',
-        cursor: 'pointer',
-        transition: 'all 0.3s ease',
-        opacity: refreshing ? 0.6 : 1,
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px',
+        color: '#475569', cursor: 'pointer', opacity: refreshing ? 0.6 : 1,
       }}
+      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 20px rgba(148,163,184,0.3)'}
+      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
     >
       <RefreshCw size={18} className={refreshing ? 'spinning' : ''} />
       Refresh
     </button>
+
+    {/* BACKUP BUTTON */}
     <button
+      className="smart-action-btn"
       onClick={() => setShowBackupModal(true)}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '10px 20px',
-        background: '#8b5cf6',
-        border: 'none',
-        borderRadius: '8px',
-        color: 'white',
-        cursor: 'pointer',
-        transition: 'all 0.3s ease',
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: '#22c55e', border: 'none', borderRadius: '8px',
+        color: 'white', cursor: 'pointer',
       }}
-      onMouseEnter={(e) => e.currentTarget.style.background = '#16a34a'}
-      onMouseLeave={(e) => e.currentTarget.style.background = '#22c55e'}
+      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 20px rgba(34,197,94,0.5)'}
+      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
     >
       <Database size={18} />
       Backup
     </button>
+
+    {/* CONFIG BUTTON */}
     <button
+      className="smart-action-btn"
       onClick={() => setShowConfigModal(true)}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '10px 20px',
-        background: '#8b5cf6',
-        border: 'none',
-        borderRadius: '8px',
-        color: 'white',
-        cursor: 'pointer',
-        transition: 'all 0.3s ease',
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: '#2563eb', border: 'none', borderRadius: '8px',
+        color: 'white', cursor: 'pointer',
       }}
-      onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
-      onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
+      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 20px rgba(37,99,235,0.5)'}
+      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
     >
       <Settings size={18} />
       Config
     </button>
+
+    {/* ADD USER BUTTON */}
     <button
+      className="smart-action-btn"
       onClick={() => setShowCreateUserModal(true)}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '10px 20px',
-        background: '#8b5cf6',
-        border: 'none',
-        borderRadius: '8px',
-        color: 'white',
-        cursor: 'pointer',
-        transition: 'all 0.3s ease',
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: '#8b5cf6', border: 'none', borderRadius: '8px',
+        color: 'white', cursor: 'pointer',
       }}
-      onMouseEnter={(e) => e.currentTarget.style.background = '#7c3aed'}
-      onMouseLeave={(e) => e.currentTarget.style.background = '#8b5cf6'}
+      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 20px rgba(139,92,246,0.5)'}
+      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
     >
       <UserPlus size={18} />
       Add User
     </button>
-  </AdminActionMenu>
+
+    {/* SEND SMS BUTTON */}
+    <button
+      className="smart-action-btn"
+      onClick={() => setShowSmsModal(true)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+        background: '#10b981', border: 'none', borderRadius: '8px',
+        color: 'white', cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 20px rgba(16,185,129,0.5)'}
+      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
+    >
+      <Send size={18} />
+      Send SMS
+    </button>
+  </div>
 </div>
 
         {/* Stats Cards */}
@@ -2122,42 +2092,8 @@ const handleBatchGenerateSchedules = async () => {
                   <option value="pending">Pending Approval</option>
                 </>
               )}
-              {['fee-structures', 'banks', 'departments', 'payment-periods'].includes(activeTab) && (
-                <>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </>
-              )}
-              {activeTab === 'payment-schedules' && (
-                <>
-                  <option value="PENDING">Pending</option>
-                  <option value="PARTIAL">Partial</option>
-                  <option value="PAID">Paid</option>
-                  <option value="OVERDUE">Overdue</option>
-                  <option value="LOCKED">Locked</option>
-                </>
-              )}
             </select>
           </div>
-          {activeTab === 'users' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Users size={18} />
-              <select
-                aria-label="Filter users by role"
-                value={filterRole}
-                onChange={(e) => setFilterRole(e.target.value)}
-                style={{ padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', background: 'white' }}
-              >
-                <option value="all">All roles</option>
-                <option value="ADMIN">Administrator</option>
-                <option value="TEACHER">Teacher</option>
-                <option value="STUDENT">Student</option>
-                <option value="DEPT_HEAD">Department Head</option>
-                <option value="FINANCE">Finance Officer</option>
-                <option value="REGISTRAR">Registrar</option>
-              </select>
-            </div>
-          )}
           {(activeTab === 'users' || activeTab === 'courses') && (
             <button
               onClick={() => {
@@ -2192,34 +2128,112 @@ const handleBatchGenerateSchedules = async () => {
         }}>
           <div style={{ padding: '24px' }}>
 
-            {/* OVERVIEW TAB */}
+            {/* OVERVIEW TAB - UPGRADED AMAZING UI */}
             {activeTab === 'overview' && (
               <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#0f172a', marginBottom: '16px' }}>System Overview</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Total Enrollments</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: '4px 0 0 0' }}>{stats.totalEnrollments || 0}</p>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Activity size={20} color="#3b82f6" /> Platform Analytics
+                </h3>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                  
+                  {/* Smart Card 1 - Blue */}
+                  <div className="analytics-card card-delay-1" style={{ 
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
+                    padding: '24px', borderRadius: '16px', color: 'white',
+                    boxShadow: '0 10px 25px -5px rgba(37, 99, 235, 0.4)',
+                    cursor: 'pointer'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Total Enrollments</p>
+                        <h2 style={{ fontSize: '32px', fontWeight: 700, margin: 0 }}>{stats.totalEnrollments || 0}</h2>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.2)', padding: '10px', borderRadius: '12px' }}>
+                        <Users size={24} />
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Active Enrollments</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: '4px 0 0 0' }}>{stats.activeEnrollments || 0}</p>
+
+                  {/* Smart Card 2 - Green */}
+                  <div className="analytics-card card-delay-2" style={{ 
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                    padding: '24px', borderRadius: '16px', color: 'white',
+                    boxShadow: '0 10px 25px -5px rgba(5, 150, 105, 0.4)',
+                    cursor: 'pointer'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Active Enrollments</p>
+                        <h2 style={{ fontSize: '32px', fontWeight: 700, margin: 0 }}>{stats.activeEnrollments || 0}</h2>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.2)', padding: '10px', borderRadius: '12px' }}>
+                        <CheckCircle size={24} />
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Total Payments</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: '4px 0 0 0' }}>ETB {stats.paymentTotal?.toFixed(2) || '0.00'}</p>
+
+                  {/* Smart Card 3 - Purple */}
+                  <div className="analytics-card card-delay-3" style={{ 
+                    background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', 
+                    padding: '24px', borderRadius: '16px', color: 'white',
+                    boxShadow: '0 10px 25px -5px rgba(109, 40, 217, 0.4)',
+                    cursor: 'pointer'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Total Revenue</p>
+                        <h2 style={{ fontSize: '28px', fontWeight: 700, margin: 0 }}>ETB {stats.paymentTotal?.toFixed(0) || '0'}</h2>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.2)', padding: '10px', borderRadius: '12px' }}>
+                        <DollarSign size={24} />
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Total Exams</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: '4px 0 0 0' }}>{stats.totalExams || 0}</p>
+
+                  {/* Smart Card 4 - Orange */}
+                  <div className="analytics-card card-delay-4" style={{ 
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', 
+                    padding: '24px', borderRadius: '16px', color: 'white',
+                    boxShadow: '0 10px 25px -5px rgba(217, 119, 6, 0.4)',
+                    cursor: 'pointer'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <p style={{ fontSize: '13px', fontWeight: 500, opacity: 0.9, margin: '0 0 8px 0' }}>Total Exams</p>
+                        <h2 style={{ fontSize: '32px', fontWeight: 700, margin: 0 }}>{stats.totalExams || 0}</h2>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.2)', padding: '10px', borderRadius: '12px' }}>
+                        <BookOpen size={24} />
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Published Exams</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: '4px 0 0 0' }}>{stats.publishedExams || 0}</p>
+                </div>
+
+                {/* Secondary Info Row */}
+                <div style={{ 
+                  display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', 
+                  background: '#f8fafc', padding: '24px', borderRadius: '16px', 
+                  border: '1px solid #e2e8f0', 
+                  animation: 'fadeUp 1s ease-out forwards' 
+                }}>
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircle size={16} color="#10b981" /> Published Exams
+                    </p>
+                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats.publishedExams || 0}</p>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Flagged Exams</p>
-                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626', margin: '4px 0 0 0' }}>{stats.flaggedExams || 0}</p>
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <AlertTriangle size={16} color="#ef4444" /> Flagged Proctoring
+                    </p>
+                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#ef4444', margin: 0 }}>{stats.flaggedExams || 0}</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Clock size={16} color="#f59e0b" /> Pending Payments
+                    </p>
+                    <p style={{ fontSize: '24px', fontWeight: 700, color: '#f59e0b', margin: 0 }}>{stats.pendingPayments || 0}</p>
                   </div>
                 </div>
               </div>
@@ -2272,7 +2286,7 @@ const handleBatchGenerateSchedules = async () => {
                             <td style={{ padding: '10px 12px', fontSize: '14px', color: '#475569' }}>{u.department || '—'}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>{getStatusBadge(u.is_active)}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                              <AdminActionMenu>
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                 <button
                                   onClick={() => { setSelectedItem(u); setUserForm({ full_name: u.full_name, phone: u.phone || '', role: u.role, is_active: u.is_active }); setShowEditUserModal(true); }}
                                   style={{ padding: '6px', border: 'none', borderRadius: '6px', cursor: 'pointer', background: '#eff6ff', color: '#3b82f6', transition: 'all 0.3s ease' }}
@@ -2296,7 +2310,7 @@ const handleBatchGenerateSchedules = async () => {
                                 >
                                   <Trash2 size={16} />
                                 </button>
-                              </AdminActionMenu>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -2340,9 +2354,9 @@ const handleBatchGenerateSchedules = async () => {
                               )}
                             </td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                              <AdminActionMenu>
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                 <button
-                                  onClick={() => { setSelectedItem(c); setCapacityRange(c.capacity <= 50 ? '1-50' : c.capacity <= 100 ? '50-100' : c.capacity <= 200 ? '100-200' : 'custom'); setCourseForm({ course_code: c.course_code, title: c.title, description: c.description || '', credit_hours: c.credit_hours || 3, year: c.year || 1, semester: c.semester || '1', capacity: c.capacity || 30, department: c.department || '', instructor: c.instructor || '', is_active: c.is_active, is_approved: c.is_approved }); setShowCourseModal(true); }}
+                                  onClick={() => { setSelectedItem(c); setCourseForm({ course_code: c.course_code, title: c.title, description: c.description || '', credit_hours: c.credit_hours || 3, semester: c.semester || '1', capacity: c.capacity || 30, department: c.department || '', instructor: c.instructor || '', is_active: c.is_active, is_approved: c.is_approved }); setShowCourseModal(true); }}
                                   style={{ padding: '6px', border: 'none', borderRadius: '6px', cursor: 'pointer', background: '#eff6ff', color: '#3b82f6' }}
                                   title="Edit Course"
                                 >
@@ -2366,7 +2380,7 @@ const handleBatchGenerateSchedules = async () => {
                                 >
                                   <Trash2 size={16} />
                                 </button>
-                              </AdminActionMenu>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -2473,7 +2487,7 @@ const handleBatchGenerateSchedules = async () => {
                             <td style={{ padding: '10px 12px', fontSize: '14px', color: '#475569' }}>{fs.grace_period_days || 0} days</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>{fs.is_active ? getStatusBadge(true) : getStatusBadge(false)}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                              <AdminActionMenu>
+                              <div style={{ display: 'flex', gap: '6px' }}>
                                 <button
                                   onClick={() => { 
                                     setSelectedItem(fs); 
@@ -2500,7 +2514,7 @@ const handleBatchGenerateSchedules = async () => {
                                 >
                                   <Trash2 size={16} />
                                 </button>
-                              </AdminActionMenu>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -2546,7 +2560,7 @@ const handleBatchGenerateSchedules = async () => {
                             <td style={{ padding: '10px 12px', fontSize: '14px', color: '#475569' }}><span style={{ background: '#e2e8f0', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>{d.code}</span></td>
                             <td style={{ padding: '10px 12px', fontSize: '14px', color: '#475569' }}>{d.head_name || '—'}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                              <AdminActionMenu>
+                              <div style={{ display: 'flex', gap: '6px' }}>
                                 <button
                                   onClick={() => { setSelectedItem(d); setDepartmentForm({ name: d.name, code: d.code, description: d.description || '', head: d.head || '', established_year: d.established_year || '' }); setShowDepartmentModal(true); }}
                                   style={{ padding: '6px', border: 'none', borderRadius: '6px', cursor: 'pointer', background: '#eff6ff', color: '#3b82f6' }}
@@ -2562,7 +2576,7 @@ const handleBatchGenerateSchedules = async () => {
                                 >
                                   <Trash2 size={16} />
                                 </button>
-                              </AdminActionMenu>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -2635,7 +2649,7 @@ const handleBatchGenerateSchedules = async () => {
                 <td style={{ padding: '10px 12px', fontSize: '14px', fontFamily: 'monospace', color: '#0f172a' }}>{bank.account_number}</td>
                 <td style={{ padding: '10px 12px', fontSize: '14px' }}>{bank.is_active ? getStatusBadge(true) : getStatusBadge(false)}</td>
                 <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                  <AdminActionMenu>
+                  <div style={{ display: 'flex', gap: '6px' }}>
                     <button
                       onClick={() => { 
                         setSelectedItem(bank); 
@@ -2663,7 +2677,7 @@ const handleBatchGenerateSchedules = async () => {
                     >
                       <Trash2 size={16} />
                     </button>
-                  </AdminActionMenu>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -2733,7 +2747,7 @@ const handleBatchGenerateSchedules = async () => {
                             </td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>{period.is_active ? getStatusBadge(true) : getStatusBadge(false)}</td>
                             <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                              <AdminActionMenu>
+                              <div style={{ display: 'flex', gap: '6px' }}>
                                 <button
                                   onClick={() => { 
                                     setSelectedItem(period); 
@@ -2759,7 +2773,7 @@ const handleBatchGenerateSchedules = async () => {
                                 >
                                   <Trash2 size={16} />
                                 </button>
-                              </AdminActionMenu>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -2790,7 +2804,6 @@ const handleBatchGenerateSchedules = async () => {
           <span style={{ fontWeight: 600, color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <CheckSquare size={18} /> Batch Mode
           </span>
-          <AdminActionMenu>
           <button
             onClick={() => {
               setBatchMode(false);
@@ -2826,7 +2839,6 @@ const handleBatchGenerateSchedules = async () => {
           >
             {selectAllSchedules ? 'Deselect All' : 'Select All'}
           </button>
-          </AdminActionMenu>
           <span style={{
             background: '#2563eb',
             color: 'white',
@@ -2988,10 +3000,10 @@ const handleBatchGenerateSchedules = async () => {
           </tr>
         </thead>
         <tbody>
-          {filteredPaymentSchedules.length === 0 ? (
+          {paymentSchedules.length === 0 ? (
             <tr><td colSpan={batchMode ? 8 : 7} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>No payment schedules found</td></tr>
           ) : (
-            filteredPaymentSchedules.map((schedule) => {
+            paymentSchedules.map((schedule) => {
               const isSelected = selectedSchedules.includes(schedule.id);
               const amount = parseFloat(schedule.amount) || 0;
               
@@ -3059,7 +3071,7 @@ const handleBatchGenerateSchedules = async () => {
                     )}
                   </td>
                   <td style={{ padding: '10px 12px', fontSize: '14px' }}>
-                    <AdminActionMenu>
+                    <div style={{ display: 'flex', gap: '4px' }}>
                       {!batchMode && (
                         <>
                           <button
@@ -3114,7 +3126,7 @@ const handleBatchGenerateSchedules = async () => {
                           )}
                         </>
                       )}
-                    </AdminActionMenu>
+                    </div>
                   </td>
                 </tr>
               );
@@ -3255,105 +3267,34 @@ const handleBatchGenerateSchedules = async () => {
                   </div>
                 </div>
 
-                <section style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
-                  <h4 style={{ margin: '0 0 12px', color: '#0f172a' }}>Browse student captures</h4>
-                  <select
-                    aria-label="Select proctoring department"
-                    value={selectedProctorDepartment}
-                    onChange={(e) => handleProctorDepartmentChange(e.target.value)}
-                    style={{ padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', minWidth: '240px', background: 'white' }}
-                  >
-                    <option value="">Select department</option>
-                    {proctorDepartments.map((department) => (
-                      <option key={department.name} value={department.name}>{department.name}</option>
-                    ))}
-                  </select>
-
-                  {selectedProctorDepartment && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
-                      {proctorStudents.map((student) => (
-                        <button
-                          key={student.id}
-                          type="button"
-                          onClick={() => handleProctorStudentSelect(student)}
-                          style={{
-                            padding: '8px 12px',
-                            border: `1px solid ${selectedProctorStudent?.id === student.id ? '#2563eb' : '#cbd5e1'}`,
-                            borderRadius: '6px',
-                            color: selectedProctorStudent?.id === student.id ? '#1d4ed8' : '#334155',
-                            background: selectedProctorStudent?.id === student.id ? '#eff6ff' : 'white',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {student.full_name}
-                        </button>
-                      ))}
-                      {!loadingProctorDrilldown && proctorStudents.length === 0 && (
-                        <span style={{ color: '#64748b', padding: '8px 0' }}>No students in this department.</span>
-                      )}
-                    </div>
-                  )}
-
-                  {loadingProctorDrilldown && <p style={{ color: '#64748b', marginBottom: 0 }}>Loading…</p>}
-                  {selectedProctorStudent && (
-                    <div style={{ marginTop: '16px' }}>
-                      <h5 style={{ margin: '0 0 10px', color: '#334155' }}>
-                        {selectedProctorStudent.full_name}'s images
-                      </h5>
-                      {studentProctorImages.length === 0 && !loadingProctorDrilldown ? (
-                        <p style={{ color: '#64748b' }}>No captured images found for this student.</p>
-                      ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' }}>
-                          {studentProctorImages.map((image) => (
-                            <a
-                              key={image.id}
-                              href={getMediaUrl(image.image)}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ color: '#334155', textDecoration: 'none', fontSize: '12px' }}
-                            >
-                              <img
-                                src={getMediaUrl(image.image)}
-                                alt={`${selectedProctorStudent.full_name} proctor capture`}
-                                style={{ width: '100%', height: '110px', objectFit: 'cover', borderRadius: '6px', border: `2px solid ${image.is_suspicious ? '#dc2626' : '#e2e8f0'}` }}
-                              />
-                              <span>{image.exam_title} · {image.capture_time ? new Date(image.capture_time).toLocaleString() : '—'}</span>
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </section>
-
                 {proctorSessions.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '48px', color: '#94a3b8' }}>
                     <Shield size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-                    {/* <p>No proctoring sessions available</p> */}
+                    <p>No proctoring sessions available</p>
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
                     {proctorSessions.slice(0, 10).map((session) => (
                       <div
                         key={session.id}
-                        // onClick={() => handleProctorSessionClick(session)}
+                        onClick={() => handleProctorSessionClick(session)}
                         style={{
-                          // background: 'white',
-                          // border: `2px solid ${session.review_status === 'FLAGGED' ? '#dc2626' : session.review_status === 'REVIEWED' ? '#22c55e' : '#f59e0b'}`,
-                          // borderRadius: '8px',
-                          // padding: '16px',
-                          // cursor: 'pointer',
-                          // transition: 'all 0.3s ease',
+                          background: 'white',
+                          border: `2px solid ${session.review_status === 'FLAGGED' ? '#dc2626' : session.review_status === 'REVIEWED' ? '#22c55e' : '#f59e0b'}`,
+                          borderRadius: '8px',
+                          padding: '16px',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease',
                         }}
-                        // onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'}
-                        // onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
+                        onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'}
+                        onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          {/* <div>
+                          <div>
                             <p style={{ fontWeight: 600, color: '#0f172a', margin: 0 }}>{session.student_name || 'Unknown Student'}</p>
                             <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0 0' }}>{session.exam_title || 'Unknown Exam'}</p>
-                          </div> */}
-                          {/* <span style={{
+                          </div>
+                          <span style={{
                             display: 'inline-flex',
                             padding: '4px 12px',
                             borderRadius: '20px',
@@ -3365,12 +3306,12 @@ const handleBatchGenerateSchedules = async () => {
                                    session.review_status === 'REVIEWED' ? '#16a34a' : '#d97706',
                           }}>
                             {session.review_status || 'PENDING'}
-                          </span> */}
+                          </span>
                         </div>
-                        {/* <div style={{ marginTop: '12px', display: 'flex', gap: '16px', fontSize: '13px', color: '#64748b' }}>
+                        <div style={{ marginTop: '12px', display: 'flex', gap: '16px', fontSize: '13px', color: '#64748b' }}>
                           <span>Captures: {session.total_captures || 0}</span>
                           <span>Suspicious: {session.suspicious_events || 0}</span>
-                        </div> */}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -3383,42 +3324,10 @@ const handleBatchGenerateSchedules = async () => {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#0f172a', margin: 0 }}>System Logs</h3>
-                  <select
-                    aria-label="Filter logs by user role"
-                    value={systemLogRole}
-                    onChange={async (e) => {
-                      const role = e.target.value;
-                      setSystemLogRole(role);
-                      try {
-                        const response = await api.get('/analytics/admin/logs/', {
-                          params: { limit: 500, role },
-                        });
-                        setSystemLogs(Array.isArray(response.data) ? response.data : []);
-                      } catch (error) {
-                        toast.error('Failed to load system logs');
-                      }
-                    }}
-                    style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', background: 'white' }}
-                  >
-                    <option value="all">All roles</option>
-                    <option value="ADMIN">Administrator</option>
-                    <option value="TEACHER">Teacher</option>
-                    <option value="STUDENT">Student</option>
-                    <option value="DEPT_HEAD">Department Head</option>
-                    <option value="FINANCE">Finance Officer</option>
-                    <option value="REGISTRAR">Registrar</option>
-                    <option value="SYSTEM">System</option>
-                  </select>
                   <button
-                    onClick={async () => {
-                      if (await requestConfirmation('Clear system logs?', 'All stored system log entries will be removed.', 'Clear logs')) {
-                        try {
-                          await api.post('/analytics/admin/logs/clear/');
-                          setSystemLogs([]);
-                          toast.success('System logs cleared');
-                        } catch (error) {
-                          toast.error('Failed to clear system logs');
-                        }
+                    onClick={() => {
+                      if (window.confirm('Clear all logs?')) {
+                        api.post('/analytics/admin/logs/clear/').then(() => fetchData());
                       }
                     }}
                     style={{ padding: '6px 12px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
@@ -3435,7 +3344,6 @@ const handleBatchGenerateSchedules = async () => {
                         <div>
                           <span style={{ fontWeight: 500, color: '#0f172a' }}>{log.action}</span>
                           <span style={{ color: '#64748b', marginLeft: '8px' }}>by {log.user || 'System'}</span>
-                          <span style={{ color: '#64748b', marginLeft: '8px' }}>{log.role || 'SYSTEM'}</span>
                           <span style={{
                             display: 'inline-flex',
                             padding: '2px 8px',
@@ -3485,10 +3393,174 @@ const handleBatchGenerateSchedules = async () => {
           </div>
         </div>
       </div>
-      {activeTab === 'news' && (
-        <div className="content">
-          <AdminNews />
-        </div>
+      {/* ============ SMS MODAL ============ */}
+      {showSmsModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px' }} onClick={() => setShowSmsModal(false)}>
+              <div style={{ background: 'white', borderRadius: '16px', padding: '32px', maxWidth: '600px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                      <h2 style={{ fontSize: '24px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Send size={24} style={{ color: '#10b981' }} />
+                          Send Bulk SMS
+                      </h2>
+                      <button onClick={() => { setShowSmsModal(false); setSmsStep(1); }} style={{ background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+                  </div>
+
+                  {/* STEP 1: Select Audience */}
+                  {smsStep === 1 && (
+                      <div>
+                          <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Who should receive this message?</label>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer' }}>
+                                  <input type="radio" name="aud" checked={smsAudience === 'ALL'} onChange={() => setSmsAudience('ALL')} />
+                                  <strong>All Students</strong>
+                              </label>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer' }}>
+                                  <input type="radio" name="aud" checked={smsAudience === 'DEPT'} onChange={() => setSmsAudience('DEPT')} />
+                                  <strong>By Department</strong>
+                              </label>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer' }}>
+                                  <input type="radio" name="aud" checked={smsAudience === 'YEAR'} onChange={() => setSmsAudience('YEAR')} />
+                                  <strong>By Year (1st, 2nd, etc.)</strong>
+                              </label>
+                          </div>
+
+                          {smsAudience === 'DEPT' && (
+                              <div style={{ marginBottom: '24px' }}>
+                                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Select Department</label>
+                                  <select value={smsDeptFilter} onChange={(e) => setSmsDeptFilter(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                      <option value="">-- Choose Department --</option>
+                                      {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                                  </select>
+                              </div>
+                          )}
+
+                          {smsAudience === 'YEAR' && (
+                              <div style={{ marginBottom: '24px' }}>
+                                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Select Year</label>
+                                  <select value={smsYearFilter} onChange={(e) => setSmsYearFilter(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                      <option value="">-- Choose Year --</option>
+                                      <option value="1">1st Year</option>
+                                      <option value="2">2nd Year</option>
+                                      <option value="3">3rd Year</option>
+                                      <option value="4">4th Year</option>
+                                      <option value="5">5th Year</option>
+                                  </select>
+                              </div>
+                          )}
+
+                          <button onClick={() => setSmsStep(2)} style={{ width: '100%', padding: '12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
+                              Next: Select Students →
+                          </button>
+                      </div>
+                  )}
+
+                  {/* STEP 2: Select Specific Students */}
+                  {smsStep === 2 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                              <label style={{ fontSize: '14px', fontWeight: 600 }}>Select Recipients</label>
+                              <button 
+                                  onClick={() => {
+                                      const eligible = users.filter(u => {
+                                          if (u.role !== 'STUDENT' || !u.phone) return false;
+                                          if (smsAudience === 'DEPT' && smsDeptFilter && u.department !== smsDeptFilter) return false;
+                                          if (smsAudience === 'YEAR' && smsYearFilter && u.year !== parseInt(smsYearFilter)) return false;
+                                          return true;
+                                      });
+                                      setSelectedStudents(eligible.map(u => u.id));
+                                  }}
+                                  style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
+                              >
+                                  Select All Eligible
+                              </button>
+                          </div>
+
+                          <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px', maxHeight: '300px', marginBottom: '20px' }}>
+                              {users
+                                  .filter(u => {
+                                      if (u.role !== 'STUDENT') return false;
+                                      if (smsAudience === 'DEPT' && smsDeptFilter && u.department !== smsDeptFilter) return false;
+                                      if (smsAudience === 'YEAR' && smsYearFilter && u.year !== parseInt(smsYearFilter)) return false;
+                                      return true;
+                                  })
+                                  .map(u => (
+                                      <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', opacity: u.phone ? 1 : 0.5 }}>
+                                          <input 
+                                              type="checkbox" 
+                                              checked={selectedStudents.includes(u.id)}
+                                              disabled={!u.phone}
+                                              onChange={(e) => {
+                                                  if (e.target.checked) setSelectedStudents(prev => [...prev, u.id]);
+                                                  else setSelectedStudents(prev => prev.filter(id => id !== u.id));
+                                              }}
+                                          />
+                                          <div>
+                                              <div style={{ fontWeight: 500, fontSize: '14px' }}>{u.full_name}</div>
+                                              <div style={{ fontSize: '12px', color: '#64748b' }}>
+                                                  {u.phone ? `📱 ${u.phone}` : '❌ No phone number'}
+                                              </div>
+                                          </div>
+                                      </label>
+                                  ))}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                              <button onClick={() => setSmsStep(1)} style={{ flex: 1, padding: '12px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'white', cursor: 'pointer' }}>
+                                  ← Back
+                              </button>
+                              <button onClick={() => setSmsStep(3)} disabled={selectedStudents.length === 0} style={{ flex: 1, padding: '12px', background: selectedStudents.length ? '#2563eb' : '#94a3b8', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: selectedStudents.length ? 'pointer' : 'not-allowed' }}>
+                                  Next: Compose ({selectedStudents.length}) →
+                              </button>
+                          </div>
+                      </div>
+                  )}
+
+                  {/* STEP 3: Compose Message */}
+                  {smsStep === 3 && (
+                      <form onSubmit={handleSendSMS} style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                          
+                          <div style={{ padding: '12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', marginBottom: '16px', color: '#166534', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <Check size={16} /> Sending to {selectedStudents.length} selected student(s).
+                          </div>
+
+                          <div style={{ marginBottom: '16px' }}>
+                              <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Message Type</label>
+                              <select
+                                  value={smsData.type}
+                                  onChange={(e) => setSmsData({ ...smsData, type: e.target.value })}
+                                  style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px' }}
+                              >
+                                  <option value="same">Same Message (Bulk to All)</option>
+                                  <option value="personal">Personalized (Adds "Hi [Name]")</option>
+                              </select>
+                          </div>
+
+                          <div style={{ marginBottom: '24px', flex: 1 }}>
+                              <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Message *</label>
+                              <textarea
+                                  required
+                                  rows="5"
+                                  placeholder="Type your message here..."
+                                  value={smsData.message}
+                                  onChange={(e) => setSmsData({ ...smsData, message: e.target.value })}
+                                  style={{ width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', resize: 'vertical' }}
+                              />
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                              <button type="button" onClick={() => setSmsStep(2)} style={{ flex: 1, padding: '12px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'white', cursor: 'pointer' }}>
+                                  ← Back
+                              </button>
+                              <button type="submit" disabled={sendingSms || !smsData.message} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '8px', background: '#10b981', color: 'white', fontWeight: 600, cursor: (sendingSms || !smsData.message) ? 'not-allowed' : 'pointer', opacity: (sendingSms || !smsData.message) ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                  <Send size={18} /> {sendingSms ? 'Sending...' : 'Send SMS'}
+                              </button>
+                          </div>
+                      </form>
+                  )}
+
+              </div>
+          </div>
       )}
 
       {/* ============ CREATE USER MODAL - WITH PASSWORD VISIBILITY ============ */}
@@ -3592,37 +3664,6 @@ const handleBatchGenerateSchedules = async () => {
               </div>
               
               {userForm.role === 'STUDENT' && (
-                <>
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Department *</label>
-                    <select required style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}
-                      value={userForm.department} onChange={(e) => setUserForm({ ...userForm, department: e.target.value })}>
-                      <option value="">Select Department</option>
-                      {getDepartmentOptions()}
-                    </select>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155' }}>
-                      Year *
-                      <input type="number" min="1" max="6" required value={userForm.year}
-                        onChange={(e) => setUserForm({ ...userForm, year: e.target.value })}
-                        style={{ display: 'block', width: '100%', marginTop: '4px', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
-                    </label>
-                    <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155' }}>
-                      Semester *
-                      <select required value={userForm.semester}
-                        onChange={(e) => setUserForm({ ...userForm, semester: e.target.value })}
-                        style={{ display: 'block', width: '100%', marginTop: '4px', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}>
-                        <option value="1">Semester 1</option>
-                        <option value="2">Semester 2</option>
-                        <option value="3">Summer</option>
-                      </select>
-                    </label>
-                  </div>
-                </>
-              )}
-
-              {userForm.role === 'TEACHER' && (
                 <div style={{ marginBottom: '16px' }}>
                   <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Department *</label>
                   <select required style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}
@@ -3805,54 +3846,9 @@ const handleBatchGenerateSchedules = async () => {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 <div>
-                  <label htmlFor={capacityRange === 'custom' ? 'course-capacity' : 'course-capacity-range'} style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Capacity (students)</label>
-                  {capacityRange === 'custom' ? (
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <input
-                        id="course-capacity"
-                        type="number"
-                        min="1"
-                        max={CAPACITY_RANGE_LIMITS.custom.max}
-                        required
-                        autoFocus
-                        placeholder="Enter any capacity"
-                        style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }}
-                        value={courseForm.capacity}
-                        onChange={(e) => setCourseForm({ ...courseForm, capacity: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCapacityRange('1-50');
-                          setCourseForm({ ...courseForm, capacity: CAPACITY_RANGE_LIMITS['1-50'].max });
-                        }}
-                        style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', background: 'white', cursor: 'pointer' }}
-                      >
-                        Presets
-                      </button>
-                    </div>
-                  ) : (
-                    <select
-                      id="course-capacity-range"
-                      value={capacityRange}
-                      onChange={(e) => {
-                        const range = e.target.value;
-                        setCapacityRange(range);
-                        if (range === 'custom') {
-                          setCourseForm({ ...courseForm, capacity: '' });
-                        } else {
-                          setCourseForm({ ...courseForm, capacity: CAPACITY_RANGE_LIMITS[range].max });
-                        }
-                      }}
-                      required
-                      style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}
-                    >
-                      <option value="1-50">1-50</option>
-                      <option value="50-100">50-100</option>
-                      <option value="100-200">100-200</option>
-                      <option value="custom">Type your own</option>
-                    </select>
-                  )}
+                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Capacity</label>
+                  <input type="number" min="1" max="200" style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }}
+                    value={courseForm.capacity} onChange={(e) => setCourseForm({ ...courseForm, capacity: parseInt(e.target.value) })} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Department</label>
@@ -4331,14 +4327,27 @@ const handleBatchGenerateSchedules = async () => {
         </div>
       )}
 
-      {/* CONFIG MODAL */}
+      {/* ============ UPGRADED CONFIG MODAL (COMPLETE) ============ */}
       {showConfigModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowConfigModal(false)}>
-          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>System Configuration</h2>
-              <button onClick={() => setShowConfigModal(false)} style={{ background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }} onClick={() => setShowConfigModal(false)}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', maxWidth: '700px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }} onClick={(e) => e.stopPropagation()}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Settings size={20} style={{ color: '#3b82f6' }} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '20px', fontWeight: 700, margin: 0, color: '#0f172a' }}>System Configuration</h2>
+                  <p style={{ fontSize: '13px', color: '#64748b', margin: '2px 0 0 0' }}>Manage global platform settings</p>
+                </div>
+              </div>
+              <button onClick={() => setShowConfigModal(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}>
+                <X size={18} />
+              </button>
             </div>
+
             <form onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
@@ -4360,80 +4369,105 @@ const handleBatchGenerateSchedules = async () => {
               };
               updateConfig(data);
             }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              
+              {/* Section 1: General System */}
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#334155', marginBottom: '16px' }}>General System</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>System Status</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="checkbox" name="system_open" defaultChecked={systemConfig.system_open} /> System Open
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>System Status</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <input type="checkbox" name="system_open" defaultChecked={systemConfig.system_open} style={{ width: '16px', height: '16px', accentColor: '#3b82f6' }} /> 
+                    <span style={{ fontSize: '14px', fontWeight: 500 }}>System Open</span>
                   </label>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Maintenance Mode</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="checkbox" name="maintenance_mode" defaultChecked={systemConfig.maintenance_mode} /> Enable Maintenance
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Maintenance Mode</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <input type="checkbox" name="maintenance_mode" defaultChecked={systemConfig.maintenance_mode} style={{ width: '16px', height: '16px', accentColor: '#f59e0b' }} /> 
+                    <span style={{ fontSize: '14px', fontWeight: 500 }}>Enable Maintenance</span>
                   </label>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Session Timeout (min)</label>
-                  <input type="number" name="session_timeout" defaultValue={systemConfig.session_timeout} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Session Timeout (minutes)</label>
+                  <input type="number" name="session_timeout" defaultValue={systemConfig.session_timeout} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Max File Size (MB)</label>
-                  <input type="number" name="max_file_size" defaultValue={systemConfig.max_file_size} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Max File Size (MB)</label>
+                  <input type="number" name="max_file_size" defaultValue={systemConfig.max_file_size} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
                 </div>
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Student ID Format</label>
-                <input type="text" name="student_id_format" defaultValue={systemConfig.student_id_format || 'STU{year}{seq:06d}'} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
-                <p style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>Use {'{year}'} for year, {'{seq}'} for sequence number, {'{dept}'} for department code.</p>
+              {/* Maintenance Message */}
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Maintenance Message (Shown to users)</label>
+                <textarea name="maintenance_message" rows="2" defaultValue={systemConfig.maintenance_message || 'System is currently under maintenance. Please check back later.'} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', resize: 'vertical', outline: 'none' }} />
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Payment Account Number</label>
-                <input type="text" name="payment_account" defaultValue={systemConfig.payment_account} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
+              {/* Section 2: Identification */}
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#334155', marginBottom: '16px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>Identification</h3>
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Student ID Format</label>
+                <input type="text" name="student_id_format" defaultValue={systemConfig.student_id_format || 'STU{year}{seq:06d}'} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', fontFamily: 'monospace', outline: 'none' }} />
+                <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '6px' }}>Variables available: {'{year}'}, {'{seq}'}, {'{dept}'}</p>
               </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Payment Phone Number</label>
-                <input type="text" name="payment_phone" defaultValue={systemConfig.payment_phone} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Bank Name</label>
-                <input type="text" name="bank_name" defaultValue={systemConfig.bank_name || 'Commercial Bank of Ethiopia'} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Account Name</label>
-                <input type="text" name="account_name" defaultValue={systemConfig.account_name || 'DEMS University'} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Default Payment Period</label>
-                <select name="default_payment_period" defaultValue={systemConfig.default_payment_period || 'QUARTERLY'} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}>
-                  <option value="MONTHLY">Monthly</option>
-                  <option value="QUARTERLY">Quarterly (3 months)</option>
-                  <option value="SEMESTER">Semester (6 months)</option>
-                  <option value="YEARLY">Yearly</option>
-                </select>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+
+              {/* Section 3: Finance & Payments */}
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#334155', marginBottom: '16px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>Finance & Payments</h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Default Penalty/Day (ETB)</label>
-                  <input type="number" step="0.01" name="default_penalty_per_day" defaultValue={systemConfig.default_penalty_per_day || 10} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Payment Account Number</label>
+                  <input type="text" name="payment_account" defaultValue={systemConfig.payment_account} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Default Grace Period (days)</label>
-                  <input type="number" name="default_grace_period" defaultValue={systemConfig.default_grace_period || 10} style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px' }} />
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Payment Phone Number</label>
+                  <input type="text" name="payment_phone" defaultValue={systemConfig.payment_phone} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Bank Name</label>
+                  <input type="text" name="bank_name" defaultValue={systemConfig.bank_name || 'Commercial Bank of Ethiopia'} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Account Name</label>
+                  <input type="text" name="account_name" defaultValue={systemConfig.account_name || 'DEMS University'} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
                 </div>
               </div>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Payment Instructions</label>
-                <textarea name="payment_instructions" rows="3" style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', resize: 'vertical' }} defaultValue={systemConfig.payment_instructions || 'Please make payment to the above account and upload the receipt for verification.'} />
+
+              {/* Default Payment Settings */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Default Payment Period</label>
+                  <select name="default_payment_period" defaultValue={systemConfig.default_payment_period || 'QUARTERLY'} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none', background: 'white' }}>
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="QUARTERLY">Quarterly (3 months)</option>
+                    <option value="SEMESTER">Semester (6 months)</option>
+                    <option value="YEARLY">Yearly</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Default Penalty/Day (ETB)</label>
+                  <input type="number" step="0.01" name="default_penalty_per_day" defaultValue={systemConfig.default_penalty_per_day || 10} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Default Grace Period (days)</label>
+                  <input type="number" name="default_grace_period" defaultValue={systemConfig.default_grace_period || 10} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }} />
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                <button type="button" onClick={() => setShowConfigModal(false)} style={{ flex: 1, padding: '12px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'none', color: '#374151', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                <button type="submit" disabled={actionLoading} style={{ flex: 1, padding: '12px', border: 'none', borderRadius: '8px', background: '#2563eb', color: 'white', fontWeight: 600, cursor: actionLoading ? 'not-allowed' : 'pointer', opacity: actionLoading ? 0.6 : 1 }}>
+
+              {/* Payment Instructions */}
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '6px' }}>Payment Instructions</label>
+                <textarea name="payment_instructions" rows="3" style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', resize: 'vertical', outline: 'none' }} defaultValue={systemConfig.payment_instructions || 'Please make payment to the above account and upload the receipt for verification.'} />
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+                <button type="button" onClick={() => setShowConfigModal(false)} style={{ padding: '10px 24px', border: '1px solid #cbd5e1', borderRadius: '8px', background: 'white', color: '#475569', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.background = 'white'}>Cancel</button>
+                <button type="submit" disabled={actionLoading} style={{ padding: '10px 24px', border: 'none', borderRadius: '8px', background: '#2563eb', color: 'white', fontWeight: 600, cursor: actionLoading ? 'not-allowed' : 'pointer', opacity: actionLoading ? 0.7 : 1, transition: 'all 0.2s' }} onMouseEnter={(e) => { if(!actionLoading) e.currentTarget.style.background = '#1d4ed8' }} onMouseLeave={(e) => { if(!actionLoading) e.currentTarget.style.background = '#2563eb' }}>
                   {actionLoading ? 'Saving...' : 'Save Configuration'}
                 </button>
               </div>
+
             </form>
           </div>
         </div>
@@ -4480,51 +4514,6 @@ const handleBatchGenerateSchedules = async () => {
             )}
             <div style={{ display: 'flex', gap: '12px', paddingTop: '16px', marginTop: '16px', borderTop: '1px solid #e5e7eb' }}>
               <button onClick={() => setShowProctoringDetailModal(false)} style={{ flex: 1, padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', background: 'none', color: '#374151', cursor: 'pointer' }}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showSystemLockModal && (
-        <div role="dialog" aria-modal="true" aria-labelledby="system-lock-title" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, padding: '20px' }}>
-          <div style={{ background: 'white', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '480px' }}>
-            <h2 id="system-lock-title" style={{ margin: '0 0 12px', fontSize: '20px' }}>
-              {systemLocked ? 'Unlock system?' : 'Lock system?'}
-            </h2>
-            <p style={{ color: '#475569', margin: '0 0 16px' }}>
-              {systemLocked
-                ? 'Unlocking will restore access for all users.'
-                : 'The message below will be shown to users while the system is locked.'}
-            </p>
-            {!systemLocked && (
-              <textarea
-                aria-label="System lock message"
-                rows="3"
-                value={systemLockDraft}
-                onChange={(e) => setSystemLockDraft(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', resize: 'vertical' }}
-              />
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-              <button type="button" onClick={() => setShowSystemLockModal(false)} disabled={lockLoading} style={{ padding: '9px 14px', border: '1px solid #cbd5e1', borderRadius: '6px', background: 'white', cursor: 'pointer' }}>Cancel</button>
-              <button type="button" onClick={submitSystemLock} disabled={lockLoading} style={{ padding: '9px 14px', border: 'none', borderRadius: '6px', color: 'white', background: systemLocked ? '#16a34a' : '#dc2626', cursor: 'pointer' }}>
-                {lockLoading ? 'Saving…' : systemLocked ? 'Unlock system' : 'Lock system'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {confirmation && (
-        <div role="dialog" aria-modal="true" aria-labelledby="confirmation-title" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3100, padding: '20px' }}>
-          <div style={{ background: 'white', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '440px' }}>
-            <h2 id="confirmation-title" style={{ margin: '0 0 10px', fontSize: '20px' }}>{confirmation.title}</h2>
-            <p style={{ margin: 0, color: '#475569' }}>{confirmation.message}</p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-              <button type="button" onClick={() => { confirmation.resolve(false); setConfirmation(null); }} style={{ padding: '9px 14px', border: '1px solid #cbd5e1', borderRadius: '6px', background: 'white', cursor: 'pointer' }}>Cancel</button>
-              <button type="button" onClick={() => { confirmation.resolve(true); setConfirmation(null); }} style={{ padding: '9px 14px', border: 'none', borderRadius: '6px', background: '#dc2626', color: 'white', cursor: 'pointer' }}>
-                {confirmation.confirmLabel}
-              </button>
             </div>
           </div>
         </div>

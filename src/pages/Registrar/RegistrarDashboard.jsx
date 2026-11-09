@@ -37,7 +37,8 @@ const RegistrarDashboard = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [documentRejectionReason, setDocumentRejectionReason] = useState('');
+  const [isUsingSampleData, setIsUsingSampleData] = useState(false);
+  const [dataSource, setDataSource] = useState('none');
   
   // Modal states
   const [showVerifyModal, setShowVerifyModal] = useState(false);
@@ -66,6 +67,8 @@ const RegistrarDashboard = () => {
       setLoading(true);
       setRefreshing(true);
       setError(null);
+      setIsUsingSampleData(false);
+      
       console.log('🔄 ========================================');
       console.log('🔄 REGISTRAR: FETCHING STUDENTS');
       console.log('🔄 ========================================');
@@ -73,6 +76,7 @@ const RegistrarDashboard = () => {
       console.log('👤 Role:', user?.role);
       
       let studentsData = [];
+      let source = 'none';
       
       // ============================================================
       // ATTEMPT 1: /auth/registrar/students/
@@ -84,8 +88,10 @@ const RegistrarDashboard = () => {
         
         if (response.data && response.data.results) {
           studentsData = response.data.results;
+          source = 'registrar';
         } else if (Array.isArray(response.data)) {
           studentsData = response.data;
+          source = 'registrar';
         }
         console.log(`📊 Got ${studentsData.length} students from /auth/registrar/students/`);
       } catch (e) {
@@ -103,8 +109,10 @@ const RegistrarDashboard = () => {
           
           if (response.data && response.data.results) {
             studentsData = response.data.results;
+            source = 'users';
           } else if (Array.isArray(response.data)) {
             studentsData = response.data;
+            source = 'users';
           }
           console.log(`📊 Got ${studentsData.length} students from /auth/users/`);
         } catch (e) {
@@ -123,8 +131,10 @@ const RegistrarDashboard = () => {
           
           if (response.data && response.data.results) {
             studentsData = response.data.results;
+            source = 'students';
           } else if (Array.isArray(response.data)) {
             studentsData = response.data;
+            source = 'students';
           }
           console.log(`📊 Got ${studentsData.length} students from /students/`);
         } catch (e) {
@@ -137,6 +147,7 @@ const RegistrarDashboard = () => {
       // ============================================================
       console.log('📊 ========================================');
       console.log('📊 TOTAL STUDENTS FOUND:', studentsData.length);
+      console.log('📊 SOURCE:', source);
       console.log('📊 ========================================');
       
       if (studentsData.length > 0) {
@@ -151,8 +162,6 @@ const RegistrarDashboard = () => {
           payment_status: s.payment_status || 'PENDING',
           documents_verified: s.documents_verified || false,
           documents_submitted: s.documents_submitted || false,
-          documents_status: s.documents_status || (s.documents_verified ? 'APPROVED' : s.documents_submitted ? 'PENDING' : 'NOT_SUBMITTED'),
-          documents_rejection_reason: s.documents_rejection_reason || '',
           is_enrolled: s.is_enrolled || false,
           grade_8_certificate: s.grade_8_certificate || null,
           grade_12_certificate: s.grade_12_certificate || null,
@@ -164,12 +173,14 @@ const RegistrarDashboard = () => {
         
         setStudents(processed);
         setFilteredStudents(processed);
+        setDataSource(source);
         calculateStats(processed);
         toast.success(`✅ Loaded ${processed.length} students from database`);
       } else {
         setStudents([]);
         setFilteredStudents([]);
-        setError('No students found.');
+        setDataSource('none');
+        setError('No students found. Click "Load Sample Data" to test.');
         toast.info('No students found in database');
       }
       
@@ -182,6 +193,82 @@ const RegistrarDashboard = () => {
       setRefreshing(false);
     }
   }, [user]);
+
+  // ============ LOAD SAMPLE DATA ============
+  const loadSampleData = () => {
+    const sampleStudents = [
+      {
+        id: 1,
+        user: { full_name: 'Abebe Kebede', email: 'abebe@example.com' },
+        student_id: 'STU20240001',
+        department: 'Computer Science',
+        payment_status: 'VERIFIED',
+        documents_verified: false,
+        documents_submitted: true,
+        is_enrolled: false,
+        grade_8_certificate: 'grade8.pdf',
+        grade_12_certificate: 'grade12.pdf',
+        transcript: 'transcript.pdf',
+        other_documents: null,
+        cgpa: '3.20',
+        notification_sent: true
+      },
+      {
+        id: 2,
+        user: { full_name: 'Betelehem Tesfaye', email: 'bete@example.com' },
+        student_id: 'STU20240002',
+        department: 'Software Engineering',
+        payment_status: 'VERIFIED',
+        documents_verified: true,
+        documents_submitted: true,
+        is_enrolled: false,
+        grade_8_certificate: 'grade8.pdf',
+        grade_12_certificate: 'grade12.pdf',
+        transcript: 'transcript.pdf',
+        other_documents: null,
+        cgpa: '3.45',
+        notification_sent: true
+      },
+      {
+        id: 3,
+        user: { full_name: 'Chala Desta', email: 'chala@example.com' },
+        student_id: 'STU20240003',
+        department: 'Information Systems',
+        payment_status: 'VERIFIED',
+        documents_verified: true,
+        documents_submitted: true,
+        is_enrolled: true,
+        grade_8_certificate: 'grade8.pdf',
+        grade_12_certificate: 'grade12.pdf',
+        transcript: 'transcript.pdf',
+        other_documents: 'other.pdf',
+        cgpa: '3.78',
+        notification_sent: true
+      },
+      {
+        id: 4,
+        user: { full_name: 'Daniel Worku', email: 'daniel@example.com' },
+        student_id: 'STU20240004',
+        department: 'Computer Science',
+        payment_status: 'VERIFIED',
+        documents_verified: false,
+        documents_submitted: false,
+        is_enrolled: false,
+        grade_8_certificate: null,
+        grade_12_certificate: null,
+        transcript: null,
+        other_documents: null,
+        cgpa: '0.00',
+        notification_sent: false
+      },
+    ];
+    setStudents(sampleStudents);
+    setFilteredStudents(sampleStudents);
+    setDataSource('sample');
+    setIsUsingSampleData(true);
+    calculateStats(sampleStudents);
+    toast.success('📊 Sample data loaded for testing');
+  };
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -203,12 +290,12 @@ const RegistrarDashboard = () => {
     setStats({
       total: arr.length,
       verified: arr.filter(s => s.documents_verified === true).length,
-      pending: arr.filter(s => s.documents_status === 'PENDING').length,
-      rejected: arr.filter(s => s.documents_status === 'REJECTED').length,
+      pending: arr.filter(s => !s.documents_verified && s.payment_status !== 'REJECTED').length,
+      rejected: arr.filter(s => s.payment_status === 'REJECTED').length,
       active: arr.filter(s => s.is_enrolled === true).length,
       documents_submitted: arr.filter(s => s.documents_submitted === true).length,
       ready_for_activation: arr.filter(s => s.documents_verified === true && s.payment_status === 'VERIFIED' && !s.is_enrolled).length,
-      pending_upload: arr.filter(s => s.payment_status === 'VERIFIED' && s.documents_status === 'NOT_SUBMITTED').length,
+      pending_upload: arr.filter(s => s.payment_status === 'VERIFIED' && !s.documents_submitted).length,
       notification_sent: arr.filter(s => s.notification_sent === true).length,
     });
   };
@@ -261,11 +348,6 @@ const RegistrarDashboard = () => {
 
   // ============ VERIFY STUDENT DOCUMENTS ============
   const verifyStudentDocuments = async (studentId, action, reason = '') => {
-    if (action === 'reject' && !reason.trim()) {
-      toast.error('A rejection reason is required.');
-      return;
-    }
-
     setActionLoading(true);
     try {
       console.log(`🔍 ${action === 'verify' ? 'Verifying' : 'Rejecting'} documents for student:`, studentId);
@@ -281,7 +363,6 @@ const RegistrarDashboard = () => {
       await fetchStudents();
       setShowVerifyModal(false);
       setSelectedStudent(null);
-      setDocumentRejectionReason('');
       
     } catch (error) {
       console.error('❌ Failed to verify documents:', error);
@@ -394,8 +475,8 @@ const RegistrarDashboard = () => {
     if (status !== 'all') {
       filtered = filtered.filter(s => {
         if (status === 'verified') return s.documents_verified === true;
-        if (status === 'pending') return s.documents_status === 'PENDING';
-        if (status === 'rejected') return s.documents_status === 'REJECTED';
+        if (status === 'pending') return !s.documents_verified && s.payment_status !== 'REJECTED';
+        if (status === 'rejected') return s.payment_status === 'REJECTED';
         if (status === 'active') return s.is_enrolled === true;
         if (status === 'documents') return s.documents_submitted === true;
         if (status === 'ready') return s.documents_verified === true && s.payment_status === 'VERIFIED' && !s.is_enrolled;
@@ -459,43 +540,6 @@ const RegistrarDashboard = () => {
         }}>
           <CheckCircle size={16} />
           Verified
-        </span>
-      );
-    } else if (student.documents_status === 'REJECTED') {
-      return (
-        <span
-          title={student.documents_rejection_reason || 'Documents rejected'}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            padding: '4px 12px',
-            borderRadius: '20px',
-            fontSize: '12px',
-            fontWeight: 500,
-            background: '#fee2e2',
-            color: '#b91c1c',
-          }}
-        >
-          <X size={14} />
-          Rejected
-        </span>
-      );
-    } else if (student.documents_status === 'PENDING') {
-      return (
-        <span style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '4px',
-          padding: '4px 12px',
-          borderRadius: '20px',
-          fontSize: '12px',
-          fontWeight: 500,
-          background: '#fef3c7',
-          color: '#d97706',
-        }}>
-          <Clock size={14} />
-          Pending Review
         </span>
       );
     } else if (student.documents_submitted && student.payment_status === 'VERIFIED') {
@@ -568,7 +612,38 @@ const RegistrarDashboard = () => {
       );
     }
   };
+  // ============ EXPORT TO CSV FUNCTION ============
+  const handleExport = () => {
+    if (filteredStudents.length === 0) {
+      toast.error('No student data to export');
+      return;
+    }
 
+    const headers = ['Full Name', 'Email', 'Student ID', 'Department', 'Payment Status', 'Docs Verified', 'Enrolled'];
+    const rows = filteredStudents.map(s => [
+      `"${s.user?.full_name || 'Unknown'}"`,
+      `"${s.user?.email || 'N/A'}"`,
+      `"${s.student_id || 'N/A'}"`,
+      `"${s.department || 'N/A'}"`,
+      s.payment_status,
+      s.documents_verified ? 'YES' : 'NO',
+      s.is_enrolled ? 'YES' : 'NO'
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `DEMS_Students_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success('Students exported successfully!');
+  };
+  // ============ EXPORT TO CSV FUNCTION ============
+  
   // ============ LOADING STATE ============
   if (loading && students.length === 0) {
     return (
@@ -589,7 +664,45 @@ const RegistrarDashboard = () => {
           animation: 'spin 1s linear infinite',
         }} />
         <p style={{ color: '#64748b' }}>Loading...</p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+
+        
+        /* 👇 NEW 3D CLASSES 👇 */
+        .batch-3d-wrapper {
+          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+        }
+        .batch-3d-wrapper:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 15px 30px -5px rgba(0,0,0,0.1);
+        }
+
+        .table-row-3d {
+          transition: all 0.3s ease;
+        }
+        .table-row-3d:hover {
+          background: #f8fafc !important;
+          transform: scale(1.002);
+          box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+          z-index: 10;
+          position: relative;
+        }
+
+        .action-btn-3d {
+          transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        }
+        .action-btn-3d:hover {
+          transform: translateY(-3px) scale(1.05);
+        }
+        .action-btn-3d:active {
+          transform: translateY(1px) scale(0.98);
+        }
+
+        `}</style>
       </div>
     );
   }
@@ -603,6 +716,54 @@ const RegistrarDashboard = () => {
     }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* 👇 3D ANIMATIONS FOR OUTER BATCH WRAPPER 👇 */
+        .batch-3d-wrapper {
+          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+        }
+        .batch-3d-wrapper:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 15px 30px -5px rgba(0,0,0,0.1);
+        }
+
+        /* 👇 3D ANIMATIONS FOR INNER BATCH CARDS 👇 */
+        /* This targets the buttons inside the BatchProcessor component */
+        .batch-inner-card {
+          transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+          cursor: pointer !important;
+        }
+        .batch-inner-card:hover {
+          transform: translateY(-6px) scale(1.02) !important;
+          box-shadow: 0 10px 20px -5px rgba(0,0,0,0.15) !important;
+          border-color: #3b82f6 !important; /* Optional: Adds a blue glow border on hover */
+        }
+        .batch-inner-card:active {
+          transform: translateY(0) scale(0.98) !important;
+        }
+
+        /* 👇 3D ANIMATIONS FOR TABLE & BUTTONS 👇 */
+        .table-row-3d {
+          transition: all 0.3s ease;
+        }
+        .table-row-3d:hover {
+          background: #f8fafc !important;
+          transform: scale(1.002);
+          box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+          z-index: 10;
+          position: relative;
+        }
+
+        .action-btn-3d {
+          transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        }
+        .action-btn-3d:hover {
+          transform: translateY(-3px) scale(1.05);
+        }
+        .action-btn-3d:active {
+          transform: translateY(1px) scale(0.98);
+        }
+
         @media (max-width: 768px) {
           .stats-grid { grid-template-columns: repeat(3, 1fr) !important; }
           .search-filter-bar { flex-direction: column !important; }
@@ -640,7 +801,13 @@ const RegistrarDashboard = () => {
               <span style={{ fontWeight: 'bold', color: '#2563eb' }}>📋 Workflow:</span> 
               <span style={{ color: '#64748b' }}> Notify → Upload → Verify → Activate</span>
             </span>
-            {students.length > 0 && (
+            {dataSource === 'none' && !isUsingSampleData && (
+              <span style={{ display: 'block', color: '#dc2626', fontSize: '14px', marginTop: '4px' }}>⚠️ No data loaded</span>
+            )}
+            {isUsingSampleData && (
+              <span style={{ display: 'block', color: '#f59e0b', fontSize: '14px', marginTop: '4px' }}>⚠️ Using SAMPLE data</span>
+            )}
+            {dataSource !== 'none' && !isUsingSampleData && students.length > 0 && (
               <span style={{ display: 'block', color: '#16a34a', fontSize: '14px', marginTop: '4px' }}>✅ {students.length} students from database</span>
             )}
             {error && (
@@ -673,6 +840,8 @@ const RegistrarDashboard = () => {
             <RefreshCw size={18} className={refreshing ? 'spinning' : ''} />
             Refresh
           </button>
+
+
           <button
             style={{
               display: 'flex',
@@ -686,203 +855,52 @@ const RegistrarDashboard = () => {
               cursor: 'pointer',
               transition: 'all 0.3s ease',
             }}
-            onClick={() => toast.info('Export feature coming soon')}
-          >
+          onClick={handleExport}>
             <Download size={18} />
             Export
           </button>
         </div>
       </div>
-
       {/* STATS CARDS */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(6, 1fr)',
-        gap: '16px',
-        marginBottom: '24px',
-      }} className="stats-grid">
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          borderLeft: '4px solid #3b82f6',
-        }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#dbeafe',
-            color: '#3b82f6',
-          }}>
-            <Users size={24} />
-          </div>
-          <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block' }}>{stats.total}</span>
-            <span style={{ fontSize: '14px', color: '#64748b' }}>Total Students</span>
-          </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }} className="stats-grid">
+        
+        <div onClick={() => handleFilter('all')} style={{ background: 'white', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', borderLeft: '4px solid #3b82f6', cursor: 'pointer', transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease', animation: 'fadeUp 0.5s ease-out' }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(59, 130, 246, 0.25)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#eff6ff', color: '#3b82f6' }}><Users size={24} /></div>
+          <div><span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{stats.total}</span><span style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Total Students</span></div>
         </div>
 
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          borderLeft: '4px solid #f59e0b',
-          cursor: 'pointer',
-        }}
-        onClick={() => handleFilter('pending_upload')}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#fef3c7',
-            color: '#f59e0b',
-          }}>
-            <Bell size={24} />
-          </div>
-          <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block' }}>{stats.pending_upload}</span>
-            <span style={{ fontSize: '14px', color: '#64748b' }}>Awaiting Docs</span>
-          </div>
+        <div onClick={() => handleFilter('pending_upload')} style={{ background: 'white', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', borderLeft: '4px solid #f59e0b', cursor: 'pointer', transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease', animation: 'fadeUp 0.6s ease-out' }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(245, 158, 11, 0.25)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fef3c7', color: '#f59e0b' }}><Bell size={24} /></div>
+          <div><span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{stats.pending_upload}</span><span style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Awaiting Docs</span></div>
         </div>
 
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          borderLeft: '4px solid #f59e0b',
-          cursor: 'pointer',
-        }}
-        onClick={() => handleFilter('documents')}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#fef3c7',
-            color: '#f59e0b',
-          }}>
-            <Upload size={24} />
-          </div>
-          <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block' }}>{stats.documents_submitted}</span>
-            <span style={{ fontSize: '14px', color: '#64748b' }}>Docs Uploaded</span>
-          </div>
+        <div onClick={() => handleFilter('documents')} style={{ background: 'white', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', borderLeft: '4px solid #8b5cf6', cursor: 'pointer', transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease', animation: 'fadeUp 0.7s ease-out' }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(139, 92, 246, 0.25)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ede9fe', color: '#8b5cf6' }}><Upload size={24} /></div>
+          <div><span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{stats.documents_submitted}</span><span style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Docs Uploaded</span></div>
         </div>
 
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          borderLeft: '4px solid #22c55e',
-          cursor: 'pointer',
-        }}
-        onClick={() => handleFilter('ready')}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#dcfce7',
-            color: '#22c55e',
-          }}>
-            <UserPlus size={24} />
-          </div>
-          <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block' }}>{stats.ready_for_activation}</span>
-            <span style={{ fontSize: '14px', color: '#64748b' }}>Ready to Activate</span>
-          </div>
+        <div onClick={() => handleFilter('ready')} style={{ background: 'white', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', borderLeft: '4px solid #22c55e', cursor: 'pointer', transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease', animation: 'fadeUp 0.8s ease-out' }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(34, 197, 94, 0.25)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#dcfce7', color: '#22c55e' }}><UserPlus size={24} /></div>
+          <div><span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{stats.ready_for_activation}</span><span style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Ready to Activate</span></div>
         </div>
 
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          borderLeft: '4px solid #8b5cf6',
-          cursor: 'pointer',
-        }}
-        onClick={() => handleFilter('active')}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#ede9fe',
-            color: '#8b5cf6',
-          }}>
-            <CheckCircle size={24} />
-          </div>
-          <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block' }}>{stats.active}</span>
-            <span style={{ fontSize: '14px', color: '#64748b' }}>Active</span>
-          </div>
+        <div onClick={() => handleFilter('active')} style={{ background: 'white', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', borderLeft: '4px solid #0ea5e9', cursor: 'pointer', transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease', animation: 'fadeUp 0.9s ease-out' }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(14, 165, 233, 0.25)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#e0f2fe', color: '#0ea5e9' }}><CheckCircle size={24} /></div>
+          <div><span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{stats.active}</span><span style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Active</span></div>
         </div>
 
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          borderLeft: '4px solid #f59e0b',
-          cursor: 'pointer',
-        }}
-        onClick={() => handleFilter('notified')}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#fef3c7',
-            color: '#f59e0b',
-          }}>
-            <Send size={24} />
-          </div>
-          <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block' }}>{stats.notification_sent}</span>
-            <span style={{ fontSize: '14px', color: '#64748b' }}>Notified</span>
-          </div>
+        <div onClick={() => handleFilter('notified')} style={{ background: 'white', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', borderLeft: '4px solid #f97316', cursor: 'pointer', transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease', animation: 'fadeUp 1s ease-out' }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(249, 115, 22, 0.25)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffedd5', color: '#f97316' }}><Send size={24} /></div>
+          <div><span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{stats.notification_sent}</span><span style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Notified</span></div>
         </div>
       </div>
+
+      
 
       {/* ============ BATCH PROCESSING SECTION ============ */}
       
       {/* Batch Student Activation */}
+      <div className="batch-3d-wrapper">
       <BatchProcessor
         endpoint="/analytics/batch/activate-students/"
         title="Batch Student Activation"
@@ -900,8 +918,9 @@ const RegistrarDashboard = () => {
         color="blue"
         bgColor="#eff6ff"
       />
-
+</div>
       {/* Batch ID Generation */}
+      <div className="batch-3d-wrapper">
       <BatchProcessor
         endpoint="/analytics/batch/generate-ids/"
         title="Batch Student ID Generation"
@@ -918,8 +937,9 @@ const RegistrarDashboard = () => {
         color="purple"
         bgColor="#f5f3ff"
       />
-
+</div>
       {/* Batch Document Verification */}
+      <div className="batch-3d-wrapper">
       <BatchProcessor
         endpoint="/analytics/batch/verify-documents/"
         title="Batch Document Verification"
@@ -936,7 +956,9 @@ const RegistrarDashboard = () => {
         color="orange"
         bgColor="#fff7ed"
       />
+      </div>
 {/* ============ BATCH NOTIFY — UPLOAD DOCUMENTS ============ */}
+<div className="batch-3d-wrapper">
 <BatchProcessor
   endpoint="/analytics/batch/send-notifications/"
   title="Batch Notify — Upload Documents"
@@ -978,6 +1000,8 @@ const RegistrarDashboard = () => {
     fetchStudents();
   }}
 />
+</div>
+
       {/* SEARCH AND FILTER */}
       <div style={{
         display: 'flex',
@@ -1144,6 +1168,7 @@ const RegistrarDashboard = () => {
                         >
                           Refresh
                         </button>
+
                       </div>
                     </div>
                   </td>
@@ -1152,12 +1177,11 @@ const RegistrarDashboard = () => {
                 filteredStudents.map((student) => (
                   <tr
                     key={student.id || Math.random()}
+                    className="table-row-3d"
                     style={{
                       borderBottom: '1px solid #f1f5f9',
                       cursor: 'default',
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                   >
                     <td style={{
                       padding: '12px 16px',
@@ -1246,133 +1270,97 @@ const RegistrarDashboard = () => {
                         flexWrap: 'wrap',
                       }} className="action-buttons">
                         
-                        {/* 1. SEND NOTIFICATION - Only for verified payment students who haven't uploaded docs */}
+                                               {/* 1. SEND NOTIFICATION */}
                         {student.payment_status === 'VERIFIED' && !student.documents_submitted && (
                           <button
+                            className="action-btn-3d"
                             onClick={() => {
                               setSelectedStudent(student);
                               setShowNotifyModal(true);
                             }}
                             style={{
-                              padding: '6px 10px',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              transition: 'all 0.3s ease',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '4px',
-                              background: '#dbeafe',
-                              color: '#2563eb',
-                              fontSize: '12px',
+                              padding: '6px 10px', border: 'none', borderRadius: '6px', cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              gap: '4px', background: '#dbeafe', color: '#2563eb', fontSize: '12px',
                             }}
                             title="Send Document Upload Notification"
                           >
-                            <Bell size={16} />
-                            Notify
+                            <Bell size={16} /> Notify
                           </button>
                         )}
-{/* 2. VIEW DOCUMENTS — show if ANY file exists */}
-{(student.grade_8_certificate ||
-  student.grade_12_certificate ||
-  student.transcript ||
-  student.other_documents ||
-  student.documents_submitted) && (
-  <button
-    onClick={() => { setSelectedStudent(student); setShowDocumentModal(true); }}
-    style={{ /* same styles */ }}
-  >
-    <Eye size={16} />
-    View Docs
-  </button>
-)}
 
-                        {/* 3. VERIFY DOCUMENTS - Only if docs uploaded but not verified */}
-                        {student.documents_status === 'PENDING' && !student.documents_verified && student.payment_status === 'VERIFIED' && (
+                        {/* 2. VIEW DOCUMENTS */}
+                        {(student.grade_8_certificate || student.grade_12_certificate || student.transcript || student.other_documents || student.documents_submitted) && (
                           <button
+                            className="action-btn-3d"
+                            onClick={() => { setSelectedStudent(student); setShowDocumentModal(true); }}
+                            style={{
+                              padding: '6px 10px', border: 'none', borderRadius: '6px', cursor: 'pointer',
+                              transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              gap: '4px', background: '#f1f5f9', color: '#475569', fontSize: '12px',
+                            }}
+                            title="View Documents"
+                          >
+                            <Eye size={16} /> View Docs
+                          </button>
+                        )}
+
+                        {/* 3. VERIFY DOCUMENTS */}
+                        {student.documents_submitted && !student.documents_verified && student.payment_status === 'VERIFIED' && (
+                          <button
+                            className="action-btn-3d"
                             onClick={() => {
                               setSelectedStudent(student);
                               setShowVerifyModal(true);
                             }}
                             style={{
-                              padding: '6px 10px',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              transition: 'all 0.3s ease',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '4px',
-                              background: '#dcfce7',
-                              color: '#22c55e',
-                              fontSize: '12px',
+                              padding: '6px 10px', border: 'none', borderRadius: '6px', cursor: 'pointer',
+                              transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              gap: '4px', background: '#dcfce7', color: '#22c55e', fontSize: '12px',
                             }}
                             title="Verify Documents"
                           >
-                            <Check size={16} />
-                            Verify
+                            <Check size={16} /> Verify
                           </button>
                         )}
 
-                        {/* 4. GENERATE ID - Only if documents verified but no ID */}
+                        {/* 4. GENERATE ID */}
                         {student.documents_verified && student.payment_status === 'VERIFIED' && !student.student_id && (
                           <button
+                            className="action-btn-3d"
                             onClick={() => {
                               setSelectedStudent(student);
                               setShowIdModal(true);
                             }}
                             style={{
-                              padding: '6px 10px',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              transition: 'all 0.3s ease',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '4px',
-                              background: '#dbeafe',
-                              color: '#3b82f6',
-                              fontSize: '12px',
+                              padding: '6px 10px', border: 'none', borderRadius: '6px', cursor: 'pointer',
+                              transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              gap: '4px', background: '#dbeafe', color: '#3b82f6', fontSize: '12px',
                             }}
                             title="Generate Student ID"
                           >
-                            <CreditCard size={16} />
-                            Generate ID
+                            <CreditCard size={16} /> Generate ID
                           </button>
                         )}
 
-                        {/* 5. ACTIVATE - Only if all conditions met */}
+                        {/* 5. ACTIVATE */}
                         {student.documents_verified && student.payment_status === 'VERIFIED' && student.student_id && !student.is_enrolled && (
                           <button
+                            className="action-btn-3d"
                             onClick={() => {
                               setSelectedStudent(student);
                               setShowActivateModal(true);
                             }}
                             style={{
-                              padding: '6px 10px',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              transition: 'all 0.3s ease',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '4px',
-                              background: '#22c55e',
-                              color: 'white',
-                              fontSize: '12px',
-                              fontWeight: 'bold',
+                              padding: '6px 10px', border: 'none', borderRadius: '6px', cursor: 'pointer',
+                              transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              gap: '4px', background: '#22c55e', color: 'white', fontSize: '12px', fontWeight: 'bold',
                             }}
                             title="Activate Account"
                           >
-                            <UserPlus size={16} />
-                            Activate
+                            <UserPlus size={16} /> Activate
                           </button>
-                        )}
-
+                        )} 
                         {/* 6. ACTIVE badge */}
                         {student.is_enrolled && (
                           <span style={{
@@ -1575,8 +1563,8 @@ const RegistrarDashboard = () => {
             setSelectedStudent(null);
             fetchStudents();
           }}
-          onVerify={(studentId, action, reason) => {
-            return verifyStudentDocuments(studentId, action, reason || '');
+          onVerify={(studentId, action) => {
+            verifyStudentDocuments(studentId, action);
           }}
         />
       )}
@@ -1611,10 +1599,7 @@ const RegistrarDashboard = () => {
                 Verify Student Documents
               </h2>
               <button
-                  onClick={() => {
-                    setShowVerifyModal(false);
-                    setDocumentRejectionReason('');
-                  }}
+                onClick={() => setShowVerifyModal(false)}
                 style={{ background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}
               >×</button>
             </div>
@@ -1650,33 +1635,9 @@ const RegistrarDashboard = () => {
               </div>
             </div>
 
-            <label style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: 600,
-              color: '#334155',
-              marginBottom: '6px',
-            }}>
-              Rejection reason (required)
-            </label>
-            <textarea
-              value={documentRejectionReason}
-              onChange={(e) => setDocumentRejectionReason(e.target.value)}
-              placeholder="Explain what needs to be corrected"
-              rows={3}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                marginBottom: '16px',
-                resize: 'vertical',
-              }}
-            />
-
             <div style={{ display: 'flex', gap: '12px' }}>
               <button
-                onClick={() => verifyStudentDocuments(selectedStudent.id, 'reject', documentRejectionReason)}
+                onClick={() => verifyStudentDocuments(selectedStudent.id, 'reject', 'Incomplete documents')}
                 disabled={actionLoading}
                 style={{
                   flex: 1,

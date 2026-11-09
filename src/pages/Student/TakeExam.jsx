@@ -535,6 +535,17 @@ const TakeExam = () => {
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: '#f1f5f9' }}>
+      {/* Optional SEB indicator */}
+      {/SEB/i.test(navigator.userAgent) && (
+        <div style={{
+          position: 'fixed', top: 8, right: 8, zIndex: 100,
+          background: '#16a34a', color: 'white',
+          padding: '4px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600
+        }}>
+          🔒 SEB Active
+        </div>
+      )}
+
       {/* LEFT: Questions */}
       <div
         style={{

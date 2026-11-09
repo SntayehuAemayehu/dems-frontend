@@ -6,17 +6,16 @@ import { useNavigate } from 'react-router-dom';
 import { 
   CheckCircle, XCircle, Clock, Eye, 
   RefreshCw, FileText, Search, Filter, Download,
-  AlertTriangle, FileImage, CheckSquare, Square,
-  ChevronDown, ChevronUp, Send, Trash2
+  AlertTriangle, FileImage, Plus, CheckSquare, Square,
+  ChevronDown, ChevronUp, Send, Trash2, Upload
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
-import { downloadPaymentExport } from '../../utils/paymentExports';
 
 const FinanceDashboard = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
-  
+  const [selectedStudent, setSelectedStudent] = useState(null);
   // ============ STATE ============
   const [payments, setPayments] = useState([]);
   const [filteredPayments, setFilteredPayments] = useState([]);
@@ -25,8 +24,9 @@ const FinanceDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedPayment, setSelectedPayment] = useState(null);
-  const [showExportOptions, setShowExportOptions] = useState(false);
-  
+  const [isUsingSampleData, setIsUsingSampleData] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   // ============================================================
   // BATCH PROCESSING STATE
   // ============================================================
@@ -58,7 +58,9 @@ const FinanceDashboard = () => {
   const [verificationNote, setVerificationNote] = useState('');
   const [receiptImage, setReceiptImage] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
-  
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importing, setImporting] = useState(false);
   // Statistics
   const [stats, setStats] = useState({
     total: 0,
@@ -76,6 +78,7 @@ const FinanceDashboard = () => {
     try {
       setLoading(true);
       setRefreshing(true);
+      setIsUsingSampleData(false);
       
       console.log('🔄 Fetching payments for Finance...');
       
@@ -130,7 +133,7 @@ const FinanceDashboard = () => {
       
       if (processedPayments.length === 0) {
         console.log('⚠️ No payment records found in database');
-        toast.info('No payment records found.');
+        toast.info('No payment records found. Click "Load Sample Data" to test.');
       }
       
       // Reset batch selection
@@ -198,18 +201,6 @@ const FinanceDashboard = () => {
       weeklyPayments
     });
   };
-
-  const handleDownload = (format) => {
-    try {
-      downloadPaymentExport(filteredPayments, format);
-      toast.success(`Downloaded ${format.toUpperCase()} payment report`);
-    } catch (error) {
-      console.error('Failed to download payment report:', error);
-      toast.error('Failed to download payment report');
-    }
-    setShowExportOptions(false);
-  };
-
   // ============================================================
   // BATCH PROCESSING FUNCTIONS
   // ============================================================
@@ -456,9 +447,10 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
     filterData(searchTerm, status);
   };
 
-  const filterData = (term, status) => {
+  const filterData = (term, status, start = startDate, end = endDate) => {
     let filtered = payments;
     
+    // Search Text Filter
     if (term) {
       filtered = filtered.filter(p => 
         (p.transaction_id?.toLowerCase() || '').includes(term) ||
@@ -467,8 +459,20 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
       );
     }
     
+    // Status Filter
     if (status !== 'all') {
       filtered = filtered.filter(p => p.status === status || (status === 'ROLLED_BACK' && p.is_rolled_back));
+    }
+
+    // 👇 NEW DATE FILTER 👇
+    if (start) {
+      filtered = filtered.filter(p => new Date(p.uploaded_at) >= new Date(start));
+    }
+    if (end) {
+      // Add one day to end date to include the full day
+      const endDatePlusOne = new Date(end);
+      endDatePlusOne.setDate(endDatePlusOne.getDate() + 1);
+      filtered = filtered.filter(p => new Date(p.uploaded_at) < endDatePlusOne);
     }
     
     setFilteredPayments(filtered);
@@ -568,7 +572,183 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
         return <span>{status}</span>;
     }
   };
+    // ============ GENERATE 7-DAY REVENUE DATA ============
+  const getRevenueData = () => {
+    const last7Days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      last7Days.push({
+        date: d.toLocaleDateString('en-US', { weekday: 'short' }),
+        fullDate: d.toDateString(),
+        amount: 0
+      });
+    }
 
+    // Add real data
+    payments.filter(p => p.status === 'VERIFIED' && !p.is_rolled_back).forEach(p => {
+      const paymentDate = new Date(p.uploaded_at).toDateString();
+      const dayData = last7Days.find(d => d.fullDate === paymentDate);
+      if (dayData) {
+        dayData.amount += parseFloat(p.amount) || 0;
+      }
+    });
+
+    const maxAmount = Math.max(...last7Days.map(d => d.amount), 1000); // Minimum scale to avoid divide by zero
+    return { days: last7Days, maxAmount };
+  };
+
+  const revenueData = getRevenueData();
+  // ============ EXPORT TO CSV FUNCTION ============
+  const handleExport = () => {
+    if (filteredPayments.length === 0) {
+      toast.error('No payment data to export');
+      return;
+    }
+
+    // Define headers
+    const headers = ['Transaction ID', 'Student Name', 'Student ID', 'Amount (ETB)', 'Bank', 'Status', 'Date'];
+    
+    // Map the data
+    const rows = filteredPayments.map(p => [
+      `"${p.transaction_id || 'N/A'}"`,
+      `"${p.student_name || 'Unknown'}"`,
+      `"${p.student_id || 'N/A'}"`,
+      p.amount.toFixed(2),
+      `"${p.bank_name || 'N/A'}"`,
+      p.status,
+      new Date(p.uploaded_at).toLocaleDateString()
+    ]);
+
+    // Create CSV string
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(e => e.join(','))
+    ].join('\n');
+
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `DEMS_Payments_${filterStatus}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success('Payments exported successfully!');
+  };
+    // ============ IMPORT BANK CSV ============
+  const handleImportCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setImporting(true);
+    const reader = new FileReader();
+    
+    reader.onload = async (event) => {
+      const csvData = event.target.result;
+      const lines = csvData.split('\n');
+      
+      // Assuming the bank CSV has: Transaction ID in column 1, Amount in column 2
+      const transactionIds = [];
+      for (let i = 1; i < lines.length; i++) {
+        const columns = lines[i].split(',');
+        if (columns[0] && columns[0].trim() !== '') {
+          transactionIds.push(columns[0].trim().replace(/"/g, ''));
+        }
+      }
+
+      // Find pending payments that match the imported IDs
+      const matchingPayments = payments.filter(p => 
+        p.status === 'PENDING' && transactionIds.includes(p.transaction_id)
+      );
+
+      if (matchingPayments.length === 0) {
+        toast.error('No matching pending payments found in the uploaded file.');
+        setImporting(false);
+        return;
+      }
+
+      // Auto-verify them
+      let successCount = 0;
+      for (const payment of matchingPayments) {
+        try {
+          await api.post(`/payments/proofs/${payment.id}/verify/`, {
+            action: 'approve',
+            reason: 'Auto-verified via Bank CSV Import'
+          });
+          successCount++;
+        } catch (err) {
+          console.error('Failed to auto-verify', payment.id);
+        }
+      }
+
+      toast.success(`Successfully imported and verified ${successCount} payments!`);
+      setShowImportModal(false);
+      setImporting(false);
+      fetchPayments(); // Refresh data
+    };
+
+    reader.readAsText(file);
+  };
+  // ============ PRINT RECEIPT FUNCTION ============
+  const handlePrintReceipt = (payment) => {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Receipt - ${payment.transaction_id}</title>
+          <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; }
+            .header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 20px; margin-bottom: 30px; }
+            .logo { font-size: 24px; font-weight: bold; color: #2563eb; margin-bottom: 5px; }
+            .title { font-size: 28px; font-weight: bold; margin-bottom: 30px; }
+            .details { width: 100%; margin-bottom: 30px; border-collapse: collapse; }
+            .details td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+            .details td:first-child { font-weight: bold; color: #64748b; width: 40%; }
+            .total { background: #f8fafc; padding: 20px; border-radius: 8px; text-align: right; font-size: 24px; font-weight: bold; color: #2563eb; margin-top: 20px; }
+            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+            .stamp { margin-top: 30px; display: inline-block; border: 3px solid #22c55e; color: #22c55e; padding: 10px 20px; border-radius: 8px; font-weight: bold; transform: rotate(-5deg); }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="logo">🎓 DEMS University</div>
+            <div>Distance Education Management System</div>
+          </div>
+          <div class="title">Official Payment Receipt</div>
+          
+          <table class="details">
+            <tr><td>Transaction ID</td><td>${payment.transaction_id}</td></tr>
+            <tr><td>Student Name</td><td>${payment.student_name}</td></tr>
+            <tr><td>Student ID</td><td>${payment.student_id || 'N/A'}</td></tr>
+            <tr><td>Payment Date</td><td>${new Date(payment.uploaded_at).toLocaleString()}</td></tr>
+            <tr><td>Bank Name</td><td>${payment.bank_name || 'N/A'}</td></tr>
+            <tr><td>Status</td><td><strong>${payment.status}</strong></td></tr>
+          </table>
+          
+          <div class="total">
+            Total Amount Paid: ETB ${payment.amount.toFixed(2)}
+          </div>
+          
+          <div style="text-align: center; margin-top: 40px;">
+            <div class="stamp">VERIFIED</div>
+          </div>
+
+          <div class="footer">
+            This is a computer-generated receipt. No signature is required.<br>
+            Generated on ${new Date().toLocaleString()} by DEMS Finance System.
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 500);
+  };
   // ============ LOADING STATE ============
   if (loading && payments.length === 0) {
     return (
@@ -598,7 +778,49 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px' }}>
       <style>{`
+          @keyframes slideInRight {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes growUp {
+          from { transform: scaleY(0); transform-origin: bottom; }
+          to { transform: scaleY(1); transform-origin: bottom; }
+        }
+                 .premium-blue-card {
+          background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+          position: relative;
+          overflow: hidden;
+          box-shadow: 0 10px 30px -5px rgba(37, 99, 235, 0.4);
+          transition: all 0.3s ease;
+        }
+        .premium-blue-card:hover {
+          box-shadow: 0 15px 35px -5px rgba(37, 99, 235, 0.6);
+          transform: translateY(-2px);
+        }
+        /* This adds the subtle glowing circles inside the blue card */
+        .premium-blue-card::before {
+          content: '';
+          position: absolute;
+          top: -50%;
+          right: -10%;
+          width: 300px;
+          height: 300px;
+          background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 70%);
+          border-radius: 50%;
+          pointer-events: none;
+        }
+        .premium-blue-card::after {
+          content: '';
+          position: absolute;
+          bottom: -50%;
+          left: 10%;
+          width: 200px;
+          height: 200px;
+          background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+          border-radius: 50%;
+          pointer-events: none;
+        } 
         @media (max-width: 768px) {
           .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
           .search-filter-bar { flex-direction: column !important; }
@@ -629,6 +851,16 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
             margin: '4px 0 0 0',
           }}>
             Manage and verify student payments
+            {isUsingSampleData && (
+              <span style={{
+                display: 'block',
+                color: '#f59e0b',
+                fontSize: '14px',
+                marginTop: '4px',
+              }}>
+                ⚠️ Using sample data (no real payment records in database)
+              </span>
+            )}
           </p>
         </div>
         <div style={{
@@ -656,258 +888,220 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
             <RefreshCw size={18} className={refreshing ? 'spinning' : ''} />
             Refresh
           </button>
-          <div style={{ position: 'relative' }}>
-            <button
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded={showExportOptions}
-              disabled={filteredPayments.length === 0}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 20px',
-                background: '#2563eb',
-                border: 'none',
-                borderRadius: '8px',
-                color: 'white',
-                cursor: filteredPayments.length === 0 ? 'not-allowed' : 'pointer',
-                opacity: filteredPayments.length === 0 ? 0.6 : 1,
-                transition: 'all 0.3s ease',
-              }}
-              onClick={() => setShowExportOptions((visible) => !visible)}
-            >
-              <Download size={18} />
-              Download
-              <ChevronDown size={16} />
-            </button>
-            {showExportOptions && (
-              <div role="menu" style={{
-                position: 'absolute',
-                right: 0,
-                top: 'calc(100% + 6px)',
-                zIndex: 10,
-                minWidth: '190px',
-                padding: '4px',
-                background: 'white',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                boxShadow: '0 8px 20px rgba(15, 23, 42, 0.12)',
-              }}>
-                {[
-                  ['pdf', 'PDF (.pdf)'],
-                  ['xlsx', 'Excel (.xlsx)'],
-                  ['csv', 'CSV (.csv)'],
-                ].map(([format, label]) => (
-                  <button
-                    key={format}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => handleDownload(format)}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      padding: '9px 12px',
-                      border: 'none',
-                      borderRadius: '5px',
-                      background: 'white',
-                      color: '#334155',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <button
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              background: '#2563eb',
+              border: 'none',
+              borderRadius: '8px',
+              color: 'white',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+            }}
+            onClick={handleExport} // 👈 CHANGE THIS LINE
+          >
+            <Download size={18} />
+            Export
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              background: '#8b5cf6', // Purple
+              border: 'none',
+              borderRadius: '8px',
+              color: 'white',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 4px 12px rgba(139,92,246,0.3)'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+          >
+            <Upload size={18} />
+            Import Bank CSV
+          </button>
+
         </div>
       </div>
-
-      {/* STATS CARDS */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(5, 1fr)',
-        gap: '16px',
-        marginBottom: '24px',
-      }} className="stats-grid">
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          borderLeft: '4px solid #1890ff',
-        }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#e6f7ff',
-            color: '#1890ff',
-          }}>
+      {/* ============================================================ */}
+      {/* 👇 NEW 3D ANIMATED STATS CARDS 👇 */}
+      {/* ============================================================ */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }} className="stats-grid">
+        
+        {/* Total Payments Card */}
+        <div 
+          style={{ 
+            background: 'white', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', 
+            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)', 
+            borderLeft: '4px solid #1890ff', cursor: 'pointer',
+            transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(24, 144, 255, 0.25), 0 10px 10px -5px rgba(24, 144, 255, 0.1)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}
+        >
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#e6f7ff', color: '#1890ff' }}>
             <FileText size={24} />
           </div>
           <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block' }}>{stats.total}</span>
-            <span style={{ fontSize: '14px', color: '#64748b' }}>Total Payments</span>
+            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{stats.total}</span>
+            <span style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Total Payments</span>
           </div>
         </div>
 
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          borderLeft: '4px solid #faad14',
-          cursor: 'pointer',
-        }}
-        onClick={() => { setFilterStatus('PENDING'); filterData(searchTerm, 'PENDING'); }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#fffbe6',
-            color: '#faad14',
-          }}>
+        {/* Pending Card */}
+        <div 
+          onClick={() => { setFilterStatus('PENDING'); filterData(searchTerm, 'PENDING'); }}
+          style={{ 
+            background: 'white', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', 
+            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)', 
+            borderLeft: '4px solid #faad14', cursor: 'pointer',
+            transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(250, 173, 20, 0.25), 0 10px 10px -5px rgba(250, 173, 20, 0.1)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}
+        >
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fffbe6', color: '#faad14' }}>
             <Clock size={24} />
           </div>
           <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block' }}>{stats.pending}</span>
-            <span style={{ fontSize: '14px', color: '#64748b' }}>Pending</span>
+            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{stats.pending}</span>
+            <span style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Pending</span>
           </div>
         </div>
 
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          borderLeft: '4px solid #52c41a',
-          cursor: 'pointer',
-        }}
-        onClick={() => { setFilterStatus('VERIFIED'); filterData(searchTerm, 'VERIFIED'); }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#f6ffed',
-            color: '#52c41a',
-          }}>
+        {/* Verified Card */}
+        <div 
+          onClick={() => { setFilterStatus('VERIFIED'); filterData(searchTerm, 'VERIFIED'); }}
+          style={{ 
+            background: 'white', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', 
+            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)', 
+            borderLeft: '4px solid #52c41a', cursor: 'pointer',
+            transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(82, 196, 26, 0.25), 0 10px 10px -5px rgba(82, 196, 26, 0.1)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}
+        >
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f6ffed', color: '#52c41a' }}>
             <CheckCircle size={24} />
           </div>
           <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block' }}>{stats.verified}</span>
-            <span style={{ fontSize: '14px', color: '#64748b' }}>Verified</span>
+            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{stats.verified}</span>
+            <span style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Verified</span>
           </div>
         </div>
 
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          borderLeft: '4px solid #ff4d4f',
-          cursor: 'pointer',
-        }}
-        onClick={() => { setFilterStatus('REJECTED'); filterData(searchTerm, 'REJECTED'); }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#fff1f0',
-            color: '#ff4d4f',
-          }}>
+        {/* Rejected Card */}
+        <div 
+          onClick={() => { setFilterStatus('REJECTED'); filterData(searchTerm, 'REJECTED'); }}
+          style={{ 
+            background: 'white', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', 
+            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)', 
+            borderLeft: '4px solid #ff4d4f', cursor: 'pointer',
+            transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(255, 77, 79, 0.25), 0 10px 10px -5px rgba(255, 77, 79, 0.1)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}
+        >
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff1f0', color: '#ff4d4f' }}>
             <XCircle size={24} />
           </div>
           <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block' }}>{stats.rejected}</span>
-            <span style={{ fontSize: '14px', color: '#64748b' }}>Rejected</span>
+            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{stats.rejected}</span>
+            <span style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Rejected</span>
           </div>
         </div>
 
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-          borderLeft: '4px solid #f59e0b',
-          cursor: 'pointer',
-        }}
-        onClick={() => { setFilterStatus('ROLLED_BACK'); filterData(searchTerm, 'ROLLED_BACK'); }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#fef3c7',
-            color: '#f59e0b',
-          }}>
+        {/* Rolled Back Card */}
+        <div 
+          onClick={() => { setFilterStatus('ROLLED_BACK'); filterData(searchTerm, 'ROLLED_BACK'); }}
+          style={{ 
+            background: 'white', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', 
+            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)', 
+            borderLeft: '4px solid #f59e0b', cursor: 'pointer',
+            transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(245, 158, 11, 0.25), 0 10px 10px -5px rgba(245, 158, 11, 0.1)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}
+        >
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fef3c7', color: '#f59e0b' }}>
             <RefreshCw size={24} />
           </div>
           <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block' }}>{stats.rolledback}</span>
-            <span style={{ fontSize: '14px', color: '#64748b' }}>Rolled Back</span>
+            <span style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{stats.rolledback}</span>
+            <span style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>Rolled Back</span>
           </div>
         </div>
       </div>
 
-      {/* TOTAL AMOUNT CARD */}
-      <div style={{
-        background: 'linear-gradient(135deg, #1e40af, #2563eb)',
-        borderRadius: '12px',
-        padding: '24px',
-        color: 'white',
-        marginBottom: '24px',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '16px',
-      }}>
-        <div>
-          <div style={{ fontSize: '14px', opacity: 0.8 }}>Total Amount Collected</div>
-          <div style={{ fontSize: '28px', fontWeight: 700 }}>
-            ETB {stats.totalAmount.toFixed(2)}
-          </div>
+      {/* TOTAL AMOUNT CARD - PREMIUM STYLE */}
+      <div 
+        className="premium-blue-card"
+        style={{ 
+          borderRadius: '16px', 
+          padding: '28px 32px', // Slightly more padding for breathing room
+          color: 'white', 
+          marginBottom: '24px', 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(3, 1fr)', 
+          gap: '16px',
+          zIndex: 1
+        }}
+      >
+        {/* Content wrapper to stay above the glowing circles */}
+        <div style={{ position: 'relative', zIndex: 2 }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: '#bfdbfe', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Amount Collected</div>
+          <div style={{ fontSize: '36px', fontWeight: 800, marginTop: '8px', textShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>ETB {stats.totalAmount.toFixed(2)}</div>
         </div>
-        <div>
-          <div style={{ fontSize: '14px', opacity: 0.8 }}>Today's Payments</div>
-          <div style={{ fontSize: '28px', fontWeight: 700 }}>{stats.todayPayments}</div>
+        
+        <div style={{ position: 'relative', zIndex: 2 }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: '#bfdbfe', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Today's Payments</div>
+          <div style={{ fontSize: '36px', fontWeight: 800, marginTop: '8px', textShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>{stats.todayPayments}</div>
         </div>
-        <div>
-          <div style={{ fontSize: '14px', opacity: 0.8 }}>This Week</div>
-          <div style={{ fontSize: '28px', fontWeight: 700 }}>{stats.weeklyPayments}</div>
+        
+        <div style={{ position: 'relative', zIndex: 2 }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: '#bfdbfe', textTransform: 'uppercase', letterSpacing: '0.5px' }}>This Week</div>
+          <div style={{ fontSize: '36px', fontWeight: 800, marginTop: '8px', textShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>{stats.weeklyPayments}</div>
         </div>
       </div>
 
+      {/* 👇 7-DAY REVENUE CHART 👇 */}
+      <div style={{ background: 'white', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', padding: '24px', marginBottom: '24px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <FileText size={18} color="#2563eb" /> 7-Day Revenue Trend
+        </h3>
+        
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: '200px', gap: '12px', paddingBottom: '10px', borderBottom: '2px solid #f1f5f9' }}>
+          {revenueData.days.map((day, index) => {
+            const heightPercent = (day.amount / revenueData.maxAmount) * 100;
+            return (
+              <div key={index} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', height: '100%', justifyContent: 'flex-end' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: day.amount > 0 ? '#2563eb' : '#94a3b8' }}>
+                  {day.amount > 0 ? `ETB ${day.amount}` : ''}
+                </span>
+                <div 
+                  style={{ 
+                    width: '100%', 
+                    maxWidth: '50px', 
+                    height: `${Math.max(heightPercent, 2)}%`, // min height 2% so bar is visible
+                    background: day.amount > 0 ? 'linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)' : '#e2e8f0',
+                    borderRadius: '6px 6px 0 0',
+                    transition: 'height 1s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                    animation: 'growUp 1s ease-out forwards'
+                  }}
+                />
+                <span style={{ fontSize: '12px', fontWeight: 500, color: '#64748b' }}>{day.date}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
       {/* ============================================================
           BATCH PROCESSING CONTROLS
           ============================================================ */}
@@ -1089,63 +1283,28 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
       </div>
 
       {/* SEARCH AND FILTER */}
-      <div style={{
-        background: 'white',
-        borderRadius: '12px',
-        boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
-        padding: '16px',
-        marginBottom: '16px',
-        display: 'flex',
-        gap: '16px',
-        flexWrap: 'wrap',
-        alignItems: 'center',
+      <div style={{ 
+        background: 'white', 
+        borderRadius: '12px', 
+        boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)', 
+        padding: '16px', 
+        marginBottom: '16px', 
+        display: 'flex', 
+        gap: '16px', 
+        flexWrap: 'wrap', 
+        alignItems: 'center' 
       }} className="search-filter-bar">
+        
+        {/* 1. Search Input */}
         <div style={{ flex: 1, position: 'relative', minWidth: '200px' }}>
-          <Search size={18} style={{
-            position: 'absolute',
-            left: '12px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: '#94a3b8',
-          }} />
-          <input
-            type="text"
-            placeholder="Search by Transaction ID, Student, or Bank..."
-            value={searchTerm}
-            onChange={handleSearch}
-            style={{
-              width: '100%',
-              padding: '10px 12px 10px 40px',
-              border: '2px solid #e2e8f0',
-              borderRadius: '8px',
-              fontSize: '14px',
-              transition: 'all 0.3s ease',
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.outline = 'none';
-              e.currentTarget.style.borderColor = '#3b82f6';
-              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = '#e2e8f0';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-          />
+          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+          <input type="text" placeholder="Search by Transaction ID, Student, or Bank..." value={searchTerm} onChange={handleSearch} style={{ width: '100%', padding: '10px 12px 10px 40px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', transition: 'all 0.3s ease' }} onFocus={(e) => { e.currentTarget.style.outline = 'none'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }} />
         </div>
+
+        {/* 2. Status Filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Filter size={18} />
-          <select
-            value={filterStatus}
-            onChange={(e) => handleFilter(e.target.value)}
-            style={{
-              padding: '10px 12px',
-              border: '2px solid #e2e8f0',
-              borderRadius: '8px',
-              fontSize: '14px',
-              background: 'white',
-              transition: 'all 0.3s ease',
-            }}
-          >
+          <select value={filterStatus} onChange={(e) => handleFilter(e.target.value)} style={{ padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', background: 'white', transition: 'all 0.3s ease' }}>
             <option value="all">All Status</option>
             <option value="PENDING">Pending</option>
             <option value="VERIFIED">Verified</option>
@@ -1154,6 +1313,26 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
             <option value="ROLLED_BACK">Rolled Back</option>
           </select>
         </div>
+
+        {/* 👇 3. PASTE THE DATE FILTER HERE 👇 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input 
+            type="date" 
+            value={startDate} 
+            onChange={(e) => { setStartDate(e.target.value); filterData(searchTerm, filterStatus, e.target.value, endDate); }} 
+            style={{ padding: '10px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#475569' }} 
+            title="Start Date"
+          />
+          <span style={{ color: '#94a3b8' }}>to</span>
+          <input 
+            type="date" 
+            value={endDate} 
+            onChange={(e) => { setEndDate(e.target.value); filterData(searchTerm, filterStatus, startDate, e.target.value); }} 
+            style={{ padding: '10px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#475569' }} 
+            title="End Date"
+          />
+        </div>
+
       </div>
 
       {/* PAYMENTS TABLE */}
@@ -1241,7 +1420,7 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
               </tr>
             </thead>
             <tbody>
-              {filteredPayments.length === 0 ? (
+              {filteredPayments.length === 0 && !isUsingSampleData ? (
                 <tr>
                   <td colSpan={batchMode ? 7 : 6} style={{
                     textAlign: 'center',
@@ -1250,12 +1429,10 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
                   }}>
                     <FileText size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
                     <p style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}>
-                      {payments.length === 0 ? 'No payment records found in database' : 'No payments match your search'}
+                      No payment records found in database
                     </p>
                     <p style={{ fontSize: '14px', marginBottom: '16px' }}>
-                      {payments.length === 0
-                        ? 'Students need to upload payment proofs first.'
-                        : 'Try adjusting your search or filters.'}
+                      Students need to upload payment proofs first.
                     </p>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
                       <button
@@ -1272,7 +1449,24 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
                         <RefreshCw size={16} style={{ display: 'inline', marginRight: '6px' }} />
                         Refresh
                       </button>
+
                     </div>
+                  </td>
+                </tr>
+              ) : filteredPayments.length === 0 && isUsingSampleData ? (
+                <tr>
+                  <td colSpan={batchMode ? 7 : 6} style={{
+                    textAlign: 'center',
+                    padding: '48px',
+                    color: '#94a3b8',
+                  }}>
+                    <FileText size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
+                    <p style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}>
+                      No payments match your search
+                    </p>
+                    <p style={{ fontSize: '14px' }}>
+                      Try adjusting your search or filters
+                    </p>
                   </td>
                 </tr>
               ) : (
@@ -1330,9 +1524,16 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
                         fontSize: '14px',
                       }}>
                         <div>
-                          <span style={{ fontWeight: 500, color: '#0f172a', display: 'block' }}>
+                          <button 
+                            onClick={() => setSelectedStudent(payment)}
+                            style={{ 
+                              fontWeight: 600, color: '#2563eb', display: 'block', background: 'none', 
+                              border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
+                              textDecoration: 'underline', textUnderlineOffset: '3px'
+                            }}
+                          >
                             {payment.student_name || 'Unknown'}
-                          </span>
+                          </button>
                           <span style={{ fontSize: '12px', color: '#94a3b8' }}>
                             ID: {payment.student_id || '—'}
                           </span>
@@ -1395,6 +1596,12 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
                               background: '#eff6ff',
                               color: '#3b82f6',
                             }}
+                          // 👇 ADD THESE TWO LINES HERE 👇
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+
+
+
                             title="View Details"
                           >
                             <Eye size={16} />
@@ -1411,10 +1618,31 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
                               background: '#fef3c7',
                               color: '#d97706',
                             }}
+                            // 👇 ADD THESE TWO LINES HERE 👇
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
                             title="View Receipt"
                           >
                             <FileImage size={16} />
                           </button>
+                                                   {/* 👇 NEW PRINT BUTTON 👇 */}
+                          <button
+                            onClick={() => handlePrintReceipt(payment)}
+                            style={{
+                              padding: '6px 10px',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              transition: 'all 0.3s ease',
+                              background: '#e2e8f0', // Light grey background
+                              color: '#475569',
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
+                            title="Print Official Receipt"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                          </button> 
                           
                           {payment.can_rollback && (
                             <button
@@ -1431,6 +1659,9 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
                                 background: '#fef3c7',
                                 color: '#d97706',
                               }}
+                              // 👇 ADD THESE TWO LINES HERE 👇
+                              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                              onMouseLeave={(e) => e.currentTarget.style.transform = 'none'}
                               title="Rollback Payment"
                             >
                               <RefreshCw size={16} />
@@ -2075,6 +2306,21 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
                   <Eye size={14} />
                   View Receipt
                 </button>
+                                          <button
+                            onClick={() => handlePrintReceipt(payment)}
+                            style={{
+                              padding: '6px 10px',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              transition: 'all 0.3s ease',
+                              background: '#f1f5f9',
+                              color: '#475569',
+                            }}
+                            title="Print Receipt"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                          </button>
               </div>
             </div>
 
@@ -2452,7 +2698,7 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
         </div>
       )}
 
-      {/* ============ RECEIPT MODAL ============ */}
+        {/* ============ RECEIPT MODAL ============ */}
       {showReceiptModal && (
         <div style={{
           position: 'fixed',
@@ -2541,6 +2787,95 @@ const handleVerifyPayment = async (paymentId, action, reason = '') => {
           </div>
         </div>
       )}
+
+            {/* ============ IMPORT CSV MODAL ============ */}
+      {showImportModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowImportModal(false)}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '32px', maxWidth: '500px', width: '90%', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ width: '64px', height: '64px', background: '#f3e8ff', color: '#8b5cf6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <Upload size={32} />
+            </div>
+            <h2 style={{ fontSize: '24px', fontWeight: 700, margin: '0 0 8px 0' }}>Import Bank Statement</h2>
+            <p style={{ color: '#64748b', marginBottom: '24px', fontSize: '14px' }}>
+              Upload the CSV file downloaded from your bank. The system will automatically verify matching pending student payments.
+            </p>
+            
+            <input 
+              type="file" 
+              accept=".csv" 
+              onChange={handleImportCSV}
+              disabled={importing}
+              style={{ 
+                display: 'block', width: '100%', padding: '12px', 
+                border: '2px dashed #cbd5e1', borderRadius: '8px', 
+                marginBottom: '24px', cursor: 'pointer', background: '#f8fafc' 
+              }} 
+            />
+
+            {importing && (
+              <p style={{ color: '#8b5cf6', fontWeight: 600 }}>
+                <RefreshCw size={16} className="spinning" style={{ display: 'inline', marginRight: '8px' }}/>
+                Processing CSV file, please wait...
+              </p>
+            )}
+
+            <button onClick={() => setShowImportModal(false)} style={{ padding: '10px 20px', background: '#f1f5f9', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer', width: '100%' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 👇 STUDENT FINANCIAL PROFILE PANEL 👇 */}
+      {selectedStudent && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 2000, display: 'flex', justifyContent: 'flex-end' }} onClick={() => setSelectedStudent(null)}>
+          <div 
+            style={{ 
+              background: 'white', width: '100%', maxWidth: '400px', height: '100%', 
+              boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', padding: '32px', 
+              animation: 'slideInRight 0.3s ease-out forwards', display: 'flex', flexDirection: 'column'
+            }} 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: 700, margin: 0 }}>Student Financials</h2>
+              <button onClick={() => setSelectedStudent(null)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
+            </div>
+
+            <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+              <div style={{ width: '80px', height: '80px', background: '#eff6ff', color: '#2563eb', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 700, margin: '0 auto 16px' }}>
+                {selectedStudent.student_name?.charAt(0) || 'S'}
+              </div>
+              <h3 style={{ fontSize: '22px', fontWeight: 700, margin: '0 0 4px 0' }}>{selectedStudent.student_name}</h3>
+              <p style={{ color: '#64748b', margin: 0 }}>ID: {selectedStudent.student_id || 'N/A'}</p>
+            </div>
+
+            <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0' }}>
+              <p style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, margin: '0 0 8px 0' }}>LAST TRANSACTION</p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ color: '#475569' }}>Amount:</span>
+                <strong style={{ color: '#16a34a' }}>ETB {parseFloat(selectedStudent.amount || 0).toFixed(2)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ color: '#475569' }}>Status:</span>
+                {getStatusBadge(selectedStudent.status, selectedStudent.is_rolled_back)}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#475569' }}>Date:</span>
+                <span style={{ color: '#0f172a', fontWeight: 500 }}>{new Date(selectedStudent.uploaded_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => { handlePrintReceipt(selectedStudent); setSelectedStudent(null); }}
+              style={{ width: '100%', padding: '14px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: 'auto' }}
+            >
+              <FileText size={18} /> Print Official Receipt
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

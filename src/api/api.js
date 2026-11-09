@@ -96,6 +96,36 @@ export const getMediaUrl = (mediaPath) => {
 };
 
 // ============================================================
+// SAFE EXAM BROWSER — download .seb file
+// ============================================================
+export const downloadSEBConfig = async (examId) => {
+    const response = await api.get(`/exams/${examId}/seb-config/`, {
+        responseType: 'blob',
+    });
+
+    // Extract filename from Content-Disposition if present
+    const disposition = response.headers?.['content-disposition'] || '';
+    let filename = `exam_${examId}.seb`;
+    const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+    if (match && match[1]) {
+        filename = decodeURIComponent(match[1]);
+    }
+
+    // Trigger browser download
+    const blob = new Blob([response.data], { type: 'application/octet-stream' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    return filename;
+};
+
+// ============================================================
 // REQUEST INTERCEPTOR - Add token to requests
 // ============================================================
 api.interceptors.request.use(

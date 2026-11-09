@@ -19,12 +19,27 @@ const PaymentModal = ({ isOpen, onClose, amount, onSuccess }) => {
   const [paymentStatus, setPaymentStatus] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  // Fetch payment methods on mount
+    // Fetch payment methods on mount AND check if returning from Chapa
   useEffect(() => {
     if (isOpen) {
       fetchPaymentMethods();
+      
+      // ✅ NEW: Check if we just returned from Chapa
+      const urlParams = new URLSearchParams(window.location.search);
+      const chapaRef = urlParams.get('ref') || localStorage.getItem('pending_chapa_ref');
+      
+      if (chapaRef) {
+        // Auto-verify the Chapa payment
+        setSelectedMethod({ id: 'chapa', name: 'Chapa' }); // Set method for verify call
+        verifyPayment(chapaRef);
+        localStorage.removeItem('pending_chapa_ref');
+        
+        // Clean the URL so the ?ref=... disappears
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
     }
   }, [isOpen]);
+
 
   const fetchPaymentMethods = async () => {
     try {
@@ -37,7 +52,6 @@ const PaymentModal = ({ isOpen, onClose, amount, onSuccess }) => {
       console.error('Failed to fetch payment methods:', error);
     }
   };
-
   const initializePayment = async () => {
     if (!selectedMethod) return;
     
@@ -49,6 +63,19 @@ const PaymentModal = ({ isOpen, onClose, amount, onSuccess }) => {
       });
       
       if (response.data.success) {
+        // 🟢 IF CHAPA: Redirect the user to Chapa's checkout page immediately
+        if (selectedMethod.id === 'chapa' && response.data.checkout_url) {
+          toast.success('Redirecting to Chapa payment gateway...');
+          
+          // Save the reference so we can verify when they return
+          localStorage.setItem('pending_chapa_ref', response.data.reference);
+          
+          // Redirect browser to Chapa
+          window.location.href = response.data.checkout_url;
+          return; // Stop executing further code
+        }
+
+        // 🟢 FOR MANUAL METHODS (Bank, Telebirr): Show Step 2
         setPaymentData(response.data);
         setStep(2);
         toast.success('Payment initialized!');
@@ -60,23 +87,24 @@ const PaymentModal = ({ isOpen, onClose, amount, onSuccess }) => {
     }
   };
 
-  const verifyPayment = async () => {
-    if (!paymentData) return;
+  const verifyPayment = async (referenceToVerify = null) => {
+    const ref = referenceToVerify || (paymentData && paymentData.reference);
+    if (!ref) return;
     
     setLoading(true);
     try {
       const response = await api.post('/payments/verify/', {
-        transaction_id: paymentData.reference,
-        method: selectedMethod.id
+        transaction_id: ref,
+        method: selectedMethod ? selectedMethod.id : 'chapa'
       });
       
       if (response.data.success) {
         setPaymentStatus(response.data);
         setStep(3);
-        if (response.data.status === 'PAID' || response.data.status === 'VERIFIED') {
-          toast.success('✅ Payment successful!');
-          if (onSuccess) onSuccess();
-        }
+        toast.success('✅ Payment verified successfully!');
+        if (onSuccess) onSuccess();
+      } else {
+        toast.error(response.data.message || 'Payment verification pending.');
       }
     } catch (error) {
       toast.error('Payment verification failed');
@@ -84,6 +112,7 @@ const PaymentModal = ({ isOpen, onClose, amount, onSuccess }) => {
       setLoading(false);
     }
   };
+
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);

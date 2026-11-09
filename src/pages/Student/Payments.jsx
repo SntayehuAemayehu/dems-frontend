@@ -100,6 +100,44 @@ useEffect(() => {
     
     loadEverything();
 }, [dispatch]);
+  // ✅ NEW: Catch the Chapa return URL and verify
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const chapaRef = urlParams.get('ref') || localStorage.getItem('pending_chapa_ref');
+    
+    if (chapaRef) {
+      const verifyChapa = async () => {
+        setUploading(true);
+        try {
+          const response = await api.post('/payments/verify/', {
+            transaction_id: chapaRef,
+            method: 'chapa'
+          });
+          
+          if (response.data.success) {
+            toast.success('✅ Chapa Payment Verified!');
+            setCurrentStep(4); // Jump to the final "Review & Submit" step
+            setSelectedMethodDetails({ id: 'chapa', name: 'Chapa', color: '#7c3aed' });
+            setFormData(prev => ({ ...prev, transaction_id: chapaRef, amount: response.data.amount }));
+            
+            // Refresh history and balance
+            dispatch(fetchPayments());
+            dispatch(fetchBalance());
+          } else {
+            toast.error(response.data.message || 'Payment pending or failed');
+          }
+        } catch (error) {
+          toast.error('Failed to verify Chapa payment');
+        } finally {
+          setUploading(false);
+          localStorage.removeItem('pending_chapa_ref');
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      };
+      
+      verifyChapa();
+    }
+  }, []); // Run once on mount
 // ✅ SAFETY NET: whenever paymentConfig changes (e.g., after admin update + refresh),
 // rebuild the payment methods so Telebirr picks up the fresh number
 useEffect(() => {
@@ -367,15 +405,14 @@ const fetchPaymentConfig = async () => {
   };
 
   const paymentsArray = Array.isArray(payments) ? payments : [];
-
   const handleMethodSelect = (methodId) => {
     const method = paymentMethodsList.find(m => m.id === methodId);
-    
     if (!method) return;
     
+    // ✅ Just set the selected method so the UI shows the instructions
     setSelectedMethodDetails(method);
     
-    // ✅ If bank transfer, set default bank
+    // Set form data for Bank/Telebirr
     if (methodId === 'bank_transfer' && method.banks && method.banks.length > 0) {
       const defaultBank = method.banks.find(b => b.is_default) || method.banks[0];
       setFormData({ 
@@ -393,6 +430,8 @@ const fetchPaymentConfig = async () => {
       });
     }
   };
+  
+
 
   // ✅ Handle bank selection change
   const handleBankChange = (e) => {
@@ -1631,14 +1670,40 @@ const renderBankSelection = () => {
                         </div>
                       ))}
                     </div>
-
                     <button
                       className="btn-primary"
                       style={{ marginTop: '8px' }}
-                      onClick={() => setCurrentStep(1)}
+                      onClick={async () => {
+                        if (selectedMethodDetails?.id === 'chapa') {
+                          // ✅ Trigger Chapa Redirect here
+                          setUploading(true);
+                          try {
+                            const response = await api.post('/payments/initialize/', {
+                              method: 'chapa',
+                              amount: formData.amount || feeAmount?.amount || 1000,
+                            });
+                            
+                            if (response.data.success && response.data.checkout_url) {
+                              toast.success('Redirecting to Chapa...');
+                              localStorage.setItem('pending_chapa_ref', response.data.reference);
+                              window.location.href = response.data.checkout_url;
+                            } else {
+                              toast.error(response.data.error || 'Failed to initialize Chapa');
+                            }
+                          } catch (error) {
+                            toast.error('Failed to connect to Chapa');
+                          } finally {
+                            setUploading(false);
+                          }
+                        } else {
+                          // ✅ For Bank, Telebirr, etc., just go to the next step
+                          setCurrentStep(1);
+                        }
+                      }}
                     >
-                      Next Step <ArrowRight size={18} />
+                      {uploading && selectedMethodDetails?.id === 'chapa' ? 'Redirecting...' : 'Next Step'} <ArrowRight size={18} />
                     </button>
+                    
                   </div>
                 )}
               </div>
@@ -1922,10 +1987,17 @@ const renderBankSelection = () => {
                     <span style={{ color: '#64748b', fontSize: '13px' }}>Amount</span>
                     <span style={{ fontWeight: 700, fontSize: '13px', color: '#2563eb' }}>ETB {formData.amount}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-                    <span style={{ color: '#64748b', fontSize: '13px' }}>Receipt</span>
-                    <span style={{ fontWeight: 500, fontSize: '13px', color: '#22c55e' }}><CheckCircle size={14} style={{ display: 'inline', marginRight: '4px' }} /> Uploaded</span>
-                  </div>
+                                {selectedMethodDetails?.id !== 'chapa' ? (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                      <span style={{ color: '#64748b', fontSize: '13px' }}>Receipt</span>
+                      <span style={{ fontWeight: 500, fontSize: '13px', color: '#22c55e' }}><CheckCircle size={14} style={{ display: 'inline', marginRight: '4px' }} /> Uploaded</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                      <span style={{ color: '#64748b', fontSize: '13px' }}>Status</span>
+                      <span style={{ fontWeight: 500, fontSize: '13px', color: '#22c55e' }}><CheckCircle size={14} style={{ display: 'inline', marginRight: '4px' }} /> Paid via Chapa</span>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{

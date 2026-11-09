@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { Clock, Calendar, FileText, CheckCircle, Eye, Loader } from 'lucide-react';
 import { fetchExams } from '../../store/slices/examSlice';
-import api, { getAllPages } from '../../api/api';
+import api, { getAllPages, downloadSEBConfig } from '../../api/api';
 import toast from 'react-hot-toast';
 
 const Exams = () => {
@@ -41,38 +41,57 @@ const Exams = () => {
     }
   };
 
+   // ============================================================
+  // ✅ SEB: Download .seb file instead of navigating directly
   // ============================================================
-// ✅ IMPROVED: Check face enrollment before going to exam
-// ============================================================
-const handleTakeExam = async (examId) => {
-  setCheckingFace(true);
-  
-  try {
-    const res = await api.get('/auth/face-status/');
-    console.log('Face status response:', res.data); // ← check this in console
+  const handleTakeExam = async (examId) => {
+    setCheckingFace(true);
 
-    const isEnrolled = res.data?.face_enrolled === true;
+    try {
+      // Check face enrollment first (preserved behavior)
+      const res = await api.get('/auth/face-status/');
+      const isEnrolled = res.data?.face_enrolled === true;
 
-    if (isEnrolled) {
-      // Already enrolled → go to exam
+      if (!isEnrolled) {
+        toast.error('Please enroll your face before taking the exam');
+        localStorage.setItem('pending_exam_id', examId);
+        navigate('/enroll-face');
+        return;
+      }
+
+      // Check if the exam has SEB config
+      const exam = localExams.find((e) => Number(e.id) === Number(examId));
+      if (exam && exam.seb_available) {
+        // SEB path — download the .seb file
+        toast.loading('Downloading Safe Exam Browser config...', { id: 'seb-dl' });
+        try {
+          const filename = await downloadSEBConfig(examId);
+          toast.success(
+            `Downloaded "${filename}". Open it with Safe Exam Browser to start the exam.`,
+            { id: 'seb-dl', duration: 6000 }
+          );
+        } catch (err) {
+          console.error('SEB download failed:', err);
+          toast.error(
+            err.response?.data?.error ||
+            'Could not download SEB config. Please contact your instructor.',
+            { id: 'seb-dl' }
+          );
+        }
+        return;
+      }
+
+      // Fallback: non-SEB exam → preserve original behavior
       navigate(`/exams/${examId}/start`);
-    } else {
-      // Not enrolled → go to face enrollment
-      toast.error('Please enroll your face before taking the exam');
-      // Save the examId so we can redirect back after enrollment
+    } catch (err) {
+      console.error('Face status check failed:', err);
+      toast.error('Could not check face enrollment status');
       localStorage.setItem('pending_exam_id', examId);
       navigate('/enroll-face');
+    } finally {
+      setCheckingFace(false);
     }
-  } catch (err) {
-    console.error('Face status check failed:', err);
-    toast.error('Could not check face enrollment status');
-    // Safer fallback
-    localStorage.setItem('pending_exam_id', examId);
-    navigate('/enroll-face');
-  } finally {
-    setCheckingFace(false);
-  }
-};
+  };
 
   const displayExams = localExams.length > 0 ? localExams : (Array.isArray(exams) ? exams : []);
   const publishedExams = displayExams.filter(e => e.is_published === true);
@@ -211,7 +230,7 @@ const handleTakeExam = async (examId) => {
                             <Loader size={16} className="spin" /> Checking...
                           </>
                         ) : (
-                          'Take Exam'
+                          'Download & Open in SEB'
                         )}
                       </button>
                     )}

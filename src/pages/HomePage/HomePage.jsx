@@ -245,11 +245,11 @@ const HomePage = () => {
     const containerStyle = {
         maxWidth: 1240,
         margin: '0 auto',
-        padding: '0 24px'
+        padding: '0 clamp(16px, 4vw, 24px)' 
     };
 
     const sectionStyle = {
-        padding: '100px 24px',
+        padding: 'clamp(40px, 8vw, 100px) clamp(16px, 4vw, 24px)',
         background: colors.background
     };
 
@@ -288,6 +288,20 @@ const HomePage = () => {
                     transform: translateY(-2px);
                     box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
                 }
+                               /* 👇 NEW 3D STATS CARD ANIMATION 👇 */
+                .dems-stat-card {
+                    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+                }
+                .dems-stat-card:hover {
+                    transform: translateY(-8px) scale(1.05);
+                    box-shadow: 0 20px 30px -10px rgba(79, 70, 229, 0.2);
+                    background: rgba(79, 70, 229, 0.03);
+                    border-radius: 16px;
+                }
+                /* 👆 END OF STATS CARD ANIMATION 👆 */
+
+
+
                 @keyframes demsShimmer {
                     0% { background-position: -200% center; }
                     100% { background-position: 200% center; }
@@ -354,8 +368,7 @@ const HomePage = () => {
                         <Col xs={24} lg={13}>
                             <FadeIn>
                                 <Title className="dems-shimmer" style={{
-                                    fontSize: 'clamp(2.5rem, 5vw, 4.2rem)',
-                                    lineHeight: 1.1,
+                                    fontSize: 'clamp(2rem, 5vw, 4.2rem)',                                     lineHeight: 1.1,
                                     fontWeight: 800,
                                     marginBottom: 24
                                 }}>
@@ -365,8 +378,7 @@ const HomePage = () => {
                             </FadeIn>
                             <FadeIn delay={0.1}>
                                 <Paragraph style={{
-                                    fontSize: 18,
-                                    lineHeight: 1.8,
+                                    fontSize: 'clamp(1rem, 2vw, 1.125rem)',                                    lineHeight: 1.8,
                                     color: colors.muted,
                                     maxWidth: 580,
                                     marginBottom: 36
@@ -382,7 +394,7 @@ const HomePage = () => {
                         <Col xs={24} lg={11}>
                             <FadeIn delay={0.2}>
                                 <TiltCard intensity={12}>
-                                    <Card bordered={false} style={{ ...cardStyle, padding: 28, borderRadius: 28, position: 'relative', overflow: 'hidden' }}>
+                                    <Card variant="borderless" style={{ ...cardStyle, padding: 'clamp(16px, 4vw, 28px)' , borderRadius: 28, position: 'relative', overflow: 'hidden' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 24 }}>
                                             <div style={{
                                                 width: 68,
@@ -461,12 +473,12 @@ const HomePage = () => {
                             ].map((item, index) => (
                                 <Col xs={12} md={6} key={index}>
                                     <StaggerItem>
-                                        <div style={{ textAlign: 'center', padding: '12px' }}>
+                                        <div className="dems-stat-card" style={{ textAlign: 'center', padding: '20px 12px', borderRadius: 16, cursor: 'pointer' }}>
                                             <Statistic
                                                 title={<span style={{ color: colors.muted, fontWeight: 600, fontSize: 14 }}>{item.title}</span>}
                                                 value={item.value}
                                                 prefix={item.icon}
-                                                valueStyle={{ color: colors.primary, fontWeight: 800, fontSize: '2.5rem' }}
+                                                styles={{ content: { color: colors.primary, fontWeight: 800, fontSize: 'clamp(1.5rem, 3vw, 2.5rem)' } }}
                                             />
                                         </div>
                                     </StaggerItem>
@@ -483,7 +495,7 @@ const HomePage = () => {
                     <RevealOnScroll>
                         <div style={{ textAlign: 'center', maxWidth: 700, margin: '0 auto 70px' }}>
                             <Tag color="purple">POWERFUL CAPABILITIES</Tag>
-                            <Title level={2} style={{ marginTop: 14, color: colors.text, fontSize: '2.5rem' }}>Engineered for Academic Excellence</Title>
+                            <Title level={2} style={{ marginTop: 14, color: colors.text, fontSize: 'clamp(1.8rem, 4vw, 2.5rem)' }}>Engineered for Academic Excellence</Title>
                             <Paragraph style={{ color: colors.muted, fontSize: 17 }}>
                                 Discover tools designed to make distance learning intuitive, efficient, and deeply engaging.
                             </Paragraph>
@@ -494,7 +506,7 @@ const HomePage = () => {
                             {features.map((feature, index) => (
                                 <Col xs={24} sm={12} lg={8} key={index}>
                                     <StaggerItem>
-                                        <Card bordered={false} className="dems-feature-card" style={cardStyle}>
+                                        <Card variant="borderless" className="dems-feature-card" style={cardStyle}>
                                             <div style={{
                                                 width: 60,
                                                 height: 60,
@@ -526,10 +538,10 @@ const HomePage = () => {
                 <div style={containerStyle}>
                     <RevealOnScroll>
                         <div style={{ textAlign: 'center', maxWidth: 700, margin: '0 auto 70px' }}>
-                            <Tag color="cyan">SEAMLESS ONBOARDING</Tag>
-                            <Title level={2} style={{ marginTop: 14, color: colors.text, fontSize: '2.5rem' }}>Your Journey in 4 Simple Steps</Title>
+                            <Tag color="purple">POWERFUL CAPABILITIES</Tag>
+                            <Title level={2} style={{ marginTop: 14, color: colors.text, fontSize: 'clamp(1.8rem, 4vw, 2.5rem)' }}>Engineered for Academic Excellence</Title>
                             <Paragraph style={{ color: colors.muted, fontSize: 17 }}>
-                                A clear roadmap from your first login to graduation success.
+                                Discover tools designed to make distance learning intuitive, efficient, and deeply engaging.
                             </Paragraph>
                         </div>
                     </RevealOnScroll>
@@ -561,8 +573,7 @@ const HomePage = () => {
                     <RevealOnScroll>
                         <div style={{ textAlign: 'center', maxWidth: 700, margin: '0 auto 70px' }}>
                             <Tag color="blue">SUPPORT CENTER</Tag>
-                            <Title level={2} style={{ marginTop: 14, color: colors.text, fontSize: '2.5rem' }}>Frequently Asked Questions</Title>
-                            <Paragraph style={{ color: colors.muted, fontSize: 17 }}>
+                            <Title level={2} style={{ marginTop: 14, color: colors.text, fontSize: 'clamp(1.8rem, 4vw, 2.5rem)' }}>Your Journey in 4 Simple Steps</Title>                            <Paragraph style={{ color: colors.muted, fontSize: 17 }}>
                                 Everything you need to know about navigating the portal.
                             </Paragraph>
                         </div>
@@ -630,8 +641,7 @@ const HomePage = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', gap: 20, flexWrap: 'wrap', marginBottom: 28 }}>
                             <div>
                                 <Tag color="blue">FROM THE DEMS COMMUNITY</Tag>
-                                <Title level={2} style={{ color: colors.text, fontSize: '2.25rem', margin: '14px 0 8px' }}>Latest News</Title>
-                                <Paragraph style={{ color: colors.muted, fontSize: 16, margin: 0 }}>Announcements, updates, and stories shared by our team.</Paragraph>
+<Title level={2} style={{ color: colors.text, fontSize: 'clamp(1.5rem, 4vw, 2.25rem)', margin: '14px 0 8px' }}>Latest News</Title>                                <Paragraph style={{ color: colors.muted, fontSize: 16, margin: 0 }}>Announcements, updates, and stories shared by our team.</Paragraph>
                             </div>
                             <Button type="link" onClick={openNewsPage} style={{ color: colors.primary, fontWeight: 700, padding: 0 }}>
                                 View all news <ArrowRightOutlined />
@@ -656,7 +666,7 @@ const HomePage = () => {
                                                 : article.image
                                                     ? <img alt="" src={getMediaUrl(article.image)} style={{ height: 190, objectFit: 'cover' }} />
                                                     : <div style={{ height: 190, display: 'grid', placeItems: 'center', background: isDarkMode ? '#1e293b' : '#eef2ff', color: colors.primary, fontSize: 34 }}>DEMS</div>}
-                                            style={{ flex: '0 0 320px', scrollSnapAlign: 'start', borderRadius: 16, overflow: 'hidden', background: colors.card, border: `1px solid ${colors.border}` }}
+                                            style={{ flex: '0 0 300px', scrollSnapAlign: 'start', borderRadius: 16, overflow: 'hidden', background: colors.card, border: `1px solid ${colors.border}` }}
                                             bodyStyle={{ padding: 20 }}
                                         >
                                             <Tag color="blue">{article.category || 'News'}</Tag>

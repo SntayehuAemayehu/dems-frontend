@@ -17,7 +17,6 @@ import toast from 'react-hot-toast';
 import { fetchCourses } from '../../store/slices/courseSlice';
 import api, { getAllPages } from '../../api/api';
 import CourseFilePreview from '../../components/CourseFilePreview';
-import CourseAIChat from '../../components/AI/CourseAIChat';
 import { downloadCourseFile, getCourseFileName, isOfficeDocument, openCourseFile } from '../../utils/courseFiles';
 
 const TeacherCourses = () => {
@@ -730,8 +729,6 @@ const TeacherCourses = () => {
                 </span>
               </div>
             </div>
-
-            <CourseAIChat courseId={selectedCourse.id} courseTitle={selectedCourse.title} />
 
             <button
               onClick={() => setShowViewModal(false)}

@@ -5,7 +5,7 @@ import {
   Clock, Calendar, FileText, CheckCircle, 
   ArrowLeft, Shield, AlertCircle, Award 
 } from 'lucide-react';
-import api from '../../api/api';
+import api, { downloadSEBConfig } from '../../api/api';
 
 const ExamDetails = () => {
   const { examId } = useParams();
@@ -13,6 +13,34 @@ const ExamDetails = () => {
   const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+    const [downloadingSEB, setDownloadingSEB] = useState(false);
+
+  const handleStartWithSEB = async () => {
+    setDownloadingSEB(true);
+    try {
+      if (exam?.seb_available) {
+        const filename = await downloadSEBConfig(exam.id);
+        alert(
+          `Downloaded "${filename}".\n\n` +
+          `Open this file with Safe Exam Browser to start the exam.\n\n` +
+          `If Safe Exam Browser is not installed, download it from:\n` +
+          `https://safeexambrowser.org/download_en.html`
+        );
+      } else {
+        // Non-SEB exam → original behavior
+        navigate(`/exams/${exam.id}/take`);
+      }
+    } catch (err) {
+      console.error('SEB download failed:', err);
+      alert(
+        err.response?.data?.error ||
+        'Could not download the SEB config. Please try again or contact your instructor.'
+      );
+    } finally {
+      setDownloadingSEB(false);
+    }
+  };
 
   useEffect(() => {
     fetchExamDetails();
@@ -242,35 +270,54 @@ const ExamDetails = () => {
           }}>
             <AlertCircle size={20} /> This exam has ended
           </div>
-        ) : (
-          <button
-            onClick={() => navigate(`/exams/${exam.id}/take`)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              background: '#22c55e',
-              color: 'white',
-              padding: '16px 48px',
-              borderRadius: '12px',
-              border: 'none',
-              fontSize: '18px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)',
-              transition: 'all 0.3s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(34, 197, 94, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(34, 197, 94, 0.3)';
-            }}
-          >
-            <FileText size={24} /> Start Exam Now
-          </button>
+                ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+            <button
+              onClick={handleStartWithSEB}
+              disabled={downloadingSEB}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                background: downloadingSEB ? '#94a3b8' : '#22c55e',
+                color: 'white',
+                padding: '16px 48px',
+                borderRadius: '12px',
+                border: 'none',
+                fontSize: '18px',
+                fontWeight: 600,
+                cursor: downloadingSEB ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseEnter={(e) => {
+                if (downloadingSEB) return;
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(34, 197, 94, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                if (downloadingSEB) return;
+                e.currentTarget.style.transform = 'none';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(34, 197, 94, 0.3)';
+              }}
+            >
+              <FileText size={24} />
+              {downloadingSEB ? 'Downloading...' : 'Download & Open in SEB'}
+            </button>
+            {exam?.seb_available && (
+              <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', margin: 0 }}>
+                A <strong>.seb</strong> file will download. Open it with Safe Exam Browser.{' '}
+                <a
+                  href="https://safeexambrowser.org/download_en.html"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: '#2563eb' }}
+                >
+                  Don't have SEB?
+                </a>
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>
