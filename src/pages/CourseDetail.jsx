@@ -12,7 +12,6 @@ import {
 import toast from 'react-hot-toast';
 import { fetchCourseDetail } from '../store/slices/courseSlice';
 import api, { getAllPages } from '../api/api';
-import CourseAIChat from '../components/AI/CourseAIChat';
 import CourseFilePreview from '../components/CourseFilePreview';
 import { downloadCourseFile, getCourseFileName, isOfficeDocument, openCourseFile } from '../utils/courseFiles';
 
@@ -296,10 +295,6 @@ const CourseDetail = () => {
           <span><CheckCircle size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} />{assignments.length} assignments</span>
         </div>
       </div>
-
-      {user?.role === 'STUDENT' && (
-        <CourseAIChat courseId={course.id} courseTitle={course.title} />
-      )}
 
       {/* Tabs */}
       <div style={{
