@@ -80,7 +80,7 @@ const AIAssistantWidget = () => {
         
         .ai-chat-window {
           position: fixed;
-          bottom: 110px;
+          bottom: 80px;
           left: 30px;
           width: 350px;
           height: 500px;
@@ -165,7 +165,7 @@ const AIAssistantWidget = () => {
         </div>
       )}
       
-      <button className="ai-float-btn" onClick={() => setIsOpen(!isOpen)}>
+      <button className="ai-float-btn" onClick={() => setIsOpen(!isOpen)} style={{ position: 'fixed', bottom: '30px', left: '30px' }}> 
         🤖
       </button>
     </>
