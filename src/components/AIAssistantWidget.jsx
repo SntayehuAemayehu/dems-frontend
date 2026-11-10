@@ -140,7 +140,7 @@ const AIAssistantWidget = () => {
             ))}
             {loading && (
               <div style={{ textAlign: 'left', color: '#64748b', fontSize: '13px', fontStyle: 'italic' }}>
-                AI is thinking...
+              Thinking...
               </div>
             )}
             <div ref={messagesEndRef} />
