@@ -464,32 +464,66 @@ const ChatWidget = () => {
 
   if (!isOpen) {
     return (
-      <button
-        onClick={() => setIsOpen(true)}
-        style={{
-          position: 'fixed', bottom: 24, right: 24, width: 62, height: 62,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-          color: '#fff', border: 'none', cursor: 'pointer',
-          boxShadow: '0 8px 24px rgba(37,99,235,0.4)',
-          zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-        title="Open chat"
-      >
-        <MessageSquare size={28} />
-        {unreadCount > 0 && (
-          <span style={{
-            position: 'absolute', top: -4, right: -4,
-            background: '#dc2626', color: '#fff',
-            fontSize: 11, fontWeight: 700,
-            minWidth: 20, height: 20, padding: '0 5px',
-            borderRadius: 10, display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-          }}>
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
-      </button>
+      <>
+        <style>{`
+          @keyframes float3D {
+            0% { transform: translateY(0px) translateX(0px) rotate(0deg) scale(1); }
+            25% { transform: translateY(-6px) translateX(-4px) rotate(-3deg) scale(1.02); }
+            50% { transform: translateY(0px) translateX(0px) rotate(0deg) scale(1); }
+            75% { transform: translateY(6px) translateX(4px) rotate(3deg) scale(1.02); }
+            100% { transform: translateY(0px) translateX(0px) rotate(0deg) scale(1); }
+          }
+          @keyframes pulseGlow {
+            0% { box-shadow: 0 0 15px rgba(37, 99, 235, 0.5); }
+            50% { box-shadow: 0 0 35px rgba(124, 58, 237, 0.8), 0 0 15px rgba(37, 99, 235, 0.6); }
+            100% { box-shadow: 0 0 15px rgba(37, 99, 235, 0.5); }
+          }
+          .chat-float-btn {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 62px;
+            height: 62px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            z-index: 999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* ✅ Added 3D floating and glowing animations */
+            animation: float3D 4s ease-in-out infinite, pulseGlow 2.5s ease-in-out infinite;
+            transition: transform 0.3s ease, filter 0.3s ease;
+          }
+          .chat-float-btn:hover {
+            filter: brightness(1.15);
+            animation-play-state: paused;
+            transform: scale(1.1);
+          }
+        `}</style>
+        <button
+          onClick={() => setIsOpen(true)}
+          className="chat-float-btn"
+          title="Open chat"
+        >
+          <MessageSquare size={28} />
+          {unreadCount > 0 && (
+            <span style={{
+              position: 'absolute', top: -4, right: -4,
+              background: '#dc2626', color: '#fff',
+              fontSize: 11, fontWeight: 700,
+              minWidth: 20, height: 20, padding: '0 5px',
+              borderRadius: 10, display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+            }}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+      </>
     );
   }
 

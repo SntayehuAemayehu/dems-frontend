@@ -19,9 +19,10 @@ import api, { getAllPages } from '../../api/api';
 import CourseFilePreview from '../../components/CourseFilePreview';
 import { downloadCourseFile, getCourseFileName, isOfficeDocument, openCourseFile } from '../../utils/courseFiles';
 
-const TeacherCourses = () => {
+  const TeacherCourses = () => {
   const dispatch = useDispatch();
-  const { courses = [], isLoading = false } = useSelector((state) => state.courses || { courses: [] });
+  const [courses, setCourses] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { user } = useSelector((state) => state.auth || {});
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
@@ -56,21 +57,35 @@ const TeacherCourses = () => {
   useEffect(() => {
     fetchTeacherCourses();
   }, []);
-
+ 
   const fetchTeacherCourses = async () => {
     try {
-      await dispatch(fetchCourses());
-      console.log('📚 All courses:', courses);
-      console.log('👤 Current user:', user);
+      setIsLoading(true);
+      console.log('🔄 Fetching courses for teacher:', user?.id);
+      
+      const response = await api.get('/courses/');
+      let allCourses = [];
+      
+      if (response.data && response.data.results) {
+        allCourses = response.data.results;
+      } else if (Array.isArray(response.data)) {
+        allCourses = response.data;
+      }
+
+      // ✅ FIX: Strict matching, then set the state
+      const filteredCourses = allCourses.filter(c => Number(c.instructor) === Number(user?.id));
+      setCourses(filteredCourses);
+      
+      console.log('✅ Teacher Courses Loaded:', filteredCourses);
     } catch (error) {
-      console.error('Failed to fetch courses:', error);
+      console.error('❌ Failed to fetch courses:', error);
+      toast.error('Failed to load courses');
+      setCourses([]);
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  // Filter courses created by this teacher
-  const myCourses = Array.isArray(courses) ? courses.filter(c => c.instructor === user?.id) : [];
-
-  // ============ MATERIAL FUNCTIONS ============
+  const myCourses = courses;
   const handleUploadMaterial = async (e) => {
     e.preventDefault();
     if (!materialData.file) {

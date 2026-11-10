@@ -314,7 +314,7 @@ const DeptDashboard = () => {
         setFilteredStudents([]);
       }
 
-      // TEACHERS
+          // TEACHERS
       try {
         const response = await api.get('/auth/dept-head/teachers/');
         let data = response.data;
@@ -325,18 +325,26 @@ const DeptDashboard = () => {
             email: t.email || t.user?.email || '',
             is_verified: t.is_verified || false
           }));
+          
           setTeachers(processedTeachers);
           setFilteredTeachers(processedTeachers);
+          
+          // ✅ FIX: Calculate stats based ONLY on the actual returned array length
           setStats(prev => ({
             ...prev,
-            totalTeachers: data.count || data.results.length || 0,
-            verifiedTeachers: processedTeachers.filter(t => t.is_verified).length || 0
+            totalTeachers: processedTeachers.length,
+            verifiedTeachers: processedTeachers.filter(t => t.is_verified).length
           }));
+        } else {
+           setTeachers([]);
+           setFilteredTeachers([]);
+           setStats(prev => ({ ...prev, totalTeachers: 0, verifiedTeachers: 0 }));
         }
       } catch (e) {
         console.warn('/auth/dept-head/teachers/ failed:', e.message);
         setTeachers([]);
         setFilteredTeachers([]);
+        setStats(prev => ({ ...prev, totalTeachers: 0, verifiedTeachers: 0 }));
       }
 
       // COURSES
@@ -541,15 +549,15 @@ const DeptDashboard = () => {
 
   // ============================================================
   // HELPERS
-  // ============================================================
-  const getTeacherOptions = () => {
-    if (teachers.length === 0) {
-      return <option value="" disabled>No teachers available</option>;
-    }
-    return teachers.map(t => (
-      <option key={t.id} value={String(t.id)}>{t.full_name}</option>
-    ));
-  };
+ const getTeacherOptions = () => {
+  if (teachers.length === 0) {
+    return <option value="" disabled>No teachers available</option>;
+  }
+  return teachers.map(t => (
+    // ✅ FIX: Use t.user_id here as well
+    <option key={t.user_id} value={String(t.user_id)}>{t.full_name}</option>
+  ));
+};
 
   const getCourseOptions = () => {
     const approvedCourses = courses.filter(c => c.is_approved);
@@ -1159,9 +1167,7 @@ const DeptDashboard = () => {
                   </p>
                 </div>
               </div>
-            </div>
-
-            <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+               <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <button className={`sidebar-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
                 <LayoutDashboard size={20} /> Overview
               </button>
@@ -1169,10 +1175,13 @@ const DeptDashboard = () => {
                 <Users size={20} /> Students
                 <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#94a3b8' }}>{stats.totalStudents}</span>
               </button>
+              
+              {/* ✅ FIX: Changed stats.totalTeachers to filteredTeachers.length */}
               <button className={`sidebar-item ${activeTab === 'teachers' ? 'active' : ''}`} onClick={() => setActiveTab('teachers')}>
                 <UserCheck size={20} /> Teachers
-                <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#94a3b8' }}>{stats.totalTeachers}</span>
+                <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#94a3b8' }}>{filteredTeachers.length}</span>
               </button>
+              
               <button className={`sidebar-item ${activeTab === 'courses' ? 'active' : ''}`} onClick={() => setActiveTab('courses')}>
                 <BookOpen size={20} /> Courses
                 <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#94a3b8' }}>{stats.totalCourses}</span>
@@ -1185,7 +1194,10 @@ const DeptDashboard = () => {
                 <ClipboardList size={20} /> Enrollments
                 <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#94a3b8' }}>{stats.totalEnrollments}</span>
               </button>
-            </nav>
+            </nav>         
+            </div>
+      
+
           </div>
         </div>
 
@@ -1354,8 +1366,7 @@ const DeptDashboard = () => {
               {[
                 { id: 'overview', label: 'Overview', icon: LayoutDashboard },
                 { id: 'students', label: `Students (${stats.totalStudents})`, icon: Users, badge: stats.pendingStudents },
-                { id: 'teachers', label: `Teachers (${stats.totalTeachers})`, icon: UserCheck },
-                { id: 'courses', label: `Courses (${stats.totalCourses})`, icon: BookOpen, badge: stats.pendingCourses },
+                { id: 'teachers', label: `Teachers (${filteredTeachers.length})`, icon: UserCheck },                { id: 'courses', label: `Courses (${stats.totalCourses})`, icon: BookOpen, badge: stats.pendingCourses },
                 { id: 'exams', label: `Exams (${stats.totalExams})`, icon: FileText },
                 { id: 'enrollments', label: `Enrollments (${stats.totalEnrollments})`, icon: ClipboardList },
               ].map(tab => (
@@ -1642,7 +1653,7 @@ const DeptDashboard = () => {
                       Teachers in Department
                     </h3>
                     <p style={{ fontSize: '14px', color: '#64748b', margin: '4px 0 0 0' }}>
-                      {teachers.length} teachers • {stats.verifiedTeachers} verified
+                      {filteredTeachers.length} teachers • {stats.verifiedTeachers} verified
                     </p>
                   </div>
                 </div>
@@ -2170,17 +2181,19 @@ const DeptDashboard = () => {
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>Instructor *</label>
-                  <select
-                    required
-                    value={courseForm.instructor}
-                    onChange={(e) => setCourseForm({ ...courseForm, instructor: e.target.value })}
-                    style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}
-                  >
-                    <option value="">Select Instructor</option>
-                    {teachers.length > 0 ? teachers.map(t => (
-                      <option key={t.id} value={t.id}>{t.full_name}</option>
-                    )) : <option value="" disabled>No teachers available</option>}
-                  </select>
+
+<select
+  required
+  value={courseForm.instructor}
+  onChange={(e) => setCourseForm({ ...courseForm, instructor: e.target.value })}
+  style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '16px', background: 'white' }}
+>
+  <option value="">Select Instructor</option>
+  {teachers.length > 0 ? teachers.map(t => (
+    // ✅ FIX: Use t.user_id instead of t.id so the backend gets the actual User ID
+    <option key={t.user_id} value={t.user_id}>{t.full_name}</option>
+  )) : <option value="" disabled>No teachers available</option>}
+</select>
                 </div>
               </div>
 

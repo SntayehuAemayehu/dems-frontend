@@ -83,7 +83,7 @@ const TeacherDashboard = () => {
   });
 
   // ============ FETCH DATA ============
-  const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setRefreshing(true);
@@ -93,14 +93,20 @@ const TeacherDashboard = () => {
       // Fetch courses taught by this teacher
       const coursesData = await getAllPages('/courses/');
       
-      // Filter courses where this user is the instructor
-      const teacherCourses = coursesData.filter(c => c.instructor === user?.id);
+      // ✅ FIX: Ensure we only get courses where THIS user is the instructor
+      // This handles courses created by Dept Head and assigned to this teacher
+      const teacherCourses = coursesData.filter(
+        (c) => Number(c.instructor) === Number(user?.id)
+      );
       setCourses(teacherCourses);
       
       // Get all submissions for teacher's courses
       const allSubmissions = [];
       const allAssignments = [];
-      let totalStudents = 0;
+      
+      // ✅ FIX: Use a Set to track unique student IDs to prevent double-counting
+      const uniqueStudentIds = new Set(); 
+      
       let pendingExams = 0;
       let pendingAssignments = 0;
       let gradedExams = 0;
@@ -116,7 +122,12 @@ const TeacherDashboard = () => {
           } else if (Array.isArray(enrollRes.data)) {
             enrollData = enrollRes.data;
           }
-          totalStudents += enrollData.filter(e => e.status === 'ACTIVE').length;
+          
+          // ✅ FIX: Add unique student IDs instead of raw counting
+          enrollData.filter(e => e.status === 'ACTIVE').forEach(e => {
+            if (e.student) uniqueStudentIds.add(e.student);
+          });
+          
         } catch (e) {
           console.warn(`Could not fetch enrollments for course ${course.id}`);
         }
@@ -235,7 +246,8 @@ const TeacherDashboard = () => {
       
       setStats({
         totalCourses: teacherCourses.length,
-        totalStudents: totalStudents,
+        // ✅ FIX: Use the size of the Set for accurate unique student count
+        totalStudents: uniqueStudentIds.size, 
         pendingExams: pendingExams,
         pendingAssignments: pendingAssignments,
         gradedExams: gradedExams,
@@ -245,6 +257,7 @@ const TeacherDashboard = () => {
       
       console.log('✅ Teacher data loaded:', {
         courses: teacherCourses.length,
+        totalStudents: uniqueStudentIds.size,
         examSubmissions: allSubmissions.length,
         assignmentSubmissions: allAssignments.length,
         pendingExams,

@@ -333,7 +333,7 @@ const TeacherExams = () => {
     }
   }, []);
 
-  const handleCreateExam = async (e) => {
+   const handleCreateExam = async (e) => {
     e.preventDefault();
     setCreatingExam(true);
     try {
@@ -342,6 +342,8 @@ const TeacherExams = () => {
         ...formData,
         exam_type: TYPE_MAP[formData.title] || 'MID',
         created_by: user?.id,
+        // ✅ FIX: Ensure the course ID is explicitly passed (selected from the teacher's assigned courses)
+        course: formData.course || selectedCourse?.id,
       };
       if (isEditing) {
         await api.patch(`/exams/${editExamId}/`, payload);
@@ -358,7 +360,7 @@ const TeacherExams = () => {
     } finally {
       setCreatingExam(false);
     }
-  };
+  }; 
 
   const resetForm = () => {
     setIsEditing(false);
