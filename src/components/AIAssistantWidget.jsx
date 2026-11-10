@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import api from '../api/api';
 
 const AIAssistantWidget = () => {
@@ -6,6 +6,12 @@ const AIAssistantWidget = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  // ✅ Auto-scroll to the bottom when a new message arrives
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
   const sendMessage = async () => {
     if (!input.trim()) return;
@@ -26,15 +32,19 @@ const AIAssistantWidget = () => {
     }
   };
 
+  // ✅ Clear Chat Function
+  const clearChat = () => {
+    setMessages([]);
+  };
+
   return (
     <>
-      {/* ✅ AMAZING 3D FLOATING ANIMATION CSS */}
       <style>{`
         @keyframes float3D {
           0% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-          25% { transform: translateY(-8px) translateX(-4px) rotate(3deg); }
+          25% { transform: translateY(-6px) translateX(-3px) rotate(2deg); }
           50% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-          75% { transform: translateY(8px) translateX(4px) rotate(-3deg); }
+          75% { transform: translateY(6px) translateX(3px) rotate(-2deg); }
           100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
         }
         
@@ -47,17 +57,17 @@ const AIAssistantWidget = () => {
         .ai-float-btn {
           position: fixed;
           bottom: 30px;
-          left: 30px; /* ✅ MOVED TO LEFT TO AVOID THE OTHER CHAT ICON */
+          left: 30px;
           width: 70px;
           height: 70px;
           border-radius: 50%;
-          background: transparent; /* ✅ NO BLUE BACKGROUND */
+          background: transparent;
           border: none;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 40px; 
+          font-size: 45px; 
           animation: float3D 4s ease-in-out infinite, pulseGlow 2s ease-in-out infinite;
           z-index: 1000;
           transition: filter 0.3s ease;
@@ -71,12 +81,12 @@ const AIAssistantWidget = () => {
         .ai-chat-window {
           position: fixed;
           bottom: 110px;
-          left: 30px; /* ✅ Opens from the left */
+          left: 30px;
           width: 350px;
           height: 500px;
           background: white;
           border-radius: 16px;
-          box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+          box-shadow: 0 10px 30px rgba(0,0,0,0.15);
           display: flex;
           flex-direction: column;
           z-index: 1000;
@@ -85,12 +95,24 @@ const AIAssistantWidget = () => {
         }
       `}</style>
 
-      {/* Chat Window */}
       {isOpen && (
         <div className="ai-chat-window">
-          <div style={{ padding: '16px', background: '#2563eb', color: 'white', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>🤖 DEMS AI Assistant</span>
-            <button onClick={() => setIsOpen(false)} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '20px', cursor: 'pointer' }}>×</button>
+          {/* ✅ HEADER WITH CLEAR CHAT BUTTON */}
+          <div style={{ padding: '12px 16px', background: '#2563eb', color: 'white', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '20px' }}>🤖</span>
+              <span>DEMS AI Assistant</span>
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={clearChat} 
+                title="Clear Chat"
+                style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+              >
+                🗑️ Clear
+              </button>
+              <button onClick={() => setIsOpen(false)} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '24px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
           </div>
           
           <div style={{ flex: 1, padding: '16px', overflowY: 'auto', background: '#f8fafc' }}>
@@ -110,6 +132,8 @@ const AIAssistantWidget = () => {
                   display: 'inline-block',
                   maxWidth: '85%',
                   fontSize: '14px',
+                  whiteSpace: 'pre-wrap', // ✅ Keeps tables and newlines formatted nicely
+                  textAlign: 'left',
                   boxShadow: msg.role === 'ai' ? '0 2px 5px rgba(0,0,0,0.05)' : 'none'
                 }}>{msg.text}</span>
               </div>
@@ -119,6 +143,7 @@ const AIAssistantWidget = () => {
                 AI is thinking...
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           <div style={{ padding: '12px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '8px', background: 'white' }}>
@@ -140,7 +165,6 @@ const AIAssistantWidget = () => {
         </div>
       )}
       
-      {/* Floating Button (No Background, Just the Animated Emoji/Icon) */}
       <button className="ai-float-btn" onClick={() => setIsOpen(!isOpen)}>
         🤖
       </button>
