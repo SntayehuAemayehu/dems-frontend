@@ -80,7 +80,7 @@ import Grading from './pages/teacher/Grading';
 import AnimatedBackground from './components/Motion/AnimatedBackground';
 import { AnimatePresence } from 'motion/react';
 import { useLocation } from 'react-router-dom';
-
+import AIAssistantWidget from './components/AIAssistantWidget';
 // ✅ Small helper component for the redirect (needed because examId is not in scope)
 const RedirectToStartExam = () => {
   const { examId } = useParams();
@@ -279,6 +279,7 @@ const AppContent = () => {
           {/* ============ REAL CHAT WIDGET ============ */}
           <ChatWidget />
           </SessionTimeout>
+          <AIAssistantWidget />
           <AnimatedBackground dark={isDarkMode} density={60} />
         </Router>
         
