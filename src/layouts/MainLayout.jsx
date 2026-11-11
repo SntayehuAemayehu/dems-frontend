@@ -153,7 +153,7 @@ const MainLayout = () => {
         position: 'fixed',
         insetY: 0,
         left: 0,
-        zIndex: 30,
+        zIndex: 9999,
         width: '16rem',
         background: sidebarBg,
         boxShadow: shadow,
@@ -399,7 +399,7 @@ const MainLayout = () => {
           boxShadow: shadow,
           position: 'sticky',
           top: 0,
-          zIndex: 10,
+          zIndex: 9998,
           borderBottom: `1px solid ${headerBorder}`,
           transition: 'all 0.3s ease',
         }}>

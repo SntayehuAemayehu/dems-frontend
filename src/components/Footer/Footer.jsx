@@ -56,10 +56,11 @@ const Footer = () => {
   ];
 
   const socialLinks = [
-    { name: 'Facebook', url: 'https://facebook.com', icon: <FacebookOutlined /> },
-    { name: 'YouTube', url: 'https://youtube.com', icon: <YoutubeOutlined /> },
-    { name: 'LinkedIn', url: 'https://linkedin.com', icon: <LinkedinOutlined /> },
-    { name: 'Instagram', url: 'https://instagram.com', icon: <InstagramOutlined /> },
+    { name: 'Website', url: 'https://mkau.edu.et/', icon: <GlobalOutlined /> }, // ✅ Add this line
+    { name: 'Facebook', url: 'https://www.facebook.com/Mekdela.Amba.University/', icon: <FacebookOutlined /> },
+    { name: 'YouTube', url: 'https://lnkd.in/gakMRDpG', icon: <YoutubeOutlined /> },
+    { name: 'LinkedIn', url: 'https://www.linkedin.com/company/mekdela-amba-university-mau', icon: <LinkedinOutlined /> },
+    { name: 'Telegram', url: 'https://lnkd.in/dYc8da4i', icon: <SendOutlined /> }, 
   ];
 
   const handleSubscribe = (e) => {
@@ -410,29 +411,32 @@ const Footer = () => {
               >
                 Terms &amp; Policy
               </Link>
-              
-              <button
+               <button
                 type="button"
                 onClick={handleBackToTop}
+                title="Back to top"
+                aria-label="Back to top"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
+                  justifyContent: 'center',
                   background: colors.card,
                   border: `1px solid ${colors.border}`,
-                  borderRadius: '12px',
-                  padding: '10px 16px',
+                  borderRadius: '50%', // ✅ Make it a perfect circle
+                  width: '44px',       // ✅ Larger button
+                  height: '44px',      // ✅ Larger button
                   color: colors.heading,
                   cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: 600,
+                  fontSize: '20px',    // ✅ Larger icon
+                  fontWeight: 900,     // ✅ Bolder icon
                   transition: 'all 0.2s ease',
+                  padding: 0,          // ✅ Remove text padding
                 }}
                 className="dems-top-btn"
               >
-                Back to top
-                <ArrowUpOutlined />
-              </button>
+                <ArrowUpOutlined style={{ fontSize: '22px', fontWeight: 900 }} />
+              </button>             
+
             </div>
           </div>
         </div>

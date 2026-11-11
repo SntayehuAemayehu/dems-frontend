@@ -37,7 +37,7 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
   const dispatch = useDispatch();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const darkModeContext = useDarkMode();
-  
+  const [isSpinning, setIsSpinning] = useState(false);
   const isDarkMode =
     propDarkMode !== undefined
       ? propDarkMode
@@ -68,11 +68,6 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
       path: '/',
       icon: <Home size={17} />,
     },
-    // {
-    //   name: 'Courses',
-    //   path: '/courses',
-    //   icon: <BookOpen size={17} />,
-    // },
     {
       name: 'About',
       path: '/terms-and-policy',
@@ -130,7 +125,7 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
       ? 'rgba(255, 255, 255, 0.06)'
       : 'rgba(79, 70, 229, 0.04)',
     mobileBackground: isDarkMode ? '#0b0f19' : '#ffffff',
-    accent: '#4f46e5', // Rich Indigo Accent
+    accent: '#4f46e5',
     accentGradient: 'linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)',
   };
 
@@ -209,14 +204,9 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
     borderRadius: '12px',
     textDecoration: 'none',
     fontSize: '14px',
-    fontWeight: 500,
-    color: isActive ? colors.accent : colors.muted,
-    background: isActive
-      ? isDarkMode
-        ? 'rgba(79, 70, 229, 0.15)'
-        : 'rgba(79, 70, 229, 0.08)'
-      : 'transparent',
-    transition: 'all 0.25s ease',
+    fontWeight: 600, // ✅ Change from 500 to 600 (Bold)
+    color: colors.text, // ✅ Change from colors.muted to colors.text (Black/Dark)
+    background: 'transparent', 
   });
 
   const mobileLinkStyle = ({ isActive }) => ({
@@ -240,14 +230,36 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
     <>
       <header style={headerStyle}>
         <style>{`
+                 .dems-header-link {
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform: translateZ(0); /* Enables 3D acceleration */
+          }
+
           .dems-header-link:hover {
-            color: ${colors.accent} !important;
-            background: ${colors.hover} !important;
+            color: #3b82f6 !important; /* ✅ Turns text Blue */
+            background: rgba(59, 130, 246, 0.1) !important; /* ✅ Light Blue background */
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 10px 20px -10px rgba(59, 130, 246, 0.4); /* ✅ Blue glow shadow */
+          }
+          .dems-header-button {
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform: translateZ(0);
           }
           .dems-header-button:hover {
             background: ${colors.hover} !important;
-            transform: scale(1.05);
+            transform: translateY(-3px) scale(1.1) rotate(3deg); /* ✅ 3D Float & Tilt */
+            box-shadow: 0 12px 20px -10px ${colors.accent}50; /* ✅ 3D Glow */
           }
+
+          .dems-glow-btn {
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform: translateZ(0);
+          }
+          .dems-glow-btn:hover {
+            opacity: 0.95;
+            transform: translateY(-4px) scale(1.05); /* ✅ 3D Float */
+            box-shadow: 0 15px 25px -10px rgba(79, 70, 229, 0.6), 0 0 20px rgba(79, 70, 229, 0.2); /* ✅ Intense 3D Glow */
+          }   
           .dems-glow-btn:hover {
             opacity: 0.92;
             transform: translateY(-2px);
@@ -256,6 +268,18 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
           .dems-profile-dropdown {
             animation: demsDropdown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           }
+          @keyframes spin360 {
+            0% { transform: rotate(0deg); border-color: #4f46e5; color: #4f46e5; }
+            25% { border-color: #8b5cf6; color: #8b5cf6; }
+            50% { border-color: #ec4899; color: #ec4899; }
+            75% { border-color: #f59e0b; color: #f59e0b; }
+            100% { transform: rotate(360deg); border-color: #4f46e5; color: #4f46e5; }
+          }
+          .dems-toggle-spin {
+            animation: spin360 3s cubic-bezier(0.4, 0, 0.2, 1);
+          }
+
+
           @keyframes demsDropdown {
             from {
               opacity: 0;
@@ -288,7 +312,7 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
             margin: '0 auto',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'space-between', // ✅ Keep Logo left, group right
             gap: '20px',
           }}
         >
@@ -331,7 +355,7 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
             </div>
             <div>
               <div
-                className="dems-logo-name dems-hide-mobile"  // 👈 Added hide class
+                className="dems-logo-name dems-hide-mobile"
                 style={{
                   color: colors.text,
                   fontSize: '16px',
@@ -343,7 +367,7 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
                 MEKDELA AMBA UNIVERSITY
               </div>
               <div
-                className="dems-hide-mobile" // 👈 Added hide class
+                className="dems-hide-mobile"
                 style={{
                   color: colors.muted,
                   fontSize: '11px',
@@ -364,8 +388,8 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '6px',
-              flex: 1,
+              gap: '12px', // ✅ Equal gap
+              marginLeft: 'auto', // ✅ Pushes nav to the right
             }}
           >
             {publicLinks.map((link) => (
@@ -380,26 +404,17 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
                 {link.name}
               </NavLink>
             ))}
-            {/* {isAuthenticated && (
-              <NavLink
-                to={dashboardPath}
-                style={navLinkStyle}
-                className="dems-header-link"
-              >
-                <LayoutDashboard size={17} />
-                Dashboard
-              </NavLink>
-            )} */}
           </nav>
-          {/* Unified Actions Container */}
+           {/* Unified Actions Container */}
           <div
             className="dems-header-actions"
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '10px',
+              gap: '12px', // ✅ Equal gap
             }}
-          >
+          >         
+
             {/* Desktop Only: Notification Bell & News Icon */}
             {isAuthenticated && (
               <div className="dems-desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -430,32 +445,10 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
               </div>
             )}
 
-            {/* Dark Mode Toggle (Always visible on all devices) */}
-            <button
-              type="button"
-              onClick={toggleDarkMode}
-              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-              aria-label="Toggle dark mode"
-              className="dems-header-button"
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '12px',
-                border: `1px solid ${colors.border}`,
-                background: colors.hover,
-                color: isDarkMode ? '#fbbf24' : '#4f46e5',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-              }}
-            >
-              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
 
-            {/* Desktop Only: Auth (Login/Register) or User Profile */}
-            <div className="dems-desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+
+            {/* Desktop Only: Auth or Profile */}
+             <div className="dems-desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {isAuthenticated ? (
                 <div style={{ position: 'relative' }}>
                   <button
@@ -594,21 +587,81 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
                   <Link
                     to="/login"
                     className="dems-header-link"
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '12px', color: colors.text, textDecoration: 'none', fontSize: '14px', fontWeight: 600 }}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px', 
+                      padding: '10px 16px', // ✅ Match Home/About
+                      borderRadius: '12px', 
+                      color: colors.text, // ✅ Black/Dark
+                      textDecoration: 'none', 
+                      fontSize: '14px', 
+                      fontWeight: 600 // ✅ Bold
+                    }}
                   >
                     <LogIn size={17} /> Login
                   </Link>
                   <Link
                     to="/register"
-                    className="dems-glow-btn"
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '11px 22px', borderRadius: '12px', background: colors.accentGradient, color: '#ffffff', textDecoration: 'none', fontSize: '14px', fontWeight: 600, boxShadow: '0 4px 14px rgba(79,70,229,0.3)', transition: 'all 0.25s ease' }}
+                    className="dems-header-link" // ✅ Changed from dems-glow-btn to dems-header-link
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px', 
+                      padding: '10px 16px', 
+                      borderRadius: '12px', 
+                      color: colors.text, // ✅ Same black/dark text color
+                      textDecoration: 'none', 
+                      fontSize: '14px', 
+                      fontWeight: 600 
+                    }}
                   >
-                    <UserPlus size={17} /> Get Started
+                    <UserPlus size={17} /> Register
                   </Link>
+
                 </>
               )}
             </div>
-
+                       {/* Dark Mode Toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                toggleDarkMode();
+                setIsSpinning(true);
+                setTimeout(() => setIsSpinning(false), 2000);
+              }}
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label="Toggle dark mode"
+              className={`dems-header-button ${isSpinning ? 'dems-toggle-spin' : ''}`}
+              style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%', // ✅ Made round to fit the logo nicely
+                border: `2px solid ${colors.border}`,
+                background: colors.hover,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                overflow: 'hidden', // ✅ Keeps the logo inside the circle
+              }}
+            >
+              <img 
+                src="/Mekdela_Amba_University_logo.jpg" 
+                alt="Toggle Theme" 
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  objectFit: 'cover',
+                  /* ✅ This CSS filter changes the logo color dynamically */
+                  filter: isDarkMode 
+                    ? 'brightness(1.5) sepia(1) hue-rotate(10deg) saturate(5)' // Gold/Yellow for Dark Mode
+                    : 'brightness(1) sepia(1) hue-rotate(180deg) saturate(3)'  // Blue for Light Mode
+                }} 
+              />
+            </button> 
+            
             {/* Mobile Only: Menu Toggle Button */}
             <button
               type="button"
@@ -617,7 +670,7 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
               aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={isMenuOpen}
               style={{
-                display: 'none', // CSS will override this to flex on mobile
+                display: 'none',
                 alignItems: 'center',
                 justifyContent: 'center',
                 width: '40px',
@@ -633,221 +686,224 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
             </button>
           </div>
         </div>
- 
-        {isMenuOpen && (
+      </header> 
+      {/* ✅ CLOSE HEADER HERE */}
+
+      {/* ============================================== */}
+      {/* ✅ MOBILE MENU MOVED OUTSIDE THE HEADER */}
+      {/* ============================================== */}
+            {isMenuOpen && (
+        <div
+          className="dems-mobile-menu"
+          style={{
+            position: 'fixed',
+            top: '76px',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 'calc(100vh - 76px)',
+            overflowY: 'auto',
+            background: colors.mobileBackground,
+            padding: '24px',
+            borderTop: `1px solid ${colors.border}`,
+            boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+            zIndex: 99999, // ✅ HIGHEST Z-INDEX POSSIBLE
+          }}
+        >
+          {/* Mobile User Profile Header Banner */}
+          {isAuthenticated && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+                padding: '16px',
+                background: colors.hover,
+                borderRadius: '16px',
+                marginBottom: '20px',
+                border: `1px solid ${colors.border}`,
+              }}
+            >
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  background: colors.accent,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: '15px',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+              >
+                {getInitials()}
+                {profileImage && (
+                  <img
+                    src={profileImage}
+                    alt="Profile"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
+                )}
+              </div>
+              <div>
+                <div
+                  style={{
+                    color: colors.text,
+                    fontSize: '15px',
+                    fontWeight: 700,
+                  }}
+                >
+                  {user?.full_name || 'User'}
+                </div>
+                <div
+                  style={{
+                    color: colors.muted,
+                    fontSize: '12px',
+                    marginTop: '2px',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {role?.replace('_', ' ') || 'Scholar'}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div
-            className="dems-mobile-menu"
             style={{
-              position: 'fixed',
-              top: '76px',
-              left: 0,
-              right: 0,
-              bottom: 0,
-              overflowY: 'auto',
-              background: colors.mobileBackground,
-              padding: '24px',
-              borderTop: `1px solid ${colors.border}`,
-              boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
-              zIndex: 999,
+              color: colors.muted,
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '1px',
+              margin: '12px 8px 8px',
             }}
           >
-            {/* Mobile User Profile Header Banner */}
-            {isAuthenticated && (
-              <div
+            NAVIGATION
+          </div>
+
+          {/* 1. HOME & ABOUT */}
+          {publicLinks.map((link) => (
+            <NavLink
+              key={link.path}
+              to={link.path}
+              end={link.path === '/'}
+              onClick={closeMobileMenu}
+              style={mobileLinkStyle}
+            >
+              {link.icon}
+              {link.name}
+            </NavLink>
+          ))}
+
+          {/* 2. LOGIN & REGISTER (Moved up right under About) */}
+          {!isAuthenticated && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px', // ✅ Tight gap between Login and Register
+                marginTop: '8px', // ✅ Small gap below About
+              }}
+            >
+              <Link
+                to="/login"
+                onClick={closeMobileMenu}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '14px',
-                  padding: '16px',
-                  background: colors.hover,
-                  borderRadius: '16px',
-                  marginBottom: '20px',
-                  border: `1px solid ${colors.border}`,
+                  padding: '14px 18px',
+                  borderRadius: '12px',
+                  textDecoration: 'none',
+                  fontSize: '15px',
+                  fontWeight: 500,
+                  color: colors.text,
+                  background: 'transparent',
                 }}
               >
-                <div
-                  style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '50%',
-                    background: colors.accent,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#ffffff',
-                    fontWeight: 700,
-                    fontSize: '15px',
-                    position: 'relative',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {getInitials()}
-                  {profileImage && (
-                    <img
-                      src={profileImage}
-                      alt="Profile"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                      }}
-                    />
-                  )}
-                </div>
-                <div>
-                  <div
-                    style={{
-                      color: colors.text,
-                      fontSize: '15px',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {user?.full_name || 'User'}
-                  </div>
-                  <div
-                    style={{
-                      color: colors.muted,
-                      fontSize: '12px',
-                      marginTop: '2px',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {role?.replace('_', ' ') || 'Scholar'}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div
-              style={{
-                color: colors.muted,
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '1px',
-                margin: '12px 8px 8px',
-              }}
-            >
-              NAVIGATION
-            </div>
-            {publicLinks.map((link) => (
-              <NavLink
-                key={link.path}
-                to={link.path}
-                end={link.path === '/'}
+                <LogIn size={18} />
+                Login
+              </Link>
+              <Link
+                to="/register"
                 onClick={closeMobileMenu}
-                style={mobileLinkStyle}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  padding: '14px 18px',
+                  borderRadius: '12px',
+                  textDecoration: 'none',
+                  fontSize: '15px',
+                  fontWeight: 500,
+                  color: colors.text,
+                  background: 'transparent', 
+                }}
               >
-                {link.icon}
-                {link.name}
-              </NavLink>
-            ))}
+                <UserPlus size={18} />
+                Register 
+              </Link>
 
-            {isAuthenticated && (
-              <>
-                <div
-                  style={{
-                    height: '1px',
-                    background: colors.border,
-                    margin: '18px 0',
-                  }}
-                />
-                <div
-                  style={{
-                    color: colors.muted,
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    letterSpacing: '1px',
-                    margin: '12px 8px 8px',
-                  }}
-                >
-                  PORTAL WORKSPACE
-                </div>
-                {roleLinks.map((link) => (
-                  <NavLink
-                    key={link.name}
-                    to={link.path}
-                    onClick={closeMobileMenu}
-                    style={mobileLinkStyle}
-                  >
-                    {link.icon}
-                    {link.name}
-                  </NavLink>
-                ))}
+
+            </div>
+          )}
+
+          {/* 3. LOGGED IN LINKS (If user is signed in) */}
+          {isAuthenticated && (
+            <>
+              <div
+                style={{
+                  height: '1px',
+                  background: colors.border,
+                  margin: '18px 0',
+                }}
+              />
+              <div
+                style={{
+                  color: colors.muted,
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  letterSpacing: '1px',
+                  margin: '12px 8px 8px',
+                }}
+              >
+                PORTAL WORKSPACE
+              </div>
+              {roleLinks.map((link) => (
                 <NavLink
-                  to="/profile"
+                  key={link.name}
+                  to={link.path}
                   onClick={closeMobileMenu}
                   style={mobileLinkStyle}
                 >
-                  <User size={18} />
-                  My Profile
+                  {link.icon}
+                  {link.name}
                 </NavLink>
-              </>
-            )}
-
-            <div
-              style={{
-                height: '1px',
-                background: colors.border,
-                margin: '20px 0',
-              }}
-            />
-
-            {!isAuthenticated ? (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                }}
+              ))}
+              <NavLink
+                to="/profile"
+                onClick={closeMobileMenu}
+                style={mobileLinkStyle}
               >
-                <Link
-                  to="/login"
-                  onClick={closeMobileMenu}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    padding: '14px',
-                    borderRadius: '12px',
-                    border: `1px solid ${colors.border}`,
-                    color: colors.text,
-                    textDecoration: 'none',
-                    fontWeight: 600,
-                    fontSize: '15px',
-                  }}
-                >
-                  <LogIn size={18} />
-                  Login
-                </Link>
-                <Link
-                  to="/register"
-                  onClick={closeMobileMenu}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    padding: '14px',
-                    borderRadius: '12px',
-                    background: colors.accentGradient,
-                    color: '#ffffff',
-                    textDecoration: 'none',
-                    fontWeight: 600,
-                    fontSize: '15px',
-                    boxShadow: '0 6px 18px rgba(79,70,229,0.3)',
-                  }}
-                >
-                  <UserPlus size={18} />
-                  Create Free Account
-                </Link>
-              </div>
-            ) : (
+                <User size={18} />
+                My Profile
+              </NavLink>
+              
+              <div style={{ height: '1px', background: colors.border, margin: '12px 0' }} />
+              
               <button
                 type="button"
                 onClick={handleLogout}
@@ -870,10 +926,10 @@ const Header = ({ isDarkMode: propDarkMode, toggleDarkMode: propToggleDarkMode }
                 <LogOut size={19} />
                 Sign Out
               </button>
-            )}
-          </div>
-        )}
-      </header>
+            </>
+          )}
+        </div>
+      )}
     </>
   );
 };
