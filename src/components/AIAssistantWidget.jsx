@@ -6,16 +6,15 @@ const AIAssistantWidget = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [speakingIndex, setSpeakingIndex] = useState(null);
   const messagesEndRef = useRef(null);
 
-  // ✅ Auto-scroll to the bottom when a new message arrives
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
   const sendMessage = async () => {
     if (!input.trim()) return;
-    
     const userMsg = { role: 'user', text: input };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
@@ -32,9 +31,39 @@ const AIAssistantWidget = () => {
     }
   };
 
-  // ✅ Clear Chat Function
   const clearChat = () => {
+    window.speechSynthesis.cancel();
+    setSpeakingIndex(null);
     setMessages([]);
+  };
+
+  // ✅ TEXT TO SPEECH FUNCTION
+  const speakText = (text, index) => {
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    if (speakingIndex === index) {
+      setSpeakingIndex(null);
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    // Try to pick a good voice
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google'))
+      || voices.find(v => v.lang.startsWith('en'))
+      || voices[0];
+    if (preferredVoice) utterance.voice = preferredVoice;
+
+    utterance.onend = () => setSpeakingIndex(null);
+    utterance.onerror = () => setSpeakingIndex(null);
+
+    setSpeakingIndex(index);
+    window.speechSynthesis.speak(utterance);
   };
 
   return (
@@ -67,23 +96,23 @@ const AIAssistantWidget = () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 45px; 
+          font-size: 45px;
           animation: float3D 4s ease-in-out infinite, pulseGlow 2s ease-in-out infinite;
-          z-index: 1000;
+          z-index: 1001;
           transition: filter 0.3s ease;
         }
         
         .ai-float-btn:hover {
           filter: drop-shadow(0 0 15px #3b82f6);
-          animation-play-state: paused; 
+          animation-play-state: paused;
         }
         
         .ai-chat-window {
           position: fixed;
-          bottom: 80px;
+          bottom: 110px;
           left: 30px;
-          width: 350px;
-          height: 500px;
+          width: 380px;
+          height: 550px;
           background: white;
           border-radius: 16px;
           box-shadow: 0 10px 30px rgba(0,0,0,0.15);
@@ -93,25 +122,37 @@ const AIAssistantWidget = () => {
           overflow: hidden;
           border: 1px solid #e2e8f0;
         }
+
+        .speak-btn:hover {
+          background: #dbeafe !important;
+          transform: scale(1.1);
+        }
+
+        @keyframes pulseMic {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        .speaking-active {
+          animation: pulseMic 1s ease-in-out infinite;
+        }
       `}</style>
 
       {isOpen && (
         <div className="ai-chat-window">
-          {/* ✅ HEADER WITH CLEAR CHAT BUTTON */}
           <div style={{ padding: '12px 16px', background: '#2563eb', color: 'white', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '20px' }}>🤖</span>
               <span>DEMS AI Assistant</span>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button 
-                onClick={clearChat} 
+              <button
+                onClick={clearChat}
                 title="Clear Chat"
                 style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
               >
                 🗑️ Clear
               </button>
-              <button onClick={() => setIsOpen(false)} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '24px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+              <button onClick={() => { window.speechSynthesis.cancel(); setSpeakingIndex(null); setIsOpen(false); }} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '24px', cursor: 'pointer', lineHeight: 1 }}>×</button>
             </div>
           </div>
           
@@ -123,39 +164,73 @@ const AIAssistantWidget = () => {
             )}
             {messages.map((msg, i) => (
               <div key={i} style={{ textAlign: msg.role === 'user' ? 'right' : 'left', marginBottom: '12px' }}>
-                <span style={{ 
-                  background: msg.role === 'user' ? '#dbeafe' : '#ffffff', 
-                  color: msg.role === 'user' ? '#1e40af' : '#0f172a',
-                  border: msg.role === 'ai' ? '1px solid #e2e8f0' : 'none',
-                  padding: '10px 14px', 
-                  borderRadius: '12px', 
-                  display: 'inline-block',
+                <div style={{ 
+                  display: 'inline-flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
                   maxWidth: '85%',
-                  fontSize: '14px',
-                  whiteSpace: 'pre-wrap', // ✅ Keeps tables and newlines formatted nicely
-                  textAlign: 'left',
-                  boxShadow: msg.role === 'ai' ? '0 2px 5px rgba(0,0,0,0.05)' : 'none'
-                }}>{msg.text}</span>
+                  flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
+                }}>
+                  <span style={{ 
+                    background: msg.role === 'user' ? '#dbeafe' : '#ffffff', 
+                    color: msg.role === 'user' ? '#1e40af' : '#0f172a',
+                    border: msg.role === 'ai' ? '1px solid #e2e8f0' : 'none',
+                    padding: '10px 14px', 
+                    borderRadius: '12px', 
+                    display: 'inline-block',
+                    fontSize: '14px',
+                    whiteSpace: 'pre-wrap',
+                    textAlign: 'left',
+                    boxShadow: msg.role === 'ai' ? '0 2px 5px rgba(0,0,0,0.05)' : 'none'
+                  }}>{msg.text}</span>
+                  
+                  {/* ✅ SPEAKER BUTTON ON AI MESSAGES */}
+                  {msg.role === 'ai' && (
+                    <button
+                      className={`speak-btn ${speakingIndex === i ? 'speaking-active' : ''}`}
+                      onClick={() => speakText(msg.text, i)}
+                      title={speakingIndex === i ? "Stop speaking" : "Listen to this answer"}
+                      style={{
+                        background: speakingIndex === i ? '#2563eb' : '#f1f5f9',
+                        color: speakingIndex === i ? 'white' : '#2563eb',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '32px',
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        fontSize: '16px',
+                        transition: 'all 0.2s ease',
+                        marginTop: '4px',
+                      }}
+                    >
+                      {speakingIndex === i ? '🔊' : '🔈'}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
             {loading && (
               <div style={{ textAlign: 'left', color: '#64748b', fontSize: '13px', fontStyle: 'italic' }}>
-              Thinking...
+                AI is thinking...
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
           <div style={{ padding: '12px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '8px', background: 'white' }}>
-            <input 
-              value={input} 
-              onChange={(e) => setInput(e.target.value)} 
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
               placeholder="Ask me anything..."
               style={{ flex: 1, padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px' }}
             />
-            <button 
-              onClick={sendMessage} 
+            <button
+              onClick={sendMessage}
               disabled={loading}
               style={{ padding: '10px 20px', background: loading ? '#94a3b8' : '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
             >
@@ -165,7 +240,7 @@ const AIAssistantWidget = () => {
         </div>
       )}
       
-      <button className="ai-float-btn" onClick={() => setIsOpen(!isOpen)} style={{ position: 'fixed', bottom: '30px', left: '30px' }}> 
+      <button className="ai-float-btn" onClick={() => setIsOpen(!isOpen)}>
         🤖
       </button>
     </>

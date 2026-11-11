@@ -203,13 +203,11 @@ const fetchBankAccounts = async () => {
 const updatePaymentMethods = (banks, configOverride = null) => {
     const methods = [];
     
-    // Use passed config or fall back to state
     const config = configOverride || paymentConfig || {};
     
-    // ✅ 1. BANK TRANSFER (Always show, use fallback if empty)
+    // ✅ 1. BANK TRANSFER
     let activeBanks = banks ? banks.filter(b => b.is_active !== false) : [];
     
-    // If no banks found from DB, create a fallback from System Config
     if (activeBanks.length === 0) {
         activeBanks = [{
             id: 'default',
@@ -225,7 +223,7 @@ const updatePaymentMethods = (banks, configOverride = null) => {
     methods.push({
         id: 'bank_transfer',
         name: 'Bank Transfer',
-        icon: Building, // Make sure Building is imported from lucide-react
+        icon: Building,
         color: '#2563eb',
         bgColor: '#eff6ff',
         type: 'bank_transfer',
@@ -252,7 +250,7 @@ const updatePaymentMethods = (banks, configOverride = null) => {
     methods.push({
         id: 'telebirr',
         name: 'Telebirr',
-        icon: Smartphone, // Make sure Smartphone is imported
+        icon: Smartphone,
         color: '#d97706',
         bgColor: '#fffbeb',
         type: 'telebirr',
@@ -273,11 +271,11 @@ const updatePaymentMethods = (banks, configOverride = null) => {
         ]
     });
     
-    // ✅ 3. Chapa
+    // ✅ 3. CHAPA
     methods.push({
         id: 'chapa',
         name: 'Chapa',
-        icon: Globe, // Make sure Globe is imported
+        icon: Globe,
         color: '#7c3aed',
         bgColor: '#f5f3ff',
         type: 'online',
@@ -294,46 +292,6 @@ const updatePaymentMethods = (banks, configOverride = null) => {
             'Complete the payment confirmation',
             'You will be redirected back after successful payment',
             'TEST MODE: Use 4242 4242 4242 4242 for testing'
-        ]
-    });
-    
-    // ✅ 4. Stripe
-    methods.push({
-        id: 'stripe',
-        name: 'Stripe',
-        icon: CardIcon, // Make sure CreditCard is imported as CardIcon
-        color: '#059669',
-        bgColor: '#ecfdf5',
-        type: 'online',
-        details: {
-            test_mode: true,
-            test_card: '4242 4242 4242 4242',
-            test_expiry: '12/25',
-            test_cvc: '123'
-        },
-        instructions: [
-            'Click the payment link below to proceed to Stripe',
-            'You will be redirected to Stripe\'s secure payment page',
-            'Enter your card details on the secure Stripe page',
-            'Complete the payment using 3D Secure if required',
-            'You will receive a confirmation email',
-            'TEST MODE: Use 4242 4242 4242 4242 for testing'
-        ]
-    });
-    
-    // ✅ 5. Simulate
-    methods.push({
-        id: 'simulate',
-        name: 'Demo Payment (1-Click)',
-        icon: Shield, // Make sure Shield is imported
-        color: '#8b5cf6',
-        bgColor: '#f5f3ff',
-        type: 'demo',
-        details: { test_mode: true },
-        instructions: [
-            '🧪 DEMO PAYMENT - No real money involved',
-            'Click "Complete Demo Payment" to instantly verify your payment.',
-            'This is for demonstration purposes only.'
         ]
     });
     
