@@ -12,11 +12,17 @@ const api = axios.create({
 });
 
 export const getWebSocketUrl = (path, params = {}) => {
+    // 1. Use the API_BASE_URL (your backend URL)
     const apiUrl = new URL(API_BASE_URL, window.location.origin);
+    
+    // 2. Force WSS (Secure WebSocket) for HTTPS
     apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+    
+    // 3. Set the path correctly
     apiUrl.pathname = path.startsWith('/') ? path : `/${path}`;
     apiUrl.search = '';
 
+    // 4. Append tokens/params
     Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
             apiUrl.searchParams.set(key, value);
