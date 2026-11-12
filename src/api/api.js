@@ -103,20 +103,20 @@ export const getMediaUrl = (mediaPath) => {
 
 // ============================================================
 // SAFE EXAM BROWSER — download .seb file
-// ============================================================
-// SAFE EXAM BROWSER — download .seb file (DIRECT CLOUDINARY DOWNLOAD)
-// ============================================================
 export const downloadSEBConfig = (examId) => {
-    // 1. Get the backend origin (e.g., https://dems-backend-0dxk.onrender.com)
+    // 1. Get the base API URL (e.g., https://dems-backend-0dxk.onrender.com/api)
     const apiUrl = new URL(API_BASE_URL, window.location.origin);
     
-    // 2. Construct the direct URL to the SEB download endpoint
+    // 2. Build the absolute URL to the SEB endpoint
     const downloadUrl = `${apiUrl.origin}/api/exams/${examId}/seb-config/`;
     
-    // 3. Create a temporary link and click it to trigger native browser download
+    // 3. Create a temporary hidden link to trigger the download
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.setAttribute('download', `exam_${examId}.seb`);
+    link.style.display = 'none';
+    
+    // 4. Append to body, click, and remove
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
