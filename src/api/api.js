@@ -104,31 +104,24 @@ export const getMediaUrl = (mediaPath) => {
 // ============================================================
 // SAFE EXAM BROWSER — download .seb file
 // ============================================================
-export const downloadSEBConfig = async (examId) => {
-    const response = await api.get(`/exams/${examId}/seb-config/`, {
-        responseType: 'blob',
-    });
-
-    // Extract filename from Content-Disposition if present
-    const disposition = response.headers?.['content-disposition'] || '';
-    let filename = `exam_${examId}.seb`;
-    const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
-    if (match && match[1]) {
-        filename = decodeURIComponent(match[1]);
-    }
-
-    // Trigger browser download
-    const blob = new Blob([response.data], { type: 'application/octet-stream' });
-    const url = window.URL.createObjectURL(blob);
+// SAFE EXAM BROWSER — download .seb file (DIRECT CLOUDINARY DOWNLOAD)
+// ============================================================
+export const downloadSEBConfig = (examId) => {
+    // 1. Get the backend origin (e.g., https://dems-backend-0dxk.onrender.com)
+    const apiUrl = new URL(API_BASE_URL, window.location.origin);
+    
+    // 2. Construct the direct URL to the SEB download endpoint
+    const downloadUrl = `${apiUrl.origin}/api/exams/${examId}/seb-config/`;
+    
+    // 3. Create a temporary link and click it to trigger native browser download
     const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
+    link.href = downloadUrl;
+    link.setAttribute('download', `exam_${examId}.seb`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-
-    return filename;
+    
+    return `exam_${examId}.seb`;
 };
 
 // ============================================================
