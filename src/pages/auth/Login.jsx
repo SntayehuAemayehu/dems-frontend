@@ -78,7 +78,12 @@ const Login = () => {
       const requestedPath = new URLSearchParams(location.search).get('next');
       const returnToNews = requestedPath === '/news'
         || (requestedPath?.startsWith('/news/') && !requestedPath.startsWith('//'));
-      navigate(returnToNews ? requestedPath : redirectMap[role] || '/dashboard', { replace: true });
+      const sebReturn = new URLSearchParams(location.search).get('seb_return');
+      const returnToSebExam = role === 'STUDENT' && /^\/exams\/\d+\/start$/.test(sebReturn || '');
+      navigate(
+        returnToSebExam ? sebReturn : returnToNews ? requestedPath : redirectMap[role] || '/dashboard',
+        { replace: true }
+      );
 
     } catch (error) {
       const errorMessage = error?.message || error;
