@@ -14,34 +14,6 @@ const ExamDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-    const [downloadingSEB, setDownloadingSEB] = useState(false);
-
-  const handleStartWithSEB = async () => {
-    setDownloadingSEB(true);
-    try {
-      if (exam?.seb_available) {
-        const filename = await downloadSEBConfig(exam.id);
-        alert(
-          `Downloaded "${filename}".\n\n` +
-          `Open this file with Safe Exam Browser to start the exam.\n\n` +
-          `If Safe Exam Browser is not installed, download it from:\n` +
-          `https://safeexambrowser.org/download_en.html`
-        );
-      } else {
-        // Non-SEB exam → original behavior
-        navigate(`/exams/${exam.id}/take`);
-      }
-    } catch (err) {
-      console.error('SEB download failed:', err);
-      alert(
-        err.response?.data?.error ||
-        'Could not download the SEB config. Please try again or contact your instructor.'
-      );
-    } finally {
-      setDownloadingSEB(false);
-    }
-  };
-
   useEffect(() => {
     fetchExamDetails();
   }, [examId]);
@@ -59,6 +31,30 @@ const ExamDetails = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ✅ NEW: Launch SEB handler
+  const handleLaunchSEB = () => {
+    if (!exam?.seb_file_url) {
+      alert("SEB file is not available for this exam.");
+      return;
+    }
+    
+    let fileUrl = exam.seb_file_url;
+    let protocolUrl;
+    
+    // Convert https:// to sebs:// or http:// to seb://
+    if (fileUrl.startsWith('https://')) {
+      protocolUrl = fileUrl.replace('https://', 'sebs://');
+    } else if (fileUrl.startsWith('http://')) {
+      protocolUrl = fileUrl.replace('http://', 'seb://');
+    } else {
+      alert("Invalid SEB file URL.");
+      return;
+    }
+    
+    // This triggers the browser modal asking for permission to open SEB
+    window.location.href = protocolUrl;
   };
 
   if (loading) {
@@ -93,7 +89,6 @@ const ExamDetails = () => {
   const isOngoing = now >= start && now <= end;
   const isCompleted = now > end;
   
-  // Note: If your backend doesn't return attempt_count, this will default to false
   const isTaken = exam.attempt_count > 0 || exam.is_taken; 
 
   return (
@@ -270,43 +265,41 @@ const ExamDetails = () => {
           }}>
             <AlertCircle size={20} /> This exam has ended
           </div>
-                ) : (
+        ) : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+            {/* ✅ NEW: Launch SEB Button */}
             <button
-              onClick={handleStartWithSEB}
-              disabled={downloadingSEB}
+              onClick={handleLaunchSEB}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '12px',
-                background: downloadingSEB ? '#94a3b8' : '#22c55e',
+                background: '#2563eb', // Blue
                 color: 'white',
                 padding: '16px 48px',
                 borderRadius: '12px',
                 border: 'none',
                 fontSize: '18px',
                 fontWeight: 600,
-                cursor: downloadingSEB ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
                 transition: 'all 0.3s ease'
               }}
               onMouseEnter={(e) => {
-                if (downloadingSEB) return;
                 e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 6px 16px rgba(34, 197, 94, 0.4)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.4)';
               }}
               onMouseLeave={(e) => {
-                if (downloadingSEB) return;
                 e.currentTarget.style.transform = 'none';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(34, 197, 94, 0.3)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.3)';
               }}
             >
-              <FileText size={24} />
-              {downloadingSEB ? 'Downloading...' : 'Download & Open in SEB'}
+              <Shield size={24} />
+              Open with Safe Exam Browser
             </button>
             {exam?.seb_available && (
               <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', margin: 0 }}>
-                A <strong>.seb</strong> file will download. Open it with Safe Exam Browser.{' '}
+                Your browser will ask for permission to open Safe Exam Browser. Click <strong>Allow</strong>.{' '}
                 <a
                   href="https://safeexambrowser.org/download_en.html"
                   target="_blank"
