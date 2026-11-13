@@ -786,10 +786,9 @@ const LiveClass = () => {
                                     ref={(element) => {
                                         if (element) {
                                             videoElementsRef.current.set(tile.id, element);
-                                            // ✅ CRITICAL FIX: Force the video to load the stream and play
-                                            if (tile.stream) {
+                                            // ✅ SAFER FIX: Just set srcObject and let autoPlay handle the rest
+                                            if (element.srcObject !== tile.stream && tile.stream) {
                                                 element.srcObject = tile.stream;
-                                                element.play().catch(e => console.log("Autoplay blocked:", e));
                                             }
                                         } else {
                                             videoElementsRef.current.delete(tile.id);
