@@ -88,87 +88,32 @@ const IssuedCertificates = () => {
 
   // ============================================================
   // COURSE INFORMATION
-  // Each certificate record represents one course.
+  // The backend provides every enrolled course and withholds unpublished results.
   // ============================================================
 
   const courses = useMemo(() => {
-    return certificates.map((certificate, index) => {
-      const course = certificate.course || {};
-
-      const rawCourseId =
-        certificate.course_code ??
-        certificate.course_id ??
-        course.course_code ??
-        course.id ??
-        'N/A';
-
-      const scoreValue =
-        certificate.score ??
-        certificate.total_score ??
-        certificate.total ??
-        certificate.percentage ??
-        certificate.marks ??
-        certificate.final_score ??
-        certificate.numeric_grade ??
-        null;
-
-      const amountValue =
-        certificate.amount ??
-        certificate.credit_hours ??
-        certificate.credits ??
-        certificate.credit ??
-        course.credit_hours ??
-        course.credits ??
-        course.credit ??
-        0;
-
-      const score =
-        scoreValue === null || scoreValue === ''
-          ? null
-          : Number(scoreValue);
-
-      const amount = Number(amountValue) || 0;
-
-      return {
-        id: certificate.id ?? index,
-
-        courseId: String(rawCourseId),
-
-        courseName:
-          certificate.course_title ||
-          certificate.course_name ||
-          course.course_title ||
-          course.title ||
-          course.name ||
-          'Course Name',
-
-        score:
-          Number.isFinite(score) ? score : null,
-
-        grade:
-          certificate.grade ||
-          certificate.letter_grade ||
-          certificate.course_grade ||
-          'N/A',
-
-        amount,
-      };
-    });
+    const records = certificates[0]?.courses || [];
+    return records.map((course) => ({
+      id: course.course_id,
+      courseId: course.course_code || course.course_id || 'N/A',
+      courseName: course.course_name || 'Course Name',
+      year: course.year || 'N/A',
+      semester: course.semester || 'N/A',
+      score: course.score === null || course.score === undefined
+        ? null
+        : Number(course.score),
+      scorePossible: course.score_possible === null || course.score_possible === undefined
+        ? null
+        : Number(course.score_possible),
+      grade: course.grade || 'Not issued',
+      gpa: course.gpa === null || course.gpa === undefined
+        ? null
+        : Number(course.gpa),
+    }));
   }, [certificates]);
 
-  // ============================================================
-  // TOTAL SCORE AND TOTAL AMOUNT
-  // ============================================================
-
-  const totalScore = courses.reduce(
-    (sum, course) => sum + (Number(course.score) || 0),
-    0
-  );
-
-  const totalAmount = courses.reduce(
-    (sum, course) => sum + (Number(course.amount) || 0),
-    0
-  );
+  const semesterGpa = student.gpa;
+  const cumulativeGpa = student.cgpa;
 
   // ============================================================
   // CERTIFICATE ISSUE DATE
@@ -436,11 +381,11 @@ const IssuedCertificates = () => {
             <table className="certificate-table">
               <thead>
                 <tr>
-                  <th className="course-id-column">ID</th>
+                  <th className="course-id-column">COURSE ID</th>
                   <th className="course-name-column">COURSE NAME</th>
                   <th className="score-column">SCORE</th>
                   <th className="grade-column">GRADE</th>
-                  <th className="amount-column">AMOUNT</th>
+                  <th className="gpa-column">GPA</th>
                 </tr>
               </thead>
 
@@ -457,8 +402,10 @@ const IssuedCertificates = () => {
 
                     <td className="score-column">
                       {course.score === null
-                        ? 'N/A'
-                        : course.score}
+                        ? 'Not issued'
+                        : course.scorePossible === null
+                          ? course.score.toFixed(2)
+                          : `${course.score.toFixed(2)} `}
                     </td>
 
                     <td className="grade-column">
@@ -467,46 +414,27 @@ const IssuedCertificates = () => {
                       </span>
                     </td>
 
-                    <td className="amount-column">
-                      {course.amount}
+                    <td className="gpa-column">
+                      {course.gpa === null ? '—' : course.gpa.toFixed(2)}
                     </td>
                   </tr>
                 ))}
 
-                {/* TOTAL ROW */}
-
-                <tr className="total-row">
-                  <td colSpan="2" className="total-label">
-                    TOTAL
-                  </td>
-
-                  <td className="score-column total-value">
-                    {totalScore}
-                  </td>
-
-                  <td className="grade-column">
-                    —
-                  </td>
-
-                  <td className="amount-column total-value">
-                    {totalAmount}
-                  </td>
-                </tr>
               </tbody>
             </table>
           </section>
 
-          {/* TOTAL SUMMARY */}
+          {/* CALCULATED ACADEMIC SUMMARY */}
 
           <section className="certificate-summary">
             <div className="summary-item">
-              <span>TOTAL SCORE</span>
-              <strong>{totalScore}</strong>
+              <span>SEMESTER GPA</span>
+              <strong>{semesterGpa === null || semesterGpa === undefined ? 'N/A' : Number(semesterGpa).toFixed(2)}</strong>
             </div>
 
             <div className="summary-item">
-              <span>TOTAL AMOUNT</span>
-              <strong>{totalAmount}</strong>
+              <span>CUMULATIVE GPA (CGPA)</span>
+              <strong>{cumulativeGpa === null || cumulativeGpa === undefined ? 'N/A' : Number(cumulativeGpa).toFixed(2)}</strong>
             </div>
           </section>
 
@@ -848,29 +776,29 @@ const IssuedCertificates = () => {
         }
 
         .course-id-column {
-          width: 17%;
+          width: 14%;
           font-weight: 700;
         }
 
         .course-name-column {
-          width: 35%;
+          width: 30%;
           font-weight: 600;
           color: #102a43 !important;
         }
 
         .score-column {
-          width: 16%;
+          width: 18%;
           text-align: center !important;
           font-weight: 800;
         }
 
         .grade-column {
-          width: 16%;
+          width: 10%;
           text-align: center !important;
         }
 
-        .amount-column {
-          width: 16%;
+        .gpa-column {
+          width: 8%;
           text-align: center !important;
           font-weight: 800;
         }
@@ -884,28 +812,6 @@ const IssuedCertificates = () => {
           color: #87671e;
           font-weight: 800;
           text-align: center;
-        }
-
-        .total-row {
-          background: #f4ecd5 !important;
-          font-weight: 900;
-        }
-
-        .total-row td {
-          border-top: 2px solid #b49137;
-          color: #102a43;
-          font-weight: 900;
-        }
-
-        .total-label {
-          text-align: right;
-          letter-spacing: 1px;
-        }
-
-        .total-value {
-          color: #997629 !important;
-          font-size: 12px !important;
-          text-align: center !important;
         }
 
         .certificate-summary {
@@ -1059,18 +965,18 @@ const IssuedCertificates = () => {
 
         @page {
           size: A4 landscape;
-          margin: 0;
+          margin: 8mm;
         }
 
         @media print {
           html,
           body,
           #root {
-            width: 297mm !important;
-            height: 210mm !important;
+            width: 100% !important;
+            height: auto !important;
             margin: 0 !important;
             padding: 0 !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             background: #ffffff !important;
           }
 
@@ -1088,42 +994,47 @@ const IssuedCertificates = () => {
           }
 
           .certificate-page {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 297mm !important;
-            height: 210mm !important;
+            position: static !important;
+            width: 100% !important;
+            height: auto !important;
             max-width: none !important;
             min-height: 0 !important;
             margin: 0 !important;
-            padding: 5mm !important;
+            padding: 0 !important;
             background: #ffffff !important;
-            overflow: hidden !important;
+            overflow: visible !important;
           }
 
           .official-certificate {
             width: 100% !important;
-            height: 200mm !important;
+            height: auto !important;
             min-height: 0 !important;
             max-width: none !important;
             margin: 0 !important;
             padding: 2mm !important;
             border: 2px solid #a88736 !important;
             box-shadow: none !important;
-            overflow: hidden !important;
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-            page-break-after: avoid !important;
+            overflow: visible !important;
           }
 
           .certificate-inner-border {
             width: 100% !important;
-            height: 100% !important;
+            height: auto !important;
             min-height: 0 !important;
             padding: 4mm 10mm 3mm !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             display: flex !important;
             flex-direction: column !important;
+          }
+
+          .certificate-table thead {
+            display: table-header-group !important;
+          }
+
+          .certificate-table tr,
+          .certificate-footer {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
 
           .university-logo {
@@ -1215,10 +1126,6 @@ const IssuedCertificates = () => {
             font-size: 7pt !important;
           }
 
-          .total-row td {
-            padding: 1.5mm 2mm !important;
-          }
-
           .certificate-summary {
             margin-top: 2mm !important;
             gap: 3mm !important;
@@ -1237,7 +1144,7 @@ const IssuedCertificates = () => {
           }
 
           .certificate-footer {
-            margin-top: auto !important;
+            margin-top: 6mm !important;
             padding: 3mm 10mm 1mm !important;
           }
 
