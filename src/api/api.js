@@ -104,26 +104,19 @@ export const getMediaUrl = (mediaPath) => {
 // ============================================================
 // SAFE EXAM BROWSER — download .seb file
 export const downloadSEBConfig = (examId) => {
-    // 1. Get the base API URL (e.g., https://dems-backend-0dxk.onrender.com/api)
     const apiUrl = new URL(API_BASE_URL, window.location.origin);
-    
-    // 2. Build the absolute URL to the SEB endpoint
     const downloadUrl = `${apiUrl.origin}/api/exams/${examId}/seb-config/`;
     
-    // 3. Create a temporary hidden link to trigger the download
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.setAttribute('download', `exam_${examId}.seb`);
-    link.style.display = 'none';
-    
-    // 4. Append to body, click, and remove
+    // ✅ REMOVED the 'download' attribute. The backend's 'Content-Disposition: attachment' header will force the download.
+    link.target = '_blank'; 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
     return `exam_${examId}.seb`;
 };
-
 // ============================================================
 // REQUEST INTERCEPTOR - Add token to requests
 // ============================================================
