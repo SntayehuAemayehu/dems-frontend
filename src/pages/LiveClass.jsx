@@ -237,7 +237,7 @@ const LiveClass = () => {
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
 
-    const handleMessage = useCallback((data) => {
+       const handleMessage = useCallback((data) => {
         if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
             handleSignal(data);
             return;
@@ -252,7 +252,7 @@ const LiveClass = () => {
                 time: new Date()
             }]);
         } else if (data.type === 'user_join') {
-            // ✅ FIX: Ignore our own join, but process everyone else's
+            // ✅ FIX: Remove the target_id check. Process all user_joins.
             if (String(data.user_id) === currentUserId) return;
 
             const participant = {
@@ -265,7 +265,7 @@ const LiveClass = () => {
                 ? current
                 : [...current, participant]);
 
-            // ✅ If we are the Student and the Teacher joins, we make the offer
+            // ✅ FIX: Student initiates the offer to the Teacher
             if (!isTeacher && participant.role === 'TEACHER') {
                 makeOffer(participant);
             }
@@ -764,25 +764,12 @@ const LiveClass = () => {
                 <div style={styles.videoGrid}>
                     {videoTiles.map((tile) => (
                         <article key={tile.id} style={styles.videoTile}>
-
                             {tile.local ? (
-                                <video 
-                                    ref={(element) => {
-                                        localVideoRef.current = element;
-                                        if (element) {
-                                            videoElementsRef.current.set(tile.id, element);
-                                            if (element.srcObject !== localStreamRef.current) {
-                                                element.srcObject = localStreamRef.current;
-                                            }
-                                        } else {
-                                            videoElementsRef.current.delete(tile.id);
-                                        }
-                                    }} 
-                                    autoPlay 
-                                    muted 
-                                    playsInline 
-                                    style={{ ...styles.video, transform: isScreenSharing ? 'none' : 'scaleX(-1)' }} 
-                                />
+                                <video ref={(element) => {
+                                    localVideoRef.current = element;
+                                    if (element) videoElementsRef.current.set(tile.id, element);
+                                    else videoElementsRef.current.delete(tile.id);
+                                }} autoPlay muted playsInline style={{ ...styles.video, transform: isScreenSharing ? 'none' : 'scaleX(-1)' }} />
                             ) : (
                                 <video
                                     autoPlay
@@ -791,19 +778,11 @@ const LiveClass = () => {
                                     ref={(element) => {
                                         if (element) {
                                             videoElementsRef.current.set(tile.id, element);
-                                            // ✅ CRITICAL FIX: Force the video to load the stream and play
-                                            if (element.srcObject !== tile.stream && tile.stream) {
-                                                element.srcObject = tile.stream;
-                                                element.play().catch(e => console.log("Autoplay blocked:", e));
-                                            }
-                                        } else {
-                                            videoElementsRef.current.delete(tile.id);
-                                        }
+                                            if (element.srcObject !== tile.stream) element.srcObject = tile.stream;
+                                        } else videoElementsRef.current.delete(tile.id);
                                     }}
                                 />
                             )}
-
-
                             {tile.local && !isScreenSharing && isVideoOff && <div style={styles.cameraOff}><VideoOff size={28} /><span>Camera off</span></div>}
                             <div style={styles.tileFooter}>
                                 <span>{tile.name}{tile.local ? ' (You)' : ''}</span>
