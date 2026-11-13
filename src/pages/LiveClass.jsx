@@ -267,10 +267,13 @@ const LiveClass = () => {
 
             // ✅ FIX: Student always initiates the offer to the Teacher
             // If we are the Student and the new person is the Teacher
-            if (!isTeacher && participant.role === 'TEACHER') {
+            // ✅ FIX: Teacher initiates to Student, AND Student initiates to Teacher.
+            // This guarantees the connection happens regardless of who joined first.
+            if (isTeacher && participant.role === 'STUDENT') {
+                makeOffer(participant);
+            } else if (!isTeacher && participant.role === 'TEACHER') {
                 makeOffer(participant);
             }
-            
             // If we are the Teacher, we DO NOT make an offer. We wait for the student's request_join.
             // (The student will call makeOffer once they get the teacher's user_join).
 
