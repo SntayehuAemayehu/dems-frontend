@@ -237,7 +237,7 @@ const LiveClass = () => {
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
 
-       const handleMessage = useCallback((data) => {
+    const handleMessage = useCallback((data) => {
         if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
             handleSignal(data);
             return;
@@ -252,7 +252,7 @@ const LiveClass = () => {
                 time: new Date()
             }]);
         } else if (data.type === 'user_join') {
-            // ✅ FIX: Remove the target_id check. Process all user_joins.
+            // ✅ FIX: Ignore our own join, but process everyone else's
             if (String(data.user_id) === currentUserId) return;
 
             const participant = {
@@ -265,7 +265,7 @@ const LiveClass = () => {
                 ? current
                 : [...current, participant]);
 
-            // ✅ FIX: Student initiates the offer to the Teacher
+            // ✅ If we are the Student and the Teacher joins, we make the offer
             if (!isTeacher && participant.role === 'TEACHER') {
                 makeOffer(participant);
             }
