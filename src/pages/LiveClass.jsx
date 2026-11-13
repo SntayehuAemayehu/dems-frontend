@@ -108,16 +108,9 @@ const LiveClass = () => {
             return next;
         });
     }, []);
-
-        const createPeer = useCallback((peerId, peerName) => {
+    const createPeer = useCallback((peerId, peerName) => {
         const id = String(peerId);
         if (!id || id === currentUserId) return null;
-
-        // ✅ FIX: Only create if it doesn't exist, or if it's closed
-        const existing = peersRef.current.get(id);
-        if (existing && existing.connectionState !== 'closed') {
-            return existing;
-        }
 
         const peer = new RTCPeerConnection({
             iceServers: [
@@ -127,6 +120,7 @@ const LiveClass = () => {
             iceCandidatePoolSize: 5
         });
 
+        // ✅ CRITICAL FIX: Ensure the local tracks (camera/mic) are added IMMEDIATELY
         if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach((track) => {
                 peer.addTrack(track, localStreamRef.current);
@@ -134,7 +128,6 @@ const LiveClass = () => {
         }
 
         peer.ontrack = (event) => {
-            console.log("📥 Received track from", peerName);
             const stream = event.streams?.[0];
             if (stream) {
                 setRemoteStreams((current) => ({ ...current, [id]: stream }));
@@ -159,6 +152,8 @@ const LiveClass = () => {
         peersRef.current.set(id, peer);
         return peer;
     }, [closePeer, currentUserId, sendSocketMessage]);
+
+
     const makeOffer = useCallback(async (participant) => {
         console.log("🚀 makeOffer called for:", participant.user);
         const peer = createPeer(participant.user_id, participant.user);
