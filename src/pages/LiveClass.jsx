@@ -238,7 +238,7 @@ const LiveClass = () => {
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
 
-    const handleMessage = useCallback((data) => {
+     const handleMessage = useCallback((data) => {
         if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
             handleSignal(data);
             return;
@@ -262,6 +262,15 @@ const LiveClass = () => {
             setParticipants((current) => current.some((item) => item.user_id === participant.user_id)
                 ? current
                 : [...current, participant]);
+
+            // ✅ FIX: Both Teachers and Students initiate WebRTC offers
+            // Teacher makes offer to students, Student makes offer to teacher
+            if (isTeacher && participant.role === 'STUDENT') {
+                makeOffer(participant);
+            } else if (!isTeacher && participant.role === 'TEACHER') {
+                makeOffer(participant);
+            }
+
             if (isTeacher && participant.role === 'STUDENT') {
                 const joinedAt = new Date();
                 const attendees = sessionRef.current?.attendees || [];
@@ -278,9 +287,6 @@ const LiveClass = () => {
                         nextAttendee
                     ]
                 });
-                makeOffer(participant);
-            } else if (!isTeacher && participant.role === 'TEACHER') {
-                makeOffer(participant);
             }
         } else if (data.type === 'user_leave') {
             const leavingId = String(data.user_id);
@@ -312,7 +318,6 @@ const LiveClass = () => {
             toast.error(data.message || 'The class action could not be completed.');
         }
     }, [closePeer, currentUserId, handleSignal, isTeacher, makeOffer, navigate, saveSession]);
-
     const connect = useCallback(async () => {
         setIsConnecting(true);
         setError('');
@@ -462,30 +467,57 @@ const LiveClass = () => {
             screenStreamRef.current?.getTracks().forEach((track) => track.stop());
             screenStreamRef.current = null;
             const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
-            peersRef.current.forEach((peer) => {
+            
+            peersRef.current.forEach((peer, peerId) => {
                 const sender = peer.getSenders().find((item) => item.track?.kind === 'video');
-                if (sender && cameraTrack) sender.replaceTrack(cameraTrack);
+                if (sender && cameraTrack) {
+                    sender.replaceTrack(cameraTrack);
+                    // Force update for this peer
+                    setRemoteStreams((current) => ({
+                        ...current,
+                        [peerId]: localStreamRef.current
+                    }));
+                }
             });
+            
             if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
             setIsScreenSharing(false);
             return;
         }
+
         try {
             const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             screenStreamRef.current = stream;
             const screenTrack = stream.getVideoTracks()[0];
-            peersRef.current.forEach((peer) => {
+            
+            peersRef.current.forEach((peer, peerId) => {
                 const sender = peer.getSenders().find((item) => item.track?.kind === 'video');
-                if (sender) sender.replaceTrack(screenTrack);
+                if (sender) {
+                    sender.replaceTrack(screenTrack).then(() => {
+                        // ✅ Force the UI to update so students see the screen share
+                        setRemoteStreams((current) => ({
+                            ...current,
+                            [peerId]: stream
+                        }));
+                    });
+                }
             });
+            
             if (localVideoRef.current) localVideoRef.current.srcObject = stream;
             setIsScreenSharing(true);
+            
             screenTrack.onended = () => {
                 screenStreamRef.current = null;
                 const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
-                peersRef.current.forEach((peer) => {
+                peersRef.current.forEach((peer, peerId) => {
                     const sender = peer.getSenders().find((item) => item.track?.kind === 'video');
-                    if (sender && cameraTrack) sender.replaceTrack(cameraTrack);
+                    if (sender && cameraTrack) {
+                        sender.replaceTrack(cameraTrack);
+                        setRemoteStreams((current) => ({
+                            ...current,
+                            [peerId]: localStreamRef.current
+                        }));
+                    }
                 });
                 if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
                 setIsScreenSharing(false);
@@ -666,17 +698,22 @@ const LiveClass = () => {
             </main>
         );
     }
-
     const videoTiles = [
-        { id: currentUserId, name: 'You', stream: null, local: true },
-        ...participants.filter((participant) => remoteStreams[participant.user_id]).map((participant) => ({
+        { 
+            id: currentUserId, 
+            name: isTeacher ? 'You (Teacher)' : 'You (Student)', 
+            stream: null, 
+            local: true 
+        },
+        ...participants.map((participant) => ({
             id: participant.user_id,
             name: participant.user,
-            stream: remoteStreams[participant.user_id],
+            stream: remoteStreams[participant.user_id] || null,
             local: false,
             participant
         }))
     ];
+
 
     return (
         <main style={styles.page}>
