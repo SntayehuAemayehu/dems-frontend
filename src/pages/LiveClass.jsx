@@ -108,16 +108,10 @@ const LiveClass = () => {
             return next;
         });
     }, []);
+
     const createPeer = useCallback((peerId, peerName) => {
         const id = String(peerId);
         if (!id || id === currentUserId) return null;
-        
-        // Close existing peer if it's stuck
-        const existing = peersRef.current.get(id);
-        if (existing) {
-            existing.close();
-            peersRef.current.delete(id);
-        }
 
         const peer = new RTCPeerConnection({
             iceServers: [
@@ -127,7 +121,7 @@ const LiveClass = () => {
             iceCandidatePoolSize: 5
         });
 
-        // Add local tracks to the connection
+        // ✅ FIX: Ensure we ALWAYS add local tracks immediately
         if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach((track) => {
                 peer.addTrack(track, localStreamRef.current);
@@ -135,7 +129,6 @@ const LiveClass = () => {
         }
 
         peer.ontrack = (event) => {
-            console.log("📥 Received track from", peerName);
             const stream = event.streams?.[0];
             if (stream) {
                 setRemoteStreams((current) => ({ ...current, [id]: stream }));
@@ -154,9 +147,7 @@ const LiveClass = () => {
         };
 
         peer.onconnectionstatechange = () => {
-            if (['failed', 'closed', 'disconnected'].includes(peer.connectionState)) {
-                closePeer(id);
-            }
+            if (['failed', 'closed'].includes(peer.connectionState)) closePeer(id);
         };
 
         peersRef.current.set(id, peer);
@@ -164,8 +155,10 @@ const LiveClass = () => {
     }, [closePeer, currentUserId, sendSocketMessage]);
 
     const makeOffer = useCallback(async (participant) => {
+        console.log("🚀 makeOffer called for:", participant.user);
         const peer = createPeer(participant.user_id, participant.user);
-        if (!peer || peer.signalingState !== 'stable') return;
+        if (!peer) return;
+        
         try {
             const offer = await peer.createOffer();
             await peer.setLocalDescription(offer);
@@ -175,11 +168,12 @@ const LiveClass = () => {
                 sender_id: currentUserId,
                 target_id: String(participant.user_id)
             });
-        } catch (offerError) {
-            console.error('Could not start student video connection:', offerError);
-            toast.error(`Could not connect to ${participant.user || 'a student'} video.`);
+        } catch (err) {
+            console.error('Error making offer:', err);
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
+
+
     const handleSignal = useCallback(async (message) => {
         const signal = message.type === 'webrtc' ? message.data : message;
         if (!signal) return;
@@ -243,7 +237,7 @@ const LiveClass = () => {
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
 
-    const handleMessage = useCallback((data) => {
+      const handleMessage = useCallback((data) => {
         if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
             handleSignal(data);
             return;
@@ -258,9 +252,7 @@ const LiveClass = () => {
                 time: new Date()
             }]);
         } else if (data.type === 'user_join') {
-            // ✅ FIX: Ignore messages meant for someone else
             if (data.target_id && String(data.target_id) !== currentUserId) return;
-            // ✅ FIX: Ignore our own join message
             if (String(data.user_id) === currentUserId) return;
 
             const participant = {
@@ -273,12 +265,14 @@ const LiveClass = () => {
                 ? current
                 : [...current, participant]);
 
-            // ✅ FIX: BOTH Teacher and Student must initiate an offer
-            if (isTeacher && participant.role === 'STUDENT') {
-                makeOffer(participant);
-            } else if (!isTeacher && participant.role === 'TEACHER') {
+            // ✅ FIX: Student always initiates the offer to the Teacher
+            // If we are the Student and the new person is the Teacher
+            if (!isTeacher && participant.role === 'TEACHER') {
                 makeOffer(participant);
             }
+            
+            // If we are the Teacher, we DO NOT make an offer. We wait for the student's request_join.
+            // (The student will call makeOffer once they get the teacher's user_join).
 
             if (isTeacher && participant.role === 'STUDENT') {
                 const joinedAt = new Date();
@@ -298,22 +292,10 @@ const LiveClass = () => {
                 });
             }
         } else if (data.type === 'user_leave') {
-            // ... (keep your existing user_leave code)
             const leavingId = String(data.user_id);
             setParticipants((current) => current.filter((item) => item.user_id !== leavingId));
             setRaisedHands((current) => current.filter((item) => item.user_id !== leavingId));
             closePeer(leavingId);
-            if (isTeacher) {
-                const attendees = sessionRef.current?.attendees || [];
-                const attendee = attendees.find((item) => item.userId === leavingId);
-                if (attendee) {
-                    saveSession({
-                        attendees: attendees.map((item) => item.userId === leavingId
-                            ? { ...item, leftAt: new Date().toISOString() }
-                            : item)
-                    });
-                }
-            }
         } else if (data.type === 'hand_raise') {
             setRaisedHands((current) => current.some((item) => String(item.user_id) === String(data.user_id))
                 ? current
@@ -327,9 +309,7 @@ const LiveClass = () => {
         } else if (data.type === 'error') {
             toast.error(data.message || 'The class action could not be completed.');
         }
-    }, [closePeer, currentUserId, handleSignal, isTeacher, makeOffer, navigate, saveSession]);
-
-
+    }, [closePeer, currentUserId, handleSignal, isTeacher, makeOffer, navigate, saveSession]); 
 
     const connect = useCallback(async () => {
         setIsConnecting(true);
