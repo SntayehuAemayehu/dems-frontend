@@ -764,12 +764,25 @@ const LiveClass = () => {
                 <div style={styles.videoGrid}>
                     {videoTiles.map((tile) => (
                         <article key={tile.id} style={styles.videoTile}>
+
                             {tile.local ? (
-                                <video ref={(element) => {
-                                    localVideoRef.current = element;
-                                    if (element) videoElementsRef.current.set(tile.id, element);
-                                    else videoElementsRef.current.delete(tile.id);
-                                }} autoPlay muted playsInline style={{ ...styles.video, transform: isScreenSharing ? 'none' : 'scaleX(-1)' }} />
+                                <video 
+                                    ref={(element) => {
+                                        localVideoRef.current = element;
+                                        if (element) {
+                                            videoElementsRef.current.set(tile.id, element);
+                                            if (element.srcObject !== localStreamRef.current) {
+                                                element.srcObject = localStreamRef.current;
+                                            }
+                                        } else {
+                                            videoElementsRef.current.delete(tile.id);
+                                        }
+                                    }} 
+                                    autoPlay 
+                                    muted 
+                                    playsInline 
+                                    style={{ ...styles.video, transform: isScreenSharing ? 'none' : 'scaleX(-1)' }} 
+                                />
                             ) : (
                                 <video
                                     autoPlay
@@ -778,11 +791,19 @@ const LiveClass = () => {
                                     ref={(element) => {
                                         if (element) {
                                             videoElementsRef.current.set(tile.id, element);
-                                            if (element.srcObject !== tile.stream) element.srcObject = tile.stream;
-                                        } else videoElementsRef.current.delete(tile.id);
+                                            // ✅ CRITICAL FIX: Force the video to load the stream and play
+                                            if (element.srcObject !== tile.stream && tile.stream) {
+                                                element.srcObject = tile.stream;
+                                                element.play().catch(e => console.log("Autoplay blocked:", e));
+                                            }
+                                        } else {
+                                            videoElementsRef.current.delete(tile.id);
+                                        }
                                     }}
                                 />
                             )}
+
+
                             {tile.local && !isScreenSharing && isVideoOff && <div style={styles.cameraOff}><VideoOff size={28} /><span>Camera off</span></div>}
                             <div style={styles.tileFooter}>
                                 <span>{tile.name}{tile.local ? ' (You)' : ''}</span>
