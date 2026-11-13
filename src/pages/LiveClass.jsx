@@ -237,8 +237,7 @@ const LiveClass = () => {
             }
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
-
-     const handleMessage = useCallback((data) => {
+const handleMessage = useCallback((data) => {
         if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
             handleSignal(data);
             return;
@@ -253,18 +252,22 @@ const LiveClass = () => {
                 time: new Date()
             }]);
         } else if (data.type === 'user_join') {
+            // ✅ FIX: Ignore messages meant for someone else
+            if (data.target_id && String(data.target_id) !== currentUserId) return;
+            // ✅ FIX: Ignore our own join message
             if (String(data.user_id) === currentUserId) return;
+
             const participant = {
                 user: data.user || 'Participant',
                 role: data.role || 'STUDENT',
                 user_id: String(data.user_id)
             };
+            
             setParticipants((current) => current.some((item) => item.user_id === participant.user_id)
                 ? current
                 : [...current, participant]);
 
-            // ✅ FIX: Both Teachers and Students initiate WebRTC offers
-            // Teacher makes offer to students, Student makes offer to teacher
+            // ✅ FIX: BOTH Teacher and Student must initiate an offer
             if (isTeacher && participant.role === 'STUDENT') {
                 makeOffer(participant);
             } else if (!isTeacher && participant.role === 'TEACHER') {
@@ -289,6 +292,7 @@ const LiveClass = () => {
                 });
             }
         } else if (data.type === 'user_leave') {
+            // ... (keep your existing user_leave code)
             const leavingId = String(data.user_id);
             setParticipants((current) => current.filter((item) => item.user_id !== leavingId));
             setRaisedHands((current) => current.filter((item) => item.user_id !== leavingId));
@@ -318,6 +322,7 @@ const LiveClass = () => {
             toast.error(data.message || 'The class action could not be completed.');
         }
     }, [closePeer, currentUserId, handleSignal, isTeacher, makeOffer, navigate, saveSession]);
+
     const connect = useCallback(async () => {
         setIsConnecting(true);
         setError('');
