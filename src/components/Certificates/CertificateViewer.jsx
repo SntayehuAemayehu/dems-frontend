@@ -3,34 +3,55 @@ import React, { useState, useEffect } from 'react';
 import {
   RefreshCw,
   ArrowLeft,
-  CheckCircle,
-  Printer
+  Printer,
+  GraduationCap,
+  BookOpen,
+  UserRound,
+  Hash,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/api';
 import toast from 'react-hot-toast';
-import { buildCourseGrades, letterGrade, normalizeResultList } from '../../utils/courseGrades';
+import {
+  buildCourseGrades,
+  letterGrade,
+  normalizeResultList,
+} from '../../utils/courseGrades';
 
 const CertificateViewer = () => {
   const navigate = useNavigate();
 
   const [certificates, setCertificates] = useState([]);
-  const [studentInfo, setStudentInfo] = useState({});
+  const [studentInfo, setStudentInfo] = useState({
+    name: 'Student Name',
+    id: 'N/A',
+    department: 'Distance Education',
+    year: 'N/A',
+    semester: 'N/A',
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchCertificates();
-  }, []); // eslint-disable-line
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchCertificates = async () => {
     try {
       setLoading(true);
 
-      const [studentGradesResponse, examsResponse, assignmentsResponse] = await Promise.all([
+      const [
+        studentGradesResponse,
+        examsResponse,
+        assignmentsResponse,
+      ] = await Promise.all([
         api.get('/courses/my-grades/'),
         api.get('/exams/results/'),
         api.get('/courses/student/assignments/results/'),
       ]);
+
       const studentGrades = studentGradesResponse.data || {};
 
       setStudentInfo({
@@ -45,15 +66,41 @@ const CertificateViewer = () => {
         normalizeResultList(examsResponse.data),
         normalizeResultList(assignmentsResponse.data)
       );
-      setCertificates(grades.map((course) => ({
-        ...course,
-        id: course.course_id ?? course.course_code,
-        grade: course.letter,
-      })));
 
+      setCertificates(
+        grades.map((course, index) => {
+          const score = Number(
+            course.score ??
+            course.total_score ??
+            course.total ??
+            0
+          );
+
+          const amount = Number(
+            course.amount ??
+            course.credit_hours ??
+            course.credits ??
+            course.credit ??
+            0
+          );
+
+          return {
+            ...course,
+            id: course.course_id ?? course.course_code ?? index,
+            course_id: course.course_id ?? course.course_code ?? 'N/A',
+            course_title:
+              course.course_title ||
+              course.course_name ||
+              'Untitled Course',
+            score,
+            amount,
+            grade: course.letter || course.grade || '—',
+          };
+        })
+      );
     } catch (error) {
       console.error('Failed to fetch certificates:', error);
-      toast.error('Failed to load certificates');
+      toast.error('Failed to load academic transcript');
     } finally {
       setLoading(false);
     }
@@ -63,36 +110,56 @@ const CertificateViewer = () => {
     window.print();
   };
 
-  const totalMarks = certificates.reduce((sum, course) => sum + course.total, 0);
-  const overallGrade = certificates.length ? letterGrade(totalMarks).letter : '—';
+  // Calculate total score across all courses.
+  const totalScore = certificates.reduce(
+    (sum, course) => sum + (Number(course.score) || 0),
+    0
+  );
+
+  // Calculate total credit hours.
+  const totalAmount = certificates.reduce(
+    (sum, course) => sum + (Number(course.amount) || 0),
+    0
+  );
+
+  // Calculate average score.
+  const averageScore = certificates.length
+    ? (totalScore / certificates.length).toFixed(2)
+    : '0.00';
+
+  // Calculate overall letter grade from the average score.
+  const overallGrade = certificates.length
+    ? letterGrade(Number(averageScore)).letter
+    : '—';
 
   if (loading) {
     return (
-      <div className="certificate-loading">
-        <div className="loading-spinner"></div>
+      <div className="transcript-loading">
+        <div className="loading-spinner" />
         <p>Loading your academic transcript...</p>
 
         <style>{`
-          .certificate-loading {
-            min-height: 300px;
+          .transcript-loading {
+            min-height: 360px;
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
+            gap: 16px;
             color: #64748b;
-            gap: 15px;
+            font-family: Inter, Arial, sans-serif;
           }
 
           .loading-spinner {
-            width: 42px;
-            height: 42px;
-            border: 4px solid #e2e8f0;
-            border-top-color: #1e3a8a;
+            width: 46px;
+            height: 46px;
+            border: 4px solid #dbeafe;
+            border-top-color: #1d4ed8;
             border-radius: 50%;
-            animation: certificate-spin 1s linear infinite;
+            animation: transcript-spin 0.8s linear infinite;
           }
 
-          @keyframes certificate-spin {
+          @keyframes transcript-spin {
             to {
               transform: rotate(360deg);
             }
@@ -103,383 +170,618 @@ const CertificateViewer = () => {
   }
 
   return (
-    <div className="certificate-page">
-
+    <div className="transcript-page">
       <style>{`
-
-        * {
+        .transcript-page,
+        .transcript-page * {
           box-sizing: border-box;
         }
 
-        .certificate-page {
-          max-width: 1050px;
+        .transcript-page {
+          width: 100%;
+          max-width: 1120px;
           margin: 0 auto;
-          padding: 20px;
-          font-family: Arial, sans-serif;
-          color: #1e293b;
+          padding: 28px 22px 42px;
+          color: #172554;
+          font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
-        .certificate-toolbar {
+        .transcript-toolbar {
           display: flex;
+          align-items: center;
           justify-content: space-between;
+          gap: 14px;
+          margin-bottom: 24px;
+        }
+
+        .transcript-toolbar-actions {
+          display: flex;
           align-items: center;
           gap: 10px;
-          margin-bottom: 20px;
         }
 
-        .certificate-toolbar button {
-          display: flex;
+        .transcript-action {
+          min-height: 42px;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 7px;
+          gap: 9px;
           padding: 10px 16px;
-          border: none;
-          border-radius: 7px;
-          cursor: pointer;
+          border: 1px solid transparent;
+          border-radius: 12px;
           font-size: 13px;
-          font-weight: 600;
-          transition: 0.2s;
+          font-weight: 700;
+          cursor: pointer;
+          transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
         }
 
-        .back-button {
-          background: #f1f5f9;
+        .transcript-action:hover {
+          transform: translateY(-2px);
+        }
+
+        .transcript-action:active {
+          transform: translateY(0) scale(0.98);
+        }
+
+        .transcript-back {
           color: #334155;
-        }
-
-        .refresh-button {
-          background: #eff6ff;
-          color: #1e40af;
-        }
-
-        .print-button {
-          background: #1e3a8a;
-          color: white;
-        }
-
-        .certificate-toolbar button:hover {
-          opacity: 0.85;
-          transform: translateY(-1px);
-        }
-
-        .premium-cert-wrapper {
-          position: relative;
           background: #ffffff;
-          border: 2px solid #1e3a8a;
-          outline: 5px solid #e2e8f0;
-          outline-offset: -9px;
-          border-radius: 4px;
-          padding: 24px 35px;
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-          overflow: hidden;
-          font-family: Georgia, serif;
+          border-color: #e2e8f0;
         }
 
-        .watermark {
-          position: absolute;
-          width: 250px;
-          height: 250px;
-          object-fit: contain;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          opacity: 0.035;
-          pointer-events: none;
-          z-index: 0;
+        .transcript-back:hover {
+          background: #f8fafc;
+          box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07);
         }
 
-        .cert-content {
+        .transcript-refresh {
+          color: #1d4ed8;
+          background: #eff6ff;
+          border-color: #dbeafe;
+        }
+
+        .transcript-refresh:hover {
+          background: #dbeafe;
+        }
+
+        .transcript-print {
+          color: #ffffff;
+          background: linear-gradient(135deg, #1e40af, #2563eb);
+          box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
+        }
+
+        .transcript-print:hover {
+          box-shadow: 0 12px 24px rgba(37, 99, 235, 0.28);
+        }
+
+        .transcript-sheet {
           position: relative;
-          z-index: 1;
+          overflow: hidden;
+          padding: 38px 42px 42px;
+          background: #ffffff;
+          border: 1px solid #dbeafe;
+          border-radius: 24px;
+          box-shadow: 0 22px 65px rgba(15, 23, 42, 0.09);
+          isolation: isolate;
         }
 
-        .cert-logo {
-          display: flex;
-          justify-content: center;
-          margin-bottom: 6px;
+        .transcript-sheet::before {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 7px;
+          content: "";
+          background: linear-gradient(90deg, #172554, #2563eb, #38bdf8);
+          z-index: -1;
         }
 
-        .cert-logo img {
-          height: 58px;
-          max-width: 120px;
-          object-fit: contain;
+        .transcript-sheet::after {
+          position: absolute;
+          width: 340px;
+          height: 340px;
+          right: -170px;
+          top: -180px;
+          content: "";
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(59, 130, 246, 0.10), transparent 68%);
+          pointer-events: none;
+          z-index: -1;
         }
 
-        .cert-header-text {
-          color: #0f172a;
-          font-size: 20px;
-          font-weight: bold;
-          margin: 3px 0;
-          letter-spacing: 1.5px;
+        .transcript-university {
           text-align: center;
-          text-transform: uppercase;
-        }
-
-        .cert-title {
-          color: #1e3a8a;
-          font-size: 25px;
-          font-style: italic;
-          font-weight: bold;
-          margin: 8px 0 13px;
-          text-align: center;
-        }
-
-        .cert-title::after {
-          content: '';
-          display: block;
-          width: 110px;
-          height: 2px;
-          background: #cbd5e1;
-          margin: 7px auto 0;
-        }
-
-        .cert-body {
-          color: #475569;
-          font-size: 12px;
-          margin: 4px 0;
-          text-align: center;
-          font-style: italic;
-        }
-
-        .cert-name {
-          color: #0f172a;
-          font-size: 21px;
-          font-weight: bold;
-          margin: 6px 0 12px;
-          text-align: center;
-          letter-spacing: 0.5px;
-          overflow-wrap: anywhere;
-        }
-
-        .cert-details-strip {
-          display: flex;
-          justify-content: center;
-          flex-wrap: wrap;
-          gap: 12px 30px;
-          font-size: 10px;
-          color: #475569;
-          margin-bottom: 13px;
-          padding: 9px 5px;
-          border-top: 1px solid #e2e8f0;
+          padding-bottom: 28px;
           border-bottom: 1px solid #e2e8f0;
         }
 
-        .table-container {
-          margin: 0 0 14px;
-          border: 1px solid #cbd5e1;
-          border-radius: 4px;
-          overflow: visible;
+        .transcript-logo-wrap {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 14px;
         }
 
-        .cert-details-table {
+        .transcript-logo {
+          display: block;
+          width: auto;
+          height: 88px;
+          max-width: 180px;
+          object-fit: contain;
+          filter: drop-shadow(0 5px 8px rgba(15, 23, 42, 0.10));
+        }
+
+        .transcript-university-name {
+          margin: 0;
+          color: #172554;
+          font-size: clamp(19px, 2.5vw, 27px);
+          font-weight: 900;
+          letter-spacing: 1.5px;
+          line-height: 1.3;
+        }
+
+        .transcript-heading {
+          margin: 9px 0 0;
+          color: #2563eb;
+          font-size: 14px;
+          font-weight: 800;
+          letter-spacing: 3px;
+          text-transform: uppercase;
+        }
+
+        .transcript-subheading {
+          margin: 8px 0 0;
+          color: #64748b;
+          font-size: 12px;
+          line-height: 1.6;
+        }
+
+        .student-section {
+          margin-top: 28px;
+        }
+
+        .section-heading {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin: 0 0 16px;
+          color: #172554;
+          font-size: 16px;
+          font-weight: 850;
+        }
+
+        .section-heading-icon {
+          width: 34px;
+          height: 34px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #1d4ed8;
+          background: #eff6ff;
+          border: 1px solid #dbeafe;
+          border-radius: 11px;
+        }
+
+        .student-info-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 13px;
+        }
+
+        .student-info-card {
+          min-width: 0;
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 15px;
+          background: linear-gradient(145deg, #ffffff, #f8fbff);
+          border: 1px solid #e2e8f0;
+          border-radius: 15px;
+          transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+          animation: transcript-card-in 450ms ease both;
+        }
+
+        .student-info-card:hover {
+          transform: translateY(-3px);
+          border-color: #bfdbfe;
+          box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
+        }
+
+        .student-info-icon {
+          flex: 0 0 36px;
+          width: 36px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #1d4ed8;
+          background: #eff6ff;
+          border-radius: 11px;
+        }
+
+        .student-info-copy {
+          min-width: 0;
+        }
+
+        .student-info-label {
+          display: block;
+          margin-bottom: 5px;
+          color: #64748b;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.9px;
+          text-transform: uppercase;
+        }
+
+        .student-info-value {
+          display: block;
+          overflow-wrap: anywhere;
+          color: #0f172a;
+          font-size: 13px;
+          font-weight: 750;
+          line-height: 1.45;
+        }
+
+        .courses-section {
+          margin-top: 32px;
+        }
+
+        .courses-heading-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 15px;
+        }
+
+        .courses-heading-row .section-heading {
+          margin: 0;
+        }
+
+        .course-count {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 7px 11px;
+          color: #1d4ed8;
+          background: #eff6ff;
+          border: 1px solid #dbeafe;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .courses-table-wrap {
+          overflow: hidden;
+          border: 1px solid #dbe3ef;
+          border-radius: 16px;
+          background: #ffffff;
+        }
+
+        .courses-table {
           width: 100%;
           border-collapse: collapse;
           table-layout: fixed;
         }
 
-        .cert-details-table th {
-          background: #1e3a8a;
-          color: white;
-          padding: 7px 8px;
-          font-size: 10px;
-          letter-spacing: 0.4px;
-          text-transform: uppercase;
-          text-align: left;
+        .courses-table thead {
+          background: linear-gradient(110deg, #172554, #1e40af);
         }
 
-        .cert-details-table td {
-          padding: 6px 8px;
-          border-bottom: 1px solid #e2e8f0;
+        .courses-table th {
+          padding: 15px 12px;
+          color: #ffffff;
           font-size: 10px;
-          color: #1e293b;
+          font-weight: 850;
+          letter-spacing: 0.7px;
+          text-align: left;
+          text-transform: uppercase;
+        }
+
+        .courses-table th:nth-child(1) {
+          width: 17%;
+        }
+
+        .courses-table th:nth-child(2) {
+          width: 35%;
+        }
+
+        .courses-table th:nth-child(3) {
+          width: 17%;
+          text-align: center;
+        }
+
+        .courses-table th:nth-child(4) {
+          width: 15%;
+          text-align: center;
+        }
+
+        .courses-table th:nth-child(5) {
+          width: 16%;
+          text-align: center;
+        }
+
+        .courses-table td {
+          padding: 14px 12px;
+          color: #334155;
+          border-bottom: 1px solid #edf2f7;
+          font-size: 12px;
+          line-height: 1.5;
           overflow-wrap: anywhere;
         }
 
-        .cert-details-table tr:nth-child(even) {
-          background: #f8fafc;
+        .courses-table tbody tr {
+          transition: background 160ms ease;
+          animation: transcript-row-in 350ms ease both;
         }
 
-        .cert-details-table tbody tr:last-child td {
+        .courses-table tbody tr:hover {
+          background: #f5f9ff;
+        }
+
+        .courses-table tbody tr:last-child td {
           border-bottom: none;
         }
 
-        .cert-details-table th:nth-child(1),
-        .cert-details-table td:nth-child(1) {
-          width: 20%;
+        .course-id-cell {
+          color: #1e40af !important;
+          font-weight: 800;
         }
 
-        .cert-details-table th:nth-child(2),
-        .cert-details-table td:nth-child(2) {
-          width: 48%;
+        .course-name-cell {
+          color: #0f172a !important;
+          font-weight: 700;
         }
 
-        .cert-details-table th:nth-child(3),
-        .cert-details-table td:nth-child(3) {
-          width: 14%;
+        .course-score-cell,
+        .course-grade-cell,
+        .course-amount-cell {
           text-align: center;
+          font-weight: 800;
         }
 
-        .cert-details-table th:nth-child(4),
-        .cert-details-table td:nth-child(4) {
-          width: 18%;
-          text-align: center;
+        .course-score-cell {
+          color: #1e40af !important;
+        }
+
+        .grade-pill {
+          min-width: 42px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 6px 11px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 900;
         }
 
         .grade-pass {
-          color: #15803d !important;
-          font-weight: bold;
+          color: #166534;
+          background: #dcfce7;
+          border: 1px solid #bbf7d0;
         }
 
         .grade-fail {
-          color: #dc2626 !important;
-          font-weight: bold;
+          color: #b91c1c;
+          background: #fee2e2;
+          border: 1px solid #fecaca;
         }
 
-        .cert-summary-box {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 10px 16px;
-          background: #f1f5f9;
-          border-left: 4px solid #1e3a8a;
-          margin-bottom: 20px;
-          border-radius: 3px;
-        }
-
-        .summary-label {
-          margin: 0;
-          font-size: 9px;
-          color: #64748b;
-          text-transform: uppercase;
-          letter-spacing: 0.7px;
-        }
-
-        .summary-value {
-          margin: 3px 0 0;
-          font-size: 16px;
-          font-weight: bold;
-          color: #0f172a;
-        }
-
-        .summary-cgpa {
-          color: #1e3a8a;
-          font-size: 19px;
-        }
-
-        .cert-footer {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-end;
-          gap: 15px;
-          padding: 0 10px;
-          margin-top: 12px;
-        }
-
-        .signature-block {
-          text-align: center;
-          min-width: 125px;
-        }
-
-        .signature-line {
-          border-top: 1px solid #64748b;
-          width: 125px;
-          margin-bottom: 5px;
-        }
-
-        .signature-title {
-          font-size: 9px;
+        .grade-neutral {
           color: #475569;
+          background: #f1f5f9;
+          border: 1px solid #e2e8f0;
+        }
+
+        .total-row {
+          background: #eff6ff !important;
+          font-weight: 900;
+        }
+
+        .total-row td {
+          padding: 15px 12px;
+          color: #172554 !important;
+          border-top: 2px solid #bfdbfe;
+          border-bottom: none !important;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .total-label {
+          text-align: right;
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
 
-        .seal {
-          width: 65px;
-          height: 65px;
-          border: 1.5px dashed #94a3b8;
-          border-radius: 50%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          color: #94a3b8;
-          font-size: 8px;
-          text-transform: uppercase;
+        .total-score-cell,
+        .total-amount-cell {
+          color: #1d4ed8 !important;
           text-align: center;
-          transform: rotate(-10deg);
-        }
-
-        .issued-date {
-          margin: 15px 0 0;
-          font-size: 9px;
-          color: #94a3b8;
-          text-align: center;
-          text-transform: uppercase;
-          letter-spacing: 0.7px;
+          font-size: 14px !important;
         }
 
         .empty-courses {
-          padding: 15px;
+          padding: 38px 18px !important;
           text-align: center;
-          color: #64748b;
-          font-size: 11px;
+          color: #64748b !important;
         }
 
-        @media (max-width: 600px) {
-          .certificate-page {
-            padding: 10px;
+        .empty-courses-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 9px;
+        }
+
+        .empty-courses-icon {
+          width: 46px;
+          height: 46px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #64748b;
+          background: #f1f5f9;
+          border-radius: 14px;
+        }
+
+        .academic-summary {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 13px;
+          margin-top: 20px;
+        }
+
+        .summary-card {
+          padding: 16px 18px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
+        }
+
+        .summary-card-label {
+          margin: 0;
+          color: #64748b;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.8px;
+          text-transform: uppercase;
+        }
+
+        .summary-card-value {
+          margin: 7px 0 0;
+          color: #172554;
+          font-size: 22px;
+          font-weight: 900;
+        }
+
+        .summary-card-value.highlight {
+          color: #1d4ed8;
+        }
+
+        @keyframes transcript-card-in {
+          from {
+            opacity: 0;
+            transform: translateY(12px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes transcript-row-in {
+          from {
+            opacity: 0;
+            transform: translateY(5px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @media (max-width: 760px) {
+          .transcript-page {
+            padding: 20px 14px 30px;
           }
 
-          .premium-cert-wrapper {
-            padding: 20px 12px;
+          .transcript-sheet {
+            padding: 30px 22px;
+            border-radius: 19px;
           }
 
-          .cert-header-text {
-            font-size: 16px;
+          .student-info-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
-          .cert-title {
-            font-size: 21px;
+          .courses-table th,
+          .courses-table td {
+            padding: 12px 8px;
           }
+        }
 
-          .cert-details-strip {
-            gap: 8px;
+        @media (max-width: 520px) {
+          .transcript-toolbar {
+            align-items: stretch;
             flex-direction: column;
-            align-items: center;
           }
 
-          .cert-footer {
-            padding: 0;
-            gap: 5px;
+          .transcript-toolbar-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
           }
 
-          .signature-block {
-            min-width: 90px;
+          .transcript-action {
+            padding: 10px 11px;
+            font-size: 12px;
           }
 
-          .signature-line {
-            width: 90px;
+          .transcript-sheet {
+            padding: 25px 14px;
           }
 
-          .cert-details-table th,
-          .cert-details-table td {
-            padding: 5px 3px;
-            font-size: 9px;
+          .transcript-logo {
+            height: 72px;
+            max-width: 150px;
+          }
+
+          .transcript-heading {
+            letter-spacing: 2px;
+          }
+
+          .student-info-grid {
+            grid-template-columns: 1fr;
+            gap: 9px;
+          }
+
+          .student-info-card {
+            padding: 12px;
+          }
+
+          .courses-heading-row {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .courses-table th {
+            font-size: 8px;
+            letter-spacing: 0;
+          }
+
+          .courses-table td {
+            font-size: 10px;
+          }
+
+          .academic-summary {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .student-info-card,
+          .courses-table tbody tr {
+            animation: none !important;
+            transition: none !important;
+          }
+
+          .transcript-action {
+            transition: none !important;
           }
         }
 
         @media print {
-
           @page {
             size: A4 portrait;
-            margin: 7mm;
+            margin: 12mm;
           }
 
           html,
           body {
-            width: 100%;
+            width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: white !important;
+            background: #ffffff !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -488,161 +790,87 @@ const CertificateViewer = () => {
             visibility: hidden !important;
           }
 
-          .certificate-page,
-          .certificate-page * {
+          .transcript-page,
+          .transcript-page * {
             visibility: visible !important;
           }
 
-          .certificate-page {
+          .transcript-page {
             position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
+            inset: 0 auto auto 0 !important;
             width: 100% !important;
             max-width: none !important;
             margin: 0 !important;
             padding: 0 !important;
           }
 
-          .certificate-toolbar {
+          .transcript-toolbar {
             display: none !important;
           }
 
-          .premium-cert-wrapper {
+          .transcript-sheet {
             width: 100% !important;
-            max-width: none !important;
-            margin: 0 !important;
-            padding: 12mm 10mm !important;
-            border: 1.5px solid #1e3a8a !important;
-            outline: none !important;
+            padding: 8mm !important;
+            border: 1px solid #cbd5e1 !important;
             border-radius: 0 !important;
             box-shadow: none !important;
             overflow: visible !important;
-            transform: none !important;
           }
 
-          .watermark {
-            width: 180px !important;
-            height: 180px !important;
+          .transcript-logo {
+            height: 65px !important;
           }
 
-          .cert-logo img {
-            height: 45px !important;
+          .student-info-card,
+          .summary-card {
+            break-inside: avoid !important;
+            box-shadow: none !important;
           }
 
-          .cert-header-text {
-            font-size: 17px !important;
-            margin: 2px 0 !important;
-          }
-
-          .cert-title {
-            font-size: 21px !important;
-            margin: 5px 0 9px !important;
-          }
-
-          .cert-body {
-            font-size: 10px !important;
-          }
-
-          .cert-name {
-            font-size: 17px !important;
-            margin: 4px 0 8px !important;
-          }
-
-          .cert-details-strip {
-            gap: 20px !important;
-            font-size: 9px !important;
-            margin-bottom: 8px !important;
-            padding: 6px !important;
-          }
-
-          .table-container {
-            max-height: none !important;
-            height: auto !important;
+          .courses-table-wrap {
             overflow: visible !important;
-            margin-bottom: 9px !important;
             break-inside: auto !important;
           }
 
-          .cert-details-table {
-            width: 100% !important;
-            font-size: 9px !important;
+          .courses-table thead {
+            display: table-header-group;
           }
 
-          .cert-details-table th {
-            padding: 5px !important;
-            font-size: 9px !important;
-          }
-
-          .cert-details-table td {
-            padding: 4px 5px !important;
-            font-size: 9px !important;
-          }
-
-          .cert-details-table tr {
+          .courses-table tr {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
 
-          .cert-summary-box {
-            padding: 7px 12px !important;
-            margin-bottom: 12px !important;
-            break-inside: avoid !important;
+          .courses-table th,
+          .courses-table td {
+            padding: 8px 7px !important;
+            font-size: 9px !important;
           }
 
-          .summary-label {
-            font-size: 8px !important;
+          .student-info-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
           }
 
-          .summary-value {
-            font-size: 13px !important;
-          }
-
-          .summary-cgpa {
-            font-size: 16px !important;
-          }
-
-          .cert-footer {
-            margin-top: 8px !important;
-            break-inside: avoid !important;
-          }
-
-          .signature-line {
-            width: 110px !important;
-          }
-
-          .signature-title {
-            font-size: 8px !important;
-          }
-
-          .seal {
-            width: 55px !important;
-            height: 55px !important;
-            font-size: 7px !important;
-          }
-
-          .issued-date {
-            margin-top: 9px !important;
-            font-size: 8px !important;
+          .academic-summary {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           }
         }
-
       `}</style>
 
-      {/* Toolbar */}
-      <div className="certificate-toolbar">
-
+      <div className="transcript-toolbar">
         <button
-          className="back-button"
+          type="button"
+          className="transcript-action transcript-back"
           onClick={() => navigate('/dashboard')}
         >
           <ArrowLeft size={16} />
           Back to Dashboard
         </button>
 
-        <div style={{ display: 'flex', gap: '8px' }}>
-
+        <div className="transcript-toolbar-actions">
           <button
-            className="refresh-button"
+            type="button"
+            className="transcript-action transcript-refresh"
             onClick={fetchCertificates}
           >
             <RefreshCw size={15} />
@@ -650,220 +878,222 @@ const CertificateViewer = () => {
           </button>
 
           <button
-            className="print-button"
+            type="button"
+            className="transcript-action transcript-print"
             onClick={handlePrint}
           >
             <Printer size={15} />
             Print Transcript
           </button>
-
         </div>
-
       </div>
 
-      {/* Certificate */}
-      <div className="premium-cert-wrapper">
-
-        <img
-          src="/Mekdela_Amba_University_logo.jpg"
-          alt=""
-          className="watermark"
-          onError={(e) => {
-            e.target.style.display = 'none';
-          }}
-        />
-
-        <div className="cert-content">
-
-          {/* University Logo */}
-          <div className="cert-logo">
+      <main className="transcript-sheet">
+        <header className="transcript-university">
+          <div className="transcript-logo-wrap">
             <img
               src="/Mekdela_Amba_University_logo.jpg"
               alt="Mekdela Amba University Logo"
-              onError={(e) => {
-                e.target.style.display = 'none';
+              className="transcript-logo"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
               }}
             />
           </div>
 
-          {/* University Header */}
-          <h3 className="cert-header-text">
+          <h1 className="transcript-university-name">
             MEKDELA AMBA UNIVERSITY
-          </h3>
-
-          <h1 className="cert-title">
-            Official Transcript
           </h1>
 
-          {/* Student Information */}
-          <div style={{ textAlign: 'center' }}>
+          <p className="transcript-heading">
+            Academic Transcript
+          </p>
 
-            <p className="cert-body">
-              This is to certify that
-            </p>
+          <p className="transcript-subheading">
+            Student academic record and course grade summary
+          </p>
+        </header>
 
-            <p className="cert-name">
-              {studentInfo.name}
-            </p>
+        <section className="student-section">
+          <h2 className="section-heading">
+            <span className="section-heading-icon">
+              <UserRound size={18} />
+            </span>
+            Student Information
+          </h2>
 
+          <div className="student-info-grid">
+            <div className="student-info-card">
+              <span className="student-info-icon">
+                <UserRound size={18} />
+              </span>
+              <div className="student-info-copy">
+                <span className="student-info-label">Student Name</span>
+                <span className="student-info-value">{studentInfo.name}</span>
+              </div>
+            </div>
+
+            <div className="student-info-card">
+              <span className="student-info-icon">
+                <Hash size={18} />
+              </span>
+              <div className="student-info-copy">
+                <span className="student-info-label">Student ID</span>
+                <span className="student-info-value">{studentInfo.id}</span>
+              </div>
+            </div>
+
+            <div className="student-info-card">
+              <span className="student-info-icon">
+                <Building2 size={18} />
+              </span>
+              <div className="student-info-copy">
+                <span className="student-info-label">Department</span>
+                <span className="student-info-value">{studentInfo.department}</span>
+              </div>
+            </div>
+
+            <div className="student-info-card">
+              <span className="student-info-icon">
+                <GraduationCap size={18} />
+              </span>
+              <div className="student-info-copy">
+                <span className="student-info-label">Academic Year</span>
+                <span className="student-info-value">{studentInfo.year}</span>
+              </div>
+            </div>
+
+            <div className="student-info-card">
+              <span className="student-info-icon">
+                <CalendarDays size={18} />
+              </span>
+              <div className="student-info-copy">
+                <span className="student-info-label">Semester</span>
+                <span className="student-info-value">{studentInfo.semester}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="courses-section">
+          <div className="courses-heading-row">
+            <h2 className="section-heading">
+              <span className="section-heading-icon">
+                <BookOpen size={18} />
+              </span>
+              Course Results
+            </h2>
+
+            <span className="course-count">
+              <CheckCircle2 size={14} />
+              {certificates.length} {certificates.length === 1 ? 'Course' : 'Courses'}
+            </span>
           </div>
 
-          <div className="cert-details-strip">
-
-            <span>
-              <b>Student ID:</b> {studentInfo.id}
-            </span>
-
-            <span>
-              <b>Department:</b> {studentInfo.department}
-            </span>
-
-            <span>
-              <b>Year:</b> {studentInfo.year}
-            </span>
-
-            <span>
-              <b>Semester:</b> {studentInfo.semester}
-            </span>
-
-          </div>
-
-          {/* Courses Table */}
-          <div className="table-container">
-
-            <table className="cert-details-table">
-
+          <div className="courses-table-wrap">
+            <table className="courses-table">
               <thead>
                 <tr>
-                  <th>Course Code</th>
+                  <th>ID</th>
                   <th>Course Name</th>
-                  <th>Total Marks</th>
+                  <th>Score</th>
                   <th>Grade</th>
+                  <th>Amount</th>
                 </tr>
               </thead>
 
               <tbody>
-
                 {certificates.length > 0 ? (
-                  certificates.map((cert) => (
+                  <>
+                    {certificates.map((cert, index) => {
+                      const grade = cert.grade || '—';
 
-                    <tr key={cert.id}>
-
-                      <td style={{ fontWeight: '600' }}>
-                        {cert.course_code}
-                      </td>
-
-                      <td>
-                        {cert.course_title}
-                      </td>
-
-                      <td style={{ fontWeight: 'bold' }}>
-                        {cert.total}
-                      </td>
-
-                      <td className={
-                        cert.grade === 'F'
+                      const gradeClass =
+                        grade === 'F'
                           ? 'grade-fail'
-                          : 'grade-pass'
-                      }>
-                        {cert.grade}
+                          : grade === '—'
+                            ? 'grade-neutral'
+                            : 'grade-pass';
+
+                      return (
+                        <tr key={cert.id ?? index}>
+                          <td className="course-id-cell">
+                            {cert.course_id || cert.course_code || 'N/A'}
+                          </td>
+
+                          <td className="course-name-cell">
+                            {cert.course_title || 'Untitled Course'}
+                          </td>
+
+                          <td className="course-score-cell">
+                            {cert.score}
+                          </td>
+
+                          <td className="course-grade-cell">
+                            <span className={`grade-pill ${gradeClass}`}>
+                              {grade}
+                            </span>
+                          </td>
+
+                          <td className="course-amount-cell">
+                            {cert.amount}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    <tr className="total-row">
+                      <td colSpan="2" className="total-label">
+                        TOTAL
                       </td>
 
+                      <td className="total-score-cell">
+                        {totalScore}
+                      </td>
+
+                      <td></td>
+
+                      <td className="total-amount-cell">
+                        {totalAmount}
+                      </td>
                     </tr>
-
-                  ))
+                  </>
                 ) : (
-
                   <tr>
-                    <td colSpan="4" className="empty-courses">
-                      No course grades are available yet.
+                    <td colSpan="5" className="empty-courses">
+                      <div className="empty-courses-content">
+                        <span className="empty-courses-icon">
+                          <BookOpen size={21} />
+                        </span>
+                        <strong>No course grades available yet</strong>
+                        <span>
+                          Your course results will appear here when they are available.
+                        </span>
+                      </div>
                     </td>
                   </tr>
-
                 )}
-
               </tbody>
-
             </table>
+          </div>
+        </section>
 
+        <section className="academic-summary">
+          <div className="summary-card">
+            <p className="summary-card-label">Total Score</p>
+            <p className="summary-card-value">
+              {totalScore}
+            </p>
           </div>
 
-          {/* Academic Summary */}
-          <div className="cert-summary-box">
-
-            <div>
-
-              <p className="summary-label">
-                Total Marks (All Courses)
-              </p>
-
-              <p className="summary-value">
-                {totalMarks}
-              </p>
-
-            </div>
-
-            <div style={{ textAlign: 'right' }}>
-
-              <p className="summary-label">
-                Overall Letter Grade
-              </p>
-
-              <p className="summary-value summary-cgpa">
-                {overallGrade}
-              </p>
-
-            </div>
-
+          <div className="summary-card">
+            <p className="summary-card-label">Total Amount</p>
+            <p className="summary-card-value highlight">
+              {totalAmount}
+            </p>
           </div>
-
-          {/* Signatures and Seal */}
-          <div className="cert-footer">
-
-            <div className="signature-block">
-
-              <div className="signature-line"></div>
-
-              <div className="signature-title">
-                Dean of Students
-              </div>
-
-            </div>
-
-            <div className="seal">
-
-              <CheckCircle
-                size={20}
-                style={{ marginBottom: '3px' }}
-              />
-
-              Official
-              <br />
-              Seal
-
-            </div>
-
-            <div className="signature-block">
-
-              <div className="signature-line"></div>
-
-              <div className="signature-title">
-                Registrar
-              </div>
-
-            </div>
-
-          </div>
-
-          {/* Issue Date */}
-          <p className="issued-date">
-            Issued on: {new Date().toLocaleDateString()}
-          </p>
-
-        </div>
-
-      </div>
-
+        </section>
+      </main>
     </div>
   );
 };

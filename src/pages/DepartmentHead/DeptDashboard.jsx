@@ -25,6 +25,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '../../api/api';
 import * as XLSX from 'xlsx';
+import DepartmentHeadResults from './DepartmentHeadResults';
 
 // Simple GradeBadge component (used in results modal)
 const GradeBadge = ({ grade, percentage, size = 'md' }) => {
@@ -208,6 +209,7 @@ const DeptDashboard = () => {
       toast.success(response.data.message || 'Results sent successfully');
       await fetchData();
       await fetchSentResults();
+      if (studentId) await viewStudentResults(studentId);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to send results');
     } finally {
@@ -1114,6 +1116,9 @@ const DeptDashboard = () => {
             <button className={`sidebar-item ${activeTab === 'students' ? 'active' : ''}`} onClick={() => { setActiveTab('students'); setMobileMenuOpen(false); }}>
               <Users size={20} /> Students <span style={{ marginLeft: 'auto', fontSize: '12px' }}>{stats.totalStudents}</span>
             </button>
+            <button className={`sidebar-item ${activeTab === 'results' ? 'active' : ''}`} onClick={() => { setActiveTab('results'); setMobileMenuOpen(false); }}>
+              <Award size={20} /> Results
+            </button>
             <button className={`sidebar-item ${activeTab === 'teachers' ? 'active' : ''}`} onClick={() => { setActiveTab('teachers'); setMobileMenuOpen(false); }}>
               <UserCheck size={20} /> Teachers <span style={{ marginLeft: 'auto', fontSize: '12px' }}>{stats.totalTeachers}</span>
             </button>
@@ -1174,6 +1179,9 @@ const DeptDashboard = () => {
               <button className={`sidebar-item ${activeTab === 'students' ? 'active' : ''}`} onClick={() => setActiveTab('students')}>
                 <Users size={20} /> Students
                 <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#94a3b8' }}>{stats.totalStudents}</span>
+              </button>
+              <button className={`sidebar-item ${activeTab === 'results' ? 'active' : ''}`} onClick={() => setActiveTab('results')}>
+                <Award size={20} /> Results
               </button>
               
               {/* ✅ FIX: Changed stats.totalTeachers to filteredTeachers.length */}
@@ -1485,6 +1493,8 @@ const DeptDashboard = () => {
             )}
 
             {/* ==================== STUDENTS TAB ==================== */}
+            {activeTab === 'results' && <DepartmentHeadResults />}
+
             {activeTab === 'students' && (
               <div style={{ padding: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
@@ -1623,9 +1633,6 @@ const DeptDashboard = () => {
                                   </button>
                                   <button onClick={() => { viewStudentResults(student.id); setOpenActionMenu(null); }}>
                                     <Award size={14} /> Results
-                                  </button>
-                                  <button onClick={() => { handleSendResultToRegistrar(student.id); setOpenActionMenu(null); }}>
-                                    <Send size={14} /> Send to Registrar
                                   </button>
                                 </div>
                               )}
@@ -2792,7 +2799,7 @@ const DeptDashboard = () => {
               </div>
             </div>
 
-            {!selectedStudentResults.sent_to_registrar ? (
+            {selectedStudentResults.summary?.can_send_to_registrar ? (
               <button
                 onClick={() => handleSendResultToRegistrar(selectedStudentResults.student?.id)}
                 disabled={sendingResults}
@@ -2818,7 +2825,7 @@ const DeptDashboard = () => {
             ) : (
               <div style={{ padding: '12px', background: '#dcfce7', borderRadius: '8px', textAlign: 'center', color: '#16a34a' }}>
                 <CheckCircle size={18} style={{ display: 'inline', marginRight: '8px' }} />
-                Results sent to Registrar on {selectedStudentResults.sent_at ? new Date(selectedStudentResults.sent_at).toLocaleDateString() : '—'}
+                Results sent to Registrar{selectedStudentResults.summary?.sent_at ? ` on ${new Date(selectedStudentResults.summary.sent_at).toLocaleDateString()}` : ''}
               </div>
             )}
           </div>

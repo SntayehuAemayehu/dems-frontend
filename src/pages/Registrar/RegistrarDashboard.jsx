@@ -841,6 +841,25 @@ const RegistrarDashboard = () => {
             Refresh
           </button>
 
+          <button
+            type="button"
+            onClick={() => navigate('/registrar/results')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              background: '#0f766e',
+              border: 'none',
+              borderRadius: '8px',
+              color: 'white',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+            }}
+          >
+            <FileText size={18} />
+            Results & Certificates
+          </button>
 
           <button
             style={{

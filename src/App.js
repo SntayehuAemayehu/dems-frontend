@@ -58,6 +58,7 @@ import FinanceDashboard from './pages/Finance/FinanceDashboard';
 
 // Registrar Pages
 import RegistrarDashboard from './pages/Registrar/RegistrarDashboard';
+import RegistrarResults from './pages/Registrar/RegistrarResults';
 
 // Department Head Pages
 import DeptDashboard from './pages/DepartmentHead/DeptDashboard';
@@ -67,7 +68,7 @@ import AIInsights from './components/AI/AIInsights';
 import Leaderboard from './components/Gamification/Leaderboard';
 import AILearningPath from './components/AI/AILearningPath';
 import GamificationProfile from './components/Gamification/GamificationProfile';
-import CertificateViewer from './components/Certificates/CertificateViewer';
+import CertificateViewer from './components/Certificates/IssuedCertificates';
 import PerformancePrediction from './components/AI/PerformancePrediction';
 import RealTimeDashboard from './components/Analytics/RealTimeDashboard';
 import LanguageSelector from './components/i18n/LanguageSelector';
@@ -223,6 +224,7 @@ const AnimatedRoutes = () => {
 
           {/* Registrar Routes */}
           <Route path="/registrar/dashboard" element={<ProtectedRoute roles={['REGISTRAR', 'ADMIN']}><RegistrarDashboard /></ProtectedRoute>} />
+          <Route path="/registrar/results" element={<ProtectedRoute roles={['REGISTRAR', 'ADMIN']}><RegistrarResults /></ProtectedRoute>} />
 
           {/* Department Head Routes */}
           <Route path="/dept/dashboard" element={<ProtectedRoute roles={['DEPT_HEAD']}><DeptDashboard /></ProtectedRoute>} />
