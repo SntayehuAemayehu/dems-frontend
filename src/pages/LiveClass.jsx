@@ -252,7 +252,7 @@ const LiveClass = () => {
                 time: new Date()
             }]);
         } else if (data.type === 'user_join') {
-            if (data.target_id && String(data.target_id) !== currentUserId) return;
+            // ✅ FIX: Remove the target_id check. Process all user_joins.
             if (String(data.user_id) === currentUserId) return;
 
             const participant = {
@@ -265,10 +265,8 @@ const LiveClass = () => {
                 ? current
                 : [...current, participant]);
 
-            // ✅ FIX: Teacher initiates to Student, AND Student initiates to Teacher.
-            if (isTeacher && participant.role === 'STUDENT') {
-                makeOffer(participant);
-            } else if (!isTeacher && participant.role === 'TEACHER') {
+            // ✅ FIX: Student initiates the offer to the Teacher
+            if (!isTeacher && participant.role === 'TEACHER') {
                 makeOffer(participant);
             }
 
@@ -295,8 +293,6 @@ const LiveClass = () => {
             setParticipants((current) => current.filter((item) => item.user_id !== leavingId));
             setRaisedHands((current) => current.filter((item) => item.user_id !== leavingId));
             closePeer(leavingId);
-            
-            // ✅ RESTORED: Teacher attendance tracking on leave
             if (isTeacher) {
                 const attendees = sessionRef.current?.attendees || [];
                 const attendee = attendees.find((item) => item.userId === leavingId);
@@ -321,7 +317,7 @@ const LiveClass = () => {
         } else if (data.type === 'error') {
             toast.error(data.message || 'The class action could not be completed.');
         }
-    }, [closePeer, currentUserId, handleSignal, isTeacher, makeOffer, navigate, saveSession]);   
+    }, [closePeer, currentUserId, handleSignal, isTeacher, makeOffer, navigate, saveSession]);
     const connect = useCallback(async () => {
         setIsConnecting(true);
         setError('');
