@@ -362,6 +362,14 @@ const LiveClass = () => {
                 setIsConnecting(false);
                 setError('');
                 toast.success('You joined the live class.');
+                
+                // ✅ NEW: Force request for existing participants after 1 second
+                setTimeout(() => {
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: 'request_join' }));
+                    }
+                }, 1000);
+
                 if (isTeacher && !sessionRef.current) {
                     const startedAt = new Date();
                     sessionRef.current = {
@@ -419,7 +427,6 @@ const LiveClass = () => {
             setError(message);
         }
     }, [className, courseId, currentUserId, handleMessage, isTeacher, navigate, saveSession]);
-
     const stopRecording = useCallback(() => {
         if (recordingFrameRef.current) cancelAnimationFrame(recordingFrameRef.current);
         recordingFrameRef.current = null;
