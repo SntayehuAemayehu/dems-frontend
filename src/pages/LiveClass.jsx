@@ -108,12 +108,16 @@ const LiveClass = () => {
             return next;
         });
     }, []);
-
     const createPeer = useCallback((peerId, peerName) => {
         const id = String(peerId);
         if (!id || id === currentUserId) return null;
+        
+        // Close existing peer if it's stuck
         const existing = peersRef.current.get(id);
-        if (existing && existing.connectionState !== 'closed') return existing;
+        if (existing) {
+            existing.close();
+            peersRef.current.delete(id);
+        }
 
         const peer = new RTCPeerConnection({
             iceServers: [
@@ -123,25 +127,21 @@ const LiveClass = () => {
             iceCandidatePoolSize: 5
         });
 
-        if (screenStreamRef.current) {
-            localStreamRef.current?.getAudioTracks().forEach((track) => {
-                peer.addTrack(track, localStreamRef.current);
-            });
-            screenStreamRef.current.getVideoTracks().forEach((track) => {
-                peer.addTrack(track, screenStreamRef.current);
-            });
-        } else {
-            localStreamRef.current?.getTracks().forEach((track) => {
+        // Add local tracks to the connection
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach((track) => {
                 peer.addTrack(track, localStreamRef.current);
             });
         }
+
         peer.ontrack = (event) => {
+            console.log("📥 Received track from", peerName);
             const stream = event.streams?.[0];
             if (stream) {
                 setRemoteStreams((current) => ({ ...current, [id]: stream }));
-                addRecordingAudioStream(stream);
             }
         };
+
         peer.onicecandidate = (event) => {
             if (event.candidate) {
                 sendSocketMessage({
@@ -152,13 +152,16 @@ const LiveClass = () => {
                 });
             }
         };
+
         peer.onconnectionstatechange = () => {
-            if (['failed', 'closed'].includes(peer.connectionState)) closePeer(id);
+            if (['failed', 'closed', 'disconnected'].includes(peer.connectionState)) {
+                closePeer(id);
+            }
         };
-        peer.peerName = peerName;
+
         peersRef.current.set(id, peer);
         return peer;
-    }, [addRecordingAudioStream, closePeer, currentUserId, sendSocketMessage]);
+    }, [closePeer, currentUserId, sendSocketMessage]);
 
     const makeOffer = useCallback(async (participant) => {
         const peer = createPeer(participant.user_id, participant.user);
@@ -177,59 +180,61 @@ const LiveClass = () => {
             toast.error(`Could not connect to ${participant.user || 'a student'} video.`);
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
-
     const handleSignal = useCallback(async (message) => {
         const signal = message.type === 'webrtc' ? message.data : message;
-        if (!signal || (signal.target_id && String(signal.target_id) !== currentUserId)) return;
+        if (!signal) return;
+        
+        // Ignore if the message is for someone else
+        if (signal.target_id && String(signal.target_id) !== currentUserId) return;
+
         const senderId = String(message.sender_id ?? signal.sender_id ?? '');
         if (!senderId || senderId === currentUserId) return;
 
         if (signal.type === 'offer') {
-            const participant = participantsRef.current.find((item) => String(item.user_id) === senderId);
-            const peer = createPeer(senderId, participant?.user || 'Participant');
+            console.log("📥 Received OFFER from", senderId);
+            const peer = createPeer(senderId, 'Teacher');
             if (!peer) return;
+
             try {
-                if (peer.signalingState !== 'stable') {
-                    await peer.setLocalDescription({ type: 'rollback' });
-                }
                 await peer.setRemoteDescription(new RTCSessionDescription(signal.offer));
+                
+                // Add any pending ICE candidates
                 const pendingCandidates = pendingCandidatesRef.current.get(senderId) || [];
                 pendingCandidatesRef.current.delete(senderId);
                 for (const candidate of pendingCandidates) {
                     await peer.addIceCandidate(new RTCIceCandidate(candidate));
                 }
+                
                 const answer = await peer.createAnswer();
                 await peer.setLocalDescription(answer);
+                
+                console.log("📤 Sending ANSWER to", senderId);
                 sendSocketMessage({
                     type: 'answer',
                     answer,
                     sender_id: currentUserId,
                     target_id: senderId
                 });
-            } catch (signalError) {
-                console.error('Could not answer video connection:', signalError);
+            } catch (error) {
+                console.error('Error handling offer:', error);
             }
         } else if (signal.type === 'answer') {
+            console.log("📥 Received ANSWER from", senderId);
             const peer = peersRef.current.get(senderId);
-            if (peer?.signalingState === 'have-local-offer') {
+            if (peer && peer.signalingState !== 'stable') {
                 try {
                     await peer.setRemoteDescription(new RTCSessionDescription(signal.answer));
-                    const pendingCandidates = pendingCandidatesRef.current.get(senderId) || [];
-                    pendingCandidatesRef.current.delete(senderId);
-                    for (const candidate of pendingCandidates) {
-                        await peer.addIceCandidate(new RTCIceCandidate(candidate));
-                    }
-                } catch (signalError) {
-                    console.error('Could not finish video connection:', signalError);
+                } catch (error) {
+                    console.error('Error setting remote answer:', error);
                 }
             }
         } else if (signal.type === 'ice_candidate' && signal.candidate) {
             const peer = peersRef.current.get(senderId);
-            if (peer?.remoteDescription) {
+            if (peer && peer.remoteDescription) {
                 try {
                     await peer.addIceCandidate(new RTCIceCandidate(signal.candidate));
-                } catch (signalError) {
-                    console.error('Could not add video connection candidate:', signalError);
+                } catch (error) {
+                    console.warn('Error adding ICE candidate:', error);
                 }
             } else {
                 const candidates = pendingCandidatesRef.current.get(senderId) || [];
@@ -237,6 +242,7 @@ const LiveClass = () => {
             }
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
+
     const handleMessage = useCallback((data) => {
         if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
             handleSignal(data);
