@@ -173,36 +173,37 @@ const LiveClass = () => {
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
 
-
-    const handleSignal = useCallback(async (message) => {
+     const handleSignal = useCallback(async (message) => {
         const signal = message.type === 'webrtc' ? message.data : message;
         if (!signal) return;
-        
-        // Ignore if the message is for someone else
-        if (signal.target_id && String(signal.target_id) !== currentUserId) return;
 
         const senderId = String(message.sender_id ?? signal.sender_id ?? '');
         if (!senderId || senderId === currentUserId) return;
 
+        // If it's an offer, create the peer and answer
         if (signal.type === 'offer') {
-            console.log("📥 Received OFFER from", senderId);
             const peer = createPeer(senderId, 'Teacher');
             if (!peer) return;
 
             try {
+                // 1. Set the remote description (the phone's offer)
                 await peer.setRemoteDescription(new RTCSessionDescription(signal.offer));
-                
-                // Add any pending ICE candidates
-                const pendingCandidates = pendingCandidatesRef.current.get(senderId) || [];
-                pendingCandidatesRef.current.delete(senderId);
-                for (const candidate of pendingCandidates) {
-                    await peer.addIceCandidate(new RTCIceCandidate(candidate));
+
+                // 2. Add local tracks (camera/mic) - CRITICAL for PC
+                if (localStreamRef.current) {
+                    localStreamRef.current.getTracks().forEach((track) => {
+                        const senders = peer.getSenders();
+                        const hasTrack = senders.some(s => s.track === track);
+                        if (!hasTrack) {
+                            peer.addTrack(track, localStreamRef.current);
+                        }
+                    });
                 }
-                
+
+                // 3. Create and send the answer back to the phone
                 const answer = await peer.createAnswer();
                 await peer.setLocalDescription(answer);
-                
-                console.log("📤 Sending ANSWER to", senderId);
+
                 sendSocketMessage({
                     type: 'answer',
                     answer,
@@ -213,9 +214,8 @@ const LiveClass = () => {
                 console.error('Error handling offer:', error);
             }
         } else if (signal.type === 'answer') {
-            console.log("📥 Received ANSWER from", senderId);
             const peer = peersRef.current.get(senderId);
-            if (peer && peer.signalingState !== 'stable') {
+            if (peer && peer.signalingState === 'have-local-offer') {
                 try {
                     await peer.setRemoteDescription(new RTCSessionDescription(signal.answer));
                 } catch (error) {
@@ -230,13 +230,9 @@ const LiveClass = () => {
                 } catch (error) {
                     console.warn('Error adding ICE candidate:', error);
                 }
-            } else {
-                const candidates = pendingCandidatesRef.current.get(senderId) || [];
-                pendingCandidatesRef.current.set(senderId, [...candidates, signal.candidate]);
             }
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
-
        const handleMessage = useCallback((data) => {
         if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
             handleSignal(data);
@@ -762,14 +758,26 @@ const LiveClass = () => {
             <section className={showChat ? 'live-class-content-chat' : ''} style={{ ...styles.content, marginRight: showChat ? 344 : 0 }}>
                 {isConnecting && <div style={styles.connecting}>Connecting to your class…</div>}
                 <div style={styles.videoGrid}>
-                    {videoTiles.map((tile) => (
+                        {videoTiles.map((tile) => (
                         <article key={tile.id} style={styles.videoTile}>
                             {tile.local ? (
-                                <video ref={(element) => {
-                                    localVideoRef.current = element;
-                                    if (element) videoElementsRef.current.set(tile.id, element);
-                                    else videoElementsRef.current.delete(tile.id);
-                                }} autoPlay muted playsInline style={{ ...styles.video, transform: isScreenSharing ? 'none' : 'scaleX(-1)' }} />
+                                <video 
+                                    ref={(element) => {
+                                        localVideoRef.current = element;
+                                        if (element) {
+                                            videoElementsRef.current.set(tile.id, element);
+                                            if (element.srcObject !== localStreamRef.current) {
+                                                element.srcObject = localStreamRef.current;
+                                            }
+                                        } else {
+                                            videoElementsRef.current.delete(tile.id);
+                                        }
+                                    }} 
+                                    autoPlay 
+                                    muted 
+                                    playsInline 
+                                    style={{ ...styles.video, transform: isScreenSharing ? 'none' : 'scaleX(-1)' }} 
+                                />
                             ) : (
                                 <video
                                     autoPlay
@@ -778,8 +786,14 @@ const LiveClass = () => {
                                     ref={(element) => {
                                         if (element) {
                                             videoElementsRef.current.set(tile.id, element);
-                                            if (element.srcObject !== tile.stream) element.srcObject = tile.stream;
-                                        } else videoElementsRef.current.delete(tile.id);
+                                            // ✅ CRITICAL FIX: Force the video to load the stream and play
+                                            if (tile.stream) {
+                                                element.srcObject = tile.stream;
+                                                element.play().catch(e => console.log("Autoplay blocked:", e));
+                                            }
+                                        } else {
+                                            videoElementsRef.current.delete(tile.id);
+                                        }
                                     }}
                                 />
                             )}
