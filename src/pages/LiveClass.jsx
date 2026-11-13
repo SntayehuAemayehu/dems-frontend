@@ -237,7 +237,7 @@ const LiveClass = () => {
             }
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
-const handleMessage = useCallback((data) => {
+    const handleMessage = useCallback((data) => {
         if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
             handleSignal(data);
             return;
@@ -322,6 +322,8 @@ const handleMessage = useCallback((data) => {
             toast.error(data.message || 'The class action could not be completed.');
         }
     }, [closePeer, currentUserId, handleSignal, isTeacher, makeOffer, navigate, saveSession]);
+
+
 
     const connect = useCallback(async () => {
         setIsConnecting(true);
