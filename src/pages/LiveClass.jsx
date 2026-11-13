@@ -237,7 +237,7 @@ const LiveClass = () => {
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
 
-      const handleMessage = useCallback((data) => {
+       const handleMessage = useCallback((data) => {
         if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
             handleSignal(data);
             return;
@@ -265,18 +265,14 @@ const LiveClass = () => {
                 ? current
                 : [...current, participant]);
 
-            // ✅ FIX: Student always initiates the offer to the Teacher
-            // If we are the Student and the new person is the Teacher
             // ✅ FIX: Teacher initiates to Student, AND Student initiates to Teacher.
-            // This guarantees the connection happens regardless of who joined first.
             if (isTeacher && participant.role === 'STUDENT') {
                 makeOffer(participant);
             } else if (!isTeacher && participant.role === 'TEACHER') {
                 makeOffer(participant);
             }
-            // If we are the Teacher, we DO NOT make an offer. We wait for the student's request_join.
-            // (The student will call makeOffer once they get the teacher's user_join).
 
+            // ✅ RESTORED: Teacher attendance tracking
             if (isTeacher && participant.role === 'STUDENT') {
                 const joinedAt = new Date();
                 const attendees = sessionRef.current?.attendees || [];
@@ -299,6 +295,19 @@ const LiveClass = () => {
             setParticipants((current) => current.filter((item) => item.user_id !== leavingId));
             setRaisedHands((current) => current.filter((item) => item.user_id !== leavingId));
             closePeer(leavingId);
+            
+            // ✅ RESTORED: Teacher attendance tracking on leave
+            if (isTeacher) {
+                const attendees = sessionRef.current?.attendees || [];
+                const attendee = attendees.find((item) => item.userId === leavingId);
+                if (attendee) {
+                    saveSession({
+                        attendees: attendees.map((item) => item.userId === leavingId
+                            ? { ...item, leftAt: new Date().toISOString() }
+                            : item)
+                    });
+                }
+            }
         } else if (data.type === 'hand_raise') {
             setRaisedHands((current) => current.some((item) => String(item.user_id) === String(data.user_id))
                 ? current
@@ -312,8 +321,7 @@ const LiveClass = () => {
         } else if (data.type === 'error') {
             toast.error(data.message || 'The class action could not be completed.');
         }
-    }, [closePeer, currentUserId, handleSignal, isTeacher, makeOffer, navigate, saveSession]); 
-
+    }, [closePeer, currentUserId, handleSignal, isTeacher, makeOffer, navigate, saveSession]);   
     const connect = useCallback(async () => {
         setIsConnecting(true);
         setError('');
