@@ -480,10 +480,10 @@ const ChatWidget = () => {
           }
           .chat-float-btn {
             position: fixed;
-            bottom: 24px;
-            right: 24px;
-            width: 62px;
-            height: 62px;
+            bottom: 16px;
+            right: 16px;
+            width: 52px;
+            height: 52px;
             border-radius: 50%;
             background: linear-gradient(135deg, #2563eb, #7c3aed);
             color: #fff;
@@ -508,7 +508,7 @@ const ChatWidget = () => {
           className="chat-float-btn"
           title="Open chat"
         >
-          <MessageSquare size={28} />
+          <MessageSquare size={23} />
           {unreadCount > 0 && (
             <span style={{
               position: 'absolute', top: -4, right: -4,
@@ -530,10 +530,10 @@ const ChatWidget = () => {
   // ------- open panel -------
   return (
     <div style={{
-      position: 'fixed', bottom: 24, right: 24,
-      width: 420, maxWidth: 'calc(100vw - 24px)',
-      height: 620, maxHeight: 'calc(100vh - 48px)',
-      background: '#fff', borderRadius: 16,
+      position: 'fixed', bottom: 16, right: 16,
+      width: 360, maxWidth: 'calc(100vw - 32px)',
+      height: 520, maxHeight: 'calc(100vh - 32px)',
+      background: '#fff', borderRadius: 14,
       boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
       border: '1px solid #e2e8f0',
       zIndex: 1000, display: 'flex', flexDirection: 'column',
@@ -543,8 +543,8 @@ const ChatWidget = () => {
       {/* ============ HEADER ============ */}
       <div style={{
         background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-        color: '#fff', padding: '14px 16px',
-        display: 'flex', alignItems: 'center', gap: 10,
+        color: '#fff', padding: '10px 12px',
+        display: 'flex', alignItems: 'center', gap: 8,
         flexShrink: 0,
       }}>
         {selectedRoom && (
@@ -557,10 +557,10 @@ const ChatWidget = () => {
           </button>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {selectedRoom ? roomTitle(selectedRoom) : 'Messages'}
           </div>
-          <div style={{ fontSize: 11, opacity: 0.85 }}>
+          <div style={{ fontSize: 10, opacity: 0.85 }}>
             {selectedRoom
               ? `${selectedRoom.participants?.length || 0} participant(s)`
               : 'Chat with your contacts'}
@@ -800,7 +800,7 @@ const ChatWidget = () => {
                       marginBottom: 6,
                     }}>
                       <div style={{
-                        maxWidth: '80%', display: 'flex', flexDirection: 'column',
+                        maxWidth: '84%', display: 'flex', flexDirection: 'column',
                         alignItems: isMine ? 'flex-end' : 'flex-start',
                       }}>
                         {!isMine && (
@@ -814,13 +814,13 @@ const ChatWidget = () => {
                             ? 'linear-gradient(135deg, #2563eb, #7c3aed)'
                             : '#fff',
                           color: isMine ? '#fff' : '#0f172a',
-                          padding: '8px 12px',
+                          padding: '7px 10px',
                           borderRadius: 14,
                           borderTopRightRadius: isMine ? 4 : 14,
                           borderTopLeftRadius: isMine ? 14 : 4,
                           border: isMine ? 'none' : '1px solid #e2e8f0',
                           boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                          fontSize: 14, lineHeight: 1.4,
+                          fontSize: 13, lineHeight: 1.35,
                           wordBreak: 'break-word',
                           opacity: msg._optimistic ? 0.7 : 1,
                         }}>
@@ -960,9 +960,9 @@ const ChatWidget = () => {
               }}
               placeholder="Type a message..."
               style={{
-                flex: 1, padding: '9px 12px',
+                flex: 1,                 padding: '8px 10px',
                 border: '1px solid #e2e8f0', borderRadius: 20,
-                fontSize: 14, outline: 'none', background: '#f8fafc',
+                fontSize: 13, outline: 'none', background: '#f8fafc',
               }}
             />
 
@@ -970,7 +970,7 @@ const ChatWidget = () => {
               onClick={() => sendMessage()}
               disabled={sending || !messageInput.trim()}
               style={{
-                width: 40, height: 40, borderRadius: '50%', border: 'none',
+                width: 36, height: 36, borderRadius: '50%', border: 'none',
                 background: sending || !messageInput.trim()
                   ? '#cbd5e1'
                   : 'linear-gradient(135deg, #2563eb, #7c3aed)',

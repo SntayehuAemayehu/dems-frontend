@@ -85,10 +85,10 @@ const AIAssistantWidget = () => {
 
         .ai-float-btn {
           position: fixed;
-          bottom: 30px;
-          left: 30px;
-          width: 70px;
-          height: 70px;
+          bottom: 16px;
+          left: 16px;
+          width: 54px;
+          height: 54px;
           border-radius: 50%;
           background: transparent;
           border: none;
@@ -96,7 +96,7 @@ const AIAssistantWidget = () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 45px;
+          font-size: 34px;
           animation: float3D 4s ease-in-out infinite, pulseGlow 2s ease-in-out infinite;
           z-index: 1001;
           transition: filter 0.3s ease;
@@ -109,10 +109,12 @@ const AIAssistantWidget = () => {
         
         .ai-chat-window {
           position: fixed;
-          bottom: 110px;
-          left: 30px;
-          width: 380px;
-          height: 550px;
+          bottom: 82px;
+          left: 16px;
+          width: 320px;
+          max-width: calc(100vw - 32px);
+          height: 440px;
+          max-height: calc(100vh - 96px);
           background: white;
           border-radius: 16px;
           box-shadow: 0 10px 30px rgba(0,0,0,0.15);
@@ -139,9 +141,9 @@ const AIAssistantWidget = () => {
 
       {isOpen && (
         <div className="ai-chat-window">
-          <div style={{ padding: '12px 16px', background: '#2563eb', color: 'white', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ padding: '9px 12px', background: '#2563eb', color: 'white', fontWeight: 'bold', fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '20px' }}>🤖</span>
+              <span style={{ fontSize: '17px' }}>🤖</span>
               <span>DEMS AI Assistant</span>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -152,18 +154,18 @@ const AIAssistantWidget = () => {
               >
                 🗑️ Clear
               </button>
-              <button onClick={() => { window.speechSynthesis.cancel(); setSpeakingIndex(null); setIsOpen(false); }} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '24px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+              <button onClick={() => { window.speechSynthesis.cancel(); setSpeakingIndex(null); setIsOpen(false); }} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '21px', cursor: 'pointer', lineHeight: 1 }}>×</button>
             </div>
           </div>
           
-          <div style={{ flex: 1, padding: '16px', overflowY: 'auto', background: '#f8fafc' }}>
+          <div style={{ flex: 1, padding: '12px', overflowY: 'auto', background: '#f8fafc' }}>
             {messages.length === 0 && (
-              <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '20px', fontSize: '14px' }}>
+              <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '16px', fontSize: '13px' }}>
                 Hi! I am your AI assistant. Ask me anything about the DEMS system!
               </div>
             )}
             {messages.map((msg, i) => (
-              <div key={i} style={{ textAlign: msg.role === 'user' ? 'right' : 'left', marginBottom: '12px' }}>
+              <div key={i} style={{ textAlign: msg.role === 'user' ? 'right' : 'left', marginBottom: '10px' }}>
                 <div style={{ 
                   display: 'inline-flex',
                   alignItems: 'flex-start',
@@ -175,10 +177,10 @@ const AIAssistantWidget = () => {
                     background: msg.role === 'user' ? '#dbeafe' : '#ffffff', 
                     color: msg.role === 'user' ? '#1e40af' : '#0f172a',
                     border: msg.role === 'ai' ? '1px solid #e2e8f0' : 'none',
-                    padding: '10px 14px', 
+                    padding: '8px 10px', 
                     borderRadius: '12px', 
                     display: 'inline-block',
-                    fontSize: '14px',
+                    fontSize: '13px',
                     whiteSpace: 'pre-wrap',
                     textAlign: 'left',
                     boxShadow: msg.role === 'ai' ? '0 2px 5px rgba(0,0,0,0.05)' : 'none'
@@ -195,14 +197,14 @@ const AIAssistantWidget = () => {
                         color: speakingIndex === i ? 'white' : '#2563eb',
                         border: 'none',
                         borderRadius: '50%',
-                        width: '32px',
-                        height: '32px',
+                        width: '28px',
+                        height: '28px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         cursor: 'pointer',
                         flexShrink: 0,
-                        fontSize: '16px',
+                        fontSize: '14px',
                         transition: 'all 0.2s ease',
                         marginTop: '4px',
                       }}
@@ -221,18 +223,18 @@ const AIAssistantWidget = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          <div style={{ padding: '12px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '8px', background: 'white' }}>
+          <div style={{ padding: '9px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '6px', background: 'white' }}>
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
               placeholder="Ask me anything..."
-              style={{ flex: 1, padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px' }}
+              style={{ flex: 1, minWidth: 0, padding: '8px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '13px' }}
             />
             <button
               onClick={sendMessage}
               disabled={loading}
-              style={{ padding: '10px 20px', background: loading ? '#94a3b8' : '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+              style={{ padding: '8px 12px', background: loading ? '#94a3b8' : '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '12px' }}
             >
               Send
             </button>
