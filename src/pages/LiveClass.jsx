@@ -156,6 +156,7 @@ const LiveClass = () => {
 
     const makeOffer = useCallback(async (participant) => {
         console.log("🚀 makeOffer called for:", participant.user);
+        if (peersRef.current.has(String(participant.user_id))) return;
         const peer = createPeer(participant.user_id, participant.user);
         if (!peer) return;
         
@@ -173,9 +174,24 @@ const LiveClass = () => {
         }
     }, [createPeer, currentUserId, sendSocketMessage]);
 
+    const flushPendingCandidates = useCallback(async (peerId, peer) => {
+        const candidates = pendingCandidatesRef.current.get(peerId) || [];
+        pendingCandidatesRef.current.delete(peerId);
+        for (const candidate of candidates) {
+            try {
+                await peer.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+                console.warn('Error adding pending ICE candidate:', error);
+            }
+        }
+    }, []);
+
      const handleSignal = useCallback(async (message) => {
         const signal = message.type === 'webrtc' ? message.data : message;
         if (!signal) return;
+
+        const targetId = message.target_id ?? signal.target_id;
+        if (targetId != null && String(targetId) !== currentUserId) return;
 
         const senderId = String(message.sender_id ?? signal.sender_id ?? '');
         if (!senderId || senderId === currentUserId) return;
@@ -188,6 +204,7 @@ const LiveClass = () => {
             try {
                 // 1. Set the remote description (the phone's offer)
                 await peer.setRemoteDescription(new RTCSessionDescription(signal.offer));
+                await flushPendingCandidates(senderId, peer);
 
                 // 2. Add local tracks (camera/mic) - CRITICAL for PC
                 if (localStreamRef.current) {
@@ -218,6 +235,7 @@ const LiveClass = () => {
             if (peer && peer.signalingState === 'have-local-offer') {
                 try {
                     await peer.setRemoteDescription(new RTCSessionDescription(signal.answer));
+                    await flushPendingCandidates(senderId, peer);
                 } catch (error) {
                     console.error('Error setting remote answer:', error);
                 }
@@ -230,9 +248,13 @@ const LiveClass = () => {
                 } catch (error) {
                     console.warn('Error adding ICE candidate:', error);
                 }
+            } else {
+                const pending = pendingCandidatesRef.current.get(senderId) || [];
+                pending.push(signal.candidate);
+                pendingCandidatesRef.current.set(senderId, pending);
             }
         }
-    }, [createPeer, currentUserId, sendSocketMessage]);
+    }, [createPeer, currentUserId, flushPendingCandidates, sendSocketMessage]);
        const handleMessage = useCallback((data) => {
         if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
             handleSignal(data);
@@ -262,7 +284,10 @@ const LiveClass = () => {
                 : [...current, participant]);
 
             // ✅ FIX: Student initiates the offer to the Teacher
-            if (!isTeacher && participant.role === 'TEACHER') {
+            if (!isTeacher && (
+                participant.role === 'TEACHER' ||
+                (participant.role === 'STUDENT' && currentUserId.localeCompare(participant.user_id) < 0)
+            )) {
                 makeOffer(participant);
             }
 
@@ -716,6 +741,81 @@ const LiveClass = () => {
             participant
         }))
     ];
+    const primaryVideoTile = isTeacher
+        ? videoTiles[0]
+        : videoTiles.find((tile) => tile.participant?.role === 'TEACHER') || videoTiles[0];
+    const sideVideoTiles = videoTiles.filter((tile) => tile.id !== primaryVideoTile?.id);
+    const renderVideoTile = (tile, isMainView = false) => (
+        <article
+            key={tile.id}
+            className={isMainView ? 'live-class-tile-main' : 'live-class-tile-small'}
+            style={{
+                ...styles.videoTile,
+                ...(isMainView ? styles.mainVideoTile : styles.sideVideoTile),
+            }}
+        >
+            {tile.local ? (
+                <video
+                    ref={(element) => {
+                        localVideoRef.current = element;
+                        if (element) {
+                            videoElementsRef.current.set(tile.id, element);
+                            if (element.srcObject !== localStreamRef.current) {
+                                element.srcObject = localStreamRef.current;
+                            }
+                        } else {
+                            videoElementsRef.current.delete(tile.id);
+                        }
+                    }}
+                    autoPlay
+                    muted
+                    playsInline
+                    style={{
+                        ...styles.video,
+                        objectFit: isScreenSharing ? 'contain' : 'cover',
+                        transform: isScreenSharing ? 'none' : 'scaleX(-1)',
+                    }}
+                />
+            ) : (
+                <video
+                    autoPlay
+                    playsInline
+                    style={{ ...styles.video, objectFit: 'cover' }}
+                    ref={(element) => {
+                        if (element) {
+                            videoElementsRef.current.set(tile.id, element);
+                            if (element.srcObject !== tile.stream && tile.stream) {
+                                element.srcObject = tile.stream;
+                            }
+                        } else {
+                            videoElementsRef.current.delete(tile.id);
+                        }
+                    }}
+                />
+            )}
+            {tile.local && !isScreenSharing && isVideoOff && (
+                <div style={styles.cameraOff}><VideoOff size={28} /><span>Camera off</span></div>
+            )}
+            {!tile.local && !tile.stream && (
+                <div style={styles.cameraOff}>
+                    <div style={styles.avatar}>{tile.name?.charAt(0)?.toUpperCase() || '?'}</div>
+                    <span>Connecting video…</span>
+                </div>
+            )}
+            <div style={{ ...styles.tileFooter, ...(isMainView ? styles.mainTileFooter : styles.sideTileFooter) }}>
+                <span>{tile.name}{tile.local ? ' (You)' : ''}</span>
+                {isTeacher && !tile.local && tile.participant?.role === 'STUDENT' && (
+                    <button
+                        title={`Remove ${tile.name}`}
+                        onClick={() => removeParticipant(tile.participant)}
+                        style={styles.removeButton}
+                    >
+                        <X size={15} />
+                    </button>
+                )}
+            </div>
+        </article>
+    );
 
 
     return (
@@ -735,12 +835,20 @@ const LiveClass = () => {
                 .live-chat-form input:focus { border-color:#60a5fa; }
                 .live-chat-form button { width:40px; border:0; border-radius:8px; background:#2563eb; color:white; display:grid; place-items:center; cursor:pointer; }
                 .live-chat-form button:disabled { background:#334155; color:#64748b; cursor:not-allowed; }
+                .live-class-stage-layout { display:grid; grid-template-columns:minmax(0, 1fr) 220px; gap:14px; height:100%; min-height:0; }
+                .live-class-main-view { min-width:0; min-height:0; }
+                .live-class-side-strip { display:flex; flex-direction:column; gap:10px; min-width:0; min-height:0; overflow-y:auto; }
                 @media(max-width:700px) {
                     .live-class-controls { flex-direction:column; align-items:stretch !important; }
                     .live-class-control-group { justify-content:center; }
                     .live-class-controls > button { justify-content:center; }
                     .live-class-chat { width:min(100%, 380px); }
                     .live-class-content-chat { margin-right:0 !important; }
+                    .live-class-stage-layout { grid-template-columns:minmax(0, 1fr); grid-template-rows:minmax(200px, 1fr) 120px; }
+                    .live-class-side-strip { flex-direction:row; overflow-x:auto; overflow-y:hidden; }
+                }
+                @media(max-width:700px) {
+                    .live-class-tile-small { width:160px !important; min-width:160px; height:110px; min-height:110px !important; }
                 }
             `}</style>
             <header style={styles.header}>
@@ -757,61 +865,13 @@ const LiveClass = () => {
 
             <section className={showChat ? 'live-class-content-chat' : ''} style={{ ...styles.content, marginRight: showChat ? 344 : 0 }}>
                 {isConnecting && <div style={styles.connecting}>Connecting to your class…</div>}
-                <div style={styles.videoGrid}>
-                        {videoTiles.map((tile) => (
-                        <article key={tile.id} style={styles.videoTile}>
-                            {tile.local ? (
-                                <video 
-                                    ref={(element) => {
-                                        localVideoRef.current = element;
-                                        if (element) {
-                                            videoElementsRef.current.set(tile.id, element);
-                                            if (element.srcObject !== localStreamRef.current) {
-                                                element.srcObject = localStreamRef.current;
-                                            }
-                                        } else {
-                                            videoElementsRef.current.delete(tile.id);
-                                        }
-                                    }} 
-                                    autoPlay 
-                                    muted 
-                                    playsInline 
-                                    style={{ ...styles.video, transform: isScreenSharing ? 'none' : 'scaleX(-1)' }} 
-                                />
-                            ) : (
-                                <video
-                                    autoPlay
-                                    playsInline
-                                    style={styles.video}
-                                    ref={(element) => {
-                                        if (element) {
-                                            videoElementsRef.current.set(tile.id, element);
-                                            // ✅ SAFER FIX: Just set srcObject and let autoPlay handle the rest
-                                            if (element.srcObject !== tile.stream && tile.stream) {
-                                                element.srcObject = tile.stream;
-                                            }
-                                        } else {
-                                            videoElementsRef.current.delete(tile.id);
-                                        }
-                                    }}
-                                />
-                            )}
-                            {tile.local && !isScreenSharing && isVideoOff && <div style={styles.cameraOff}><VideoOff size={28} /><span>Camera off</span></div>}
-                            <div style={styles.tileFooter}>
-                                <span>{tile.name}{tile.local ? ' (You)' : ''}</span>
-                                {isTeacher && !tile.local && tile.participant?.role === 'STUDENT' && (
-                                    <button title={`Remove ${tile.name}`} onClick={() => removeParticipant(tile.participant)} style={styles.removeButton}><X size={15} /></button>
-                                )}
-                            </div>
-                        </article>
-                    ))}
-                    {isTeacher && participants.filter((participant) => participant.role === 'STUDENT' && !remoteStreams[participant.user_id]).map((participant) => (
-                        <article key={`waiting-${participant.user_id}`} style={{ ...styles.videoTile, ...styles.waitingTile }}>
-                            <div style={styles.avatar}>{participant.user?.charAt(0)?.toUpperCase() || '?'}</div>
-                            <p>{participant.user} · Connecting video…</p>
-                            <button onClick={() => removeParticipant(participant)} style={styles.removeButton} title={`Remove ${participant.user}`}><X size={15} /></button>
-                        </article>
-                    ))}
+                <div className="live-class-stage-layout">
+                    <div className="live-class-main-view">
+                        {primaryVideoTile && renderVideoTile(primaryVideoTile, true)}
+                    </div>
+                    <aside className="live-class-side-strip" aria-label="Other class participants">
+                        {sideVideoTiles.map((tile) => renderVideoTile(tile))}
+                    </aside>
                 </div>
                 {isTeacher && raisedHands.length > 0 && (
                     <div style={styles.handNotice}><Hand size={17} /> {raisedHands.map((person) => person.user).join(', ')} {raisedHands.length === 1 ? 'has' : 'have'} a hand raised</div>
@@ -883,12 +943,14 @@ const styles = {
     countBadge: { display: 'flex', alignItems: 'center', gap: 6, background: '#1e293b', borderRadius: 18, padding: '7px 10px', marginLeft: 8 },
     content: { flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, transition: 'margin 180ms ease' },
     connecting: { textAlign: 'center', color: '#94a3b8', padding: '8px 0 15px', fontSize: 13 },
-    videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 14, alignContent: 'start' },
-    videoTile: { position: 'relative', aspectRatio: '16 / 10', minHeight: 180, maxHeight: 'calc(100vh - 220px)', borderRadius: 12, overflow: 'hidden', background: '#172033', border: '1px solid #293449' },
-    video: { width: '100%', height: '100%', objectFit: 'contain', background: '#080d18' },
+    videoTile: { position: 'relative', minHeight: 120, borderRadius: 12, overflow: 'hidden', background: '#172033', border: '1px solid #293449', flexShrink: 0 },
+    mainVideoTile: { height: '100%', minHeight: 320, maxHeight: 'calc(100vh - 220px)' },
+    sideVideoTile: { aspectRatio: '4 / 3', maxHeight: 180, minHeight: 120 },
+    video: { width: '100%', height: '100%', objectFit: 'cover', background: '#080d18' },
     tileFooter: { position: 'absolute', bottom: 10, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', background: 'rgba(2, 6, 23, .72)', padding: '7px 10px', borderRadius: 7, fontSize: 13 },
+    mainTileFooter: { fontSize: 14 },
+    sideTileFooter: { bottom: 6, left: 6, right: 6, padding: '5px 7px', fontSize: 11 },
     cameraOff: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#94a3b8', background: '#111827' },
-    waitingTile: { display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#9aa9bd', gap: 8, fontSize: 13 },
     avatar: { width: 58, height: 58, display: 'grid', placeItems: 'center', borderRadius: '50%', background: '#253550', fontSize: 22, color: '#dbeafe' },
     removeButton: { background: '#7f1d1d', border: 0, color: 'white', borderRadius: 6, width: 27, height: 27, display: 'grid', placeItems: 'center', cursor: 'pointer' },
     handNotice: { position: 'fixed', bottom: 100, left: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#422006', color: '#fde68a', borderRadius: 9, fontSize: 13 },
