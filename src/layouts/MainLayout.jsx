@@ -100,6 +100,7 @@ const MainLayout = () => {
   };
 
   const navItems = navigation[user?.role] || navigation.STUDENT;
+  const isTakingExam = /^\/exams\/[^/]+\/start\/?$/.test(location.pathname);
 
   // Dark mode styles
   const bgColor = isDarkMode ? '#0f172a' : '#f3f4f6';
@@ -117,6 +118,10 @@ const MainLayout = () => {
   const shadow = isDarkMode 
     ? '0 4px 24px rgba(0,0,0,0.3)' 
     : '0 4px 6px -1px rgba(0,0,0,0.1)';
+
+  if (isTakingExam) {
+    return <Outlet context={{ faceEnrolled }} />;
+  }
 
   return (
     <div style={{ 

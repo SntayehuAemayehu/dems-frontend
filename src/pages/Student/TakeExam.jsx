@@ -11,15 +11,20 @@ import {
   Loader,
   RefreshCw,
   CheckCircle,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
 import AIProctor from '../../components/Proctoring/AIProctor';
+import AudioMonitor from '../../utils/audioMonitor';
+import { useDarkMode } from '../../context/DarkModeContext';
 
 const TakeExam = () => {
   const { examId } = useParams();
   const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
 
   // ==================== STATES ====================
   const [exam, setExam] = useState(null);
@@ -40,12 +45,14 @@ const TakeExam = () => {
   // Proctoring counters
   const [multipleFaceCount, setMultipleFaceCount] = useState(0);
   const [isBlurred, setIsBlurred] = useState(false);
+  const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const blurTimeoutRef = useRef(null);
+  const submissionInProgressRef = useRef(false);
 
   // Refs
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const imageIntervalRef = useRef(null);
 
   // ==================== 1. LOAD EXAM + CHECK FACE ENROLLMENT ====================
   useEffect(() => {
@@ -82,10 +89,25 @@ const TakeExam = () => {
       isMounted = false;
       stopCamera();
       if (timerRef.current) clearInterval(timerRef.current);
-      if (imageIntervalRef.current) clearInterval(imageIntervalRef.current);
       if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     };
   }, [examId]);
+
+  useEffect(() => {
+    if (pageState !== 'verified') return undefined;
+
+    const monitor = new AudioMonitor((alert) => {
+      toast.warning(alert.message);
+    });
+    monitor.start().catch((error) => {
+      console.error('Sound detection could not start:', error);
+      toast.error('Sound detection could not start. Allow microphone access to enable it.');
+    });
+
+    return () => {
+      monitor.stop();
+    };
+  }, [pageState]);
 
   // ==================== START CAMERA ONLY AFTER VIDEO ELEMENT EXISTS ====================
   useEffect(() => {
@@ -207,14 +229,11 @@ const TakeExam = () => {
       setAttemptId(newAttemptId);
       setQuestions(startRes.data.questions || []);
       setTimeLeft((startRes.data.duration_minutes || 60) * 60);
+      stopCamera();
 
       toast.success('Identity verified! Starting exam...');
       setPageState('verified');
 
-      // Start sending images every 60 seconds
-      imageIntervalRef.current = setInterval(() => {
-        sendProctorImage(false);
-      }, 60000);
     } catch (err) {
       console.error(err);
       setPageState('failed');
@@ -241,37 +260,12 @@ const TakeExam = () => {
     }
   };
 
-  // ==================== SEND IMAGE ====================
-  const sendProctorImage = async (isWarning = false) => {
-    if (!attemptId || !videoRef.current) return;
-
-    try {
-      const imageData = captureImage();
-      if (!imageData) return;
-
-      await api.post(`/proctoring/sessions/capture/`, {
-        exam_id: attemptId,
-        image_data: imageData,
-        metadata: {
-          face_detected: true,
-          is_warning: isWarning,
-          multiple_faces: isWarning,
-        },
-      });
-    } catch (err) {
-      console.debug('Image send failed', err.message);
-    }
-  };
-
   // ==================== PROCTORING CALLBACKS ====================
   const handleViolation = useCallback(
     (type, message) => {
       if (type === 'MULTIPLE_FACES') {
         setMultipleFaceCount((prev) => {
           const newCount = prev + 1;
-
-          // Immediate image on warning
-          sendProctorImage(true);
 
           // Blur for 5 seconds
           setIsBlurred(true);
@@ -294,7 +288,10 @@ const TakeExam = () => {
 
       if (type === 'FACE_LOST') {
         toast.warning('No face detected. Please stay in front of the camera.');
-        sendProctorImage(true);
+      }
+
+      if (type === 'PHONE_DETECTED') {
+        toast.warning('A mobile phone was detected. Please remove it from view.');
       }
     },
     [attemptId]
@@ -339,8 +336,10 @@ const TakeExam = () => {
 
   // ==================== SUBMIT ====================
   const handleSubmit = async (reason = 'User submitted') => {
-    if (!attemptId) return;
+    if (!attemptId || submissionInProgressRef.current) return;
 
+    submissionInProgressRef.current = true;
+    setIsSubmitting(true);
     try {
       await api.post(`/exams/attempt/${attemptId}/submit/`, { answers });
       toast.success(`Exam submitted (${reason})`);
@@ -349,6 +348,8 @@ const TakeExam = () => {
     } catch (err) {
       console.error(err);
       toast.error('Failed to submit exam');
+      submissionInProgressRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -534,7 +535,13 @@ const TakeExam = () => {
   const q = questions[currentIndex];
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#f1f5f9' }}>
+    <div style={{
+      display: 'flex',
+      height: '100vh',
+      background: isDarkMode ? '#0f172a' : '#f1f5f9',
+      color: isDarkMode ? '#f1f5f9' : '#0f172a',
+      transition: 'background 0.2s, color 0.2s',
+    }}>
       {/* Optional SEB indicator */}
       {/SEB/i.test(navigator.userAgent) && (
         <div style={{
@@ -551,6 +558,7 @@ const TakeExam = () => {
         style={{
           flex: 1,
           padding: 32,
+          paddingBottom: 220,
           overflowY: 'auto',
           filter: isBlurred ? 'blur(12px)' : 'none',
           transition: 'filter 0.3s',
@@ -564,7 +572,7 @@ const TakeExam = () => {
             justifyContent: 'space-between',
             alignItems: 'center',
             marginBottom: 28,
-            background: '#0f172a',
+            background: isDarkMode ? '#1e293b' : '#0f172a',
             color: 'white',
             padding: '14px 20px',
             borderRadius: 12,
@@ -577,6 +585,26 @@ const TakeExam = () => {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <button
+              type="button"
+              onClick={toggleDarkMode}
+              aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 36,
+                height: 36,
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: 8,
+                color: 'white',
+                background: 'rgba(255,255,255,0.08)',
+                cursor: 'pointer',
+              }}
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
             <div
               style={{
                 fontSize: 20,
@@ -600,10 +628,11 @@ const TakeExam = () => {
         {q && (
           <div
             style={{
-              background: 'white',
+              background: isDarkMode ? '#1e293b' : 'white',
               padding: 28,
               borderRadius: 14,
               boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
+              color: isDarkMode ? '#f1f5f9' : '#0f172a',
             }}
           >
             <h2 style={{ fontSize: 18, marginBottom: 20, lineHeight: 1.5 }}>{q.text}</h2>
@@ -617,11 +646,11 @@ const TakeExam = () => {
                     alignItems: 'center',
                     gap: 12,
                     padding: '14px 16px',
-                    border: answers[q.id] === opt ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                    border: answers[q.id] === opt ? '2px solid #2563eb' : `1px solid ${isDarkMode ? '#475569' : '#e2e8f0'}`,
                     borderRadius: 10,
                     marginBottom: 10,
                     cursor: 'pointer',
-                    background: answers[q.id] === opt ? '#eff6ff' : 'white',
+                    background: answers[q.id] === opt ? (isDarkMode ? '#1e3a8a' : '#eff6ff') : (isDarkMode ? '#0f172a' : 'white'),
                   }}
                 >
                   <input
@@ -642,11 +671,11 @@ const TakeExam = () => {
                     style={{
                       flex: 1,
                       padding: 16,
-                      border: answers[q.id] === opt ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                      border: answers[q.id] === opt ? '2px solid #2563eb' : `1px solid ${isDarkMode ? '#475569' : '#e2e8f0'}`,
                       borderRadius: 10,
                       textAlign: 'center',
                       cursor: 'pointer',
-                      background: answers[q.id] === opt ? '#eff6ff' : 'white',
+                      background: answers[q.id] === opt ? (isDarkMode ? '#1e3a8a' : '#eff6ff') : (isDarkMode ? '#0f172a' : 'white'),
                     }}
                   >
                     <input
@@ -672,9 +701,11 @@ const TakeExam = () => {
                   width: '100%',
                   padding: 14,
                   borderRadius: 10,
-                  border: '1px solid #e2e8f0',
+                  border: `1px solid ${isDarkMode ? '#475569' : '#e2e8f0'}`,
                   fontSize: 15,
                   resize: 'vertical',
+                  color: isDarkMode ? '#f1f5f9' : '#0f172a',
+                  background: isDarkMode ? '#0f172a' : 'white',
                 }}
               />
             )}
@@ -689,8 +720,9 @@ const TakeExam = () => {
             style={{
               padding: '10px 20px',
               borderRadius: 8,
-              border: '1px solid #cbd5e1',
-              background: 'white',
+              border: `1px solid ${isDarkMode ? '#475569' : '#cbd5e1'}`,
+              color: isDarkMode ? '#f1f5f9' : '#0f172a',
+              background: isDarkMode ? '#1e293b' : 'white',
               cursor: currentIndex === 0 ? 'not-allowed' : 'pointer',
             }}
           >
@@ -699,7 +731,7 @@ const TakeExam = () => {
 
           {currentIndex === questions.length - 1 ? (
             <button
-              onClick={() => handleSubmit('User submitted')}
+              onClick={() => setShowSubmitConfirmation(true)}
               style={{
                 padding: '12px 28px',
                 background: '#16a34a',
@@ -730,8 +762,30 @@ const TakeExam = () => {
         </div>
       </div>
 
-      {/* RIGHT: AI Proctor */}
-      <div style={{ width: 420, background: '#0f172a', padding: 16, overflowY: 'auto' }}>
+      {/* Compact proctor view */}
+      <div style={{
+        position: 'fixed',
+        right: 16,
+        bottom: 16,
+        zIndex: 40,
+        width: 240,
+      }}>
+        {multipleFaceCount > 0 && (
+          <div
+            style={{
+              marginBottom: 8,
+              padding: 8,
+              background: multipleFaceCount >= 4 ? '#7f1d1d' : '#451a03',
+              borderRadius: 8,
+              color: 'white',
+              textAlign: 'center',
+              fontSize: 12,
+            }}
+          >
+            Multiple faces: <strong>{multipleFaceCount}/5</strong>
+            {multipleFaceCount >= 4 && <div>Next one will auto-submit</div>}
+          </div>
+        )}
         <AIProctor
           attemptId={attemptId}
           examId={examId}
@@ -740,27 +794,80 @@ const TakeExam = () => {
           onAutoSubmit={(data) => handleSubmit(data.reason || 'Auto submitted by proctor')}
           onControlMessage={handleLiveExamMessage}
         />
+      </div>
 
-        {/* Multiple face counter */}
-        {multipleFaceCount > 0 && (
+      {showSubmitConfirmation && (
+        <div
+          role="presentation"
+          onClick={() => !isSubmitting && setShowSubmitConfirmation(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+            background: 'rgba(15,23,42,0.65)',
+          }}
+        >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="submit-confirmation-title"
+            onClick={(event) => event.stopPropagation()}
             style={{
-              marginTop: 16,
-              padding: 12,
-              background: multipleFaceCount >= 4 ? '#7f1d1d' : '#451a03',
-              borderRadius: 10,
-              color: 'white',
-              textAlign: 'center',
-              fontSize: 14,
+              width: '100%',
+              maxWidth: 420,
+              padding: 24,
+              borderRadius: 14,
+              color: isDarkMode ? '#f1f5f9' : '#0f172a',
+              background: isDarkMode ? '#1e293b' : '#ffffff',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.25)',
             }}
           >
-            Multiple faces: <strong>{multipleFaceCount}/5</strong>
-            {multipleFaceCount >= 4 && (
-              <div style={{ fontSize: 12, marginTop: 4 }}>Next one will auto-submit</div>
-            )}
+            <h2 id="submit-confirmation-title" style={{ margin: '0 0 10px', fontSize: 20 }}>
+              Submit your exam?
+            </h2>
+            <p style={{ margin: '0 0 24px', color: isDarkMode ? '#cbd5e1' : '#475569' }}>
+              You are about to submit your exam. Are you sure you want to continue?
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => setShowSubmitConfirmation(false)}
+                style={{
+                  padding: '10px 16px',
+                  border: `1px solid ${isDarkMode ? '#475569' : '#cbd5e1'}`,
+                  borderRadius: 8,
+                  color: isDarkMode ? '#f1f5f9' : '#334155',
+                  background: 'transparent',
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => handleSubmit('User submitted')}
+                style={{
+                  padding: '10px 18px',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: 'white',
+                  background: '#16a34a',
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                  opacity: isSubmitting ? 0.7 : 1,
+                }}
+              >
+                {isSubmitting ? 'Submitting...' : 'Yes, submit'}
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Blur overlay message */}
       {isBlurred && (

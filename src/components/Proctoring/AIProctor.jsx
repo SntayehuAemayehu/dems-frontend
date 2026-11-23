@@ -22,8 +22,11 @@ const AIProctor = ({
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const landmarkerRef = useRef(null);
+  const phoneModelRef = useRef(null);
   const mediapipeLoopRef = useRef(null);
   const imageIntervalRef = useRef(null);
+  const phoneDetectionInProgressRef = useRef(false);
+  const lastPhoneAlertAtRef = useRef(0);
   const lastVideoTimeRef = useRef(-1);
   const isMounted = useRef(true);
   const hasDetectedSingleFace = useRef(false);
@@ -41,6 +44,9 @@ const AIProctor = ({
   const voiceAudioRef = useRef(null);
   const onControlMessageRef = useRef(onControlMessage);
   onControlMessageRef.current = onControlMessage;
+  const onViolationRef = useRef(onViolation);
+  onViolationRef.current = onViolation;
+  const sendImageRef = useRef(null);
 
   // ==================== STATE ====================
   const [isInitializing, setIsInitializing] = useState(true);
@@ -52,6 +58,8 @@ const AIProctor = ({
   const [fps, setFps] = useState(0);
   const [usingMediaPipe, setUsingMediaPipe] = useState(false);
   const [liveConnected, setLiveConnected] = useState(false);
+  const [phoneDetected, setPhoneDetected] = useState(false);
+  const [phoneDetectionError, setPhoneDetectionError] = useState(false);
 
   // ==================== SEND IMAGE ====================
   const sendImage = useCallback(
@@ -83,6 +91,7 @@ const AIProctor = ({
     },
     [attemptId, faceDetected, multipleFaces, faceCount]
   );
+  sendImageRef.current = sendImage;
 
   // ==================== WEBRTC - CONNECT TO TEACHER ====================
   const startLiveStream = useCallback(async () => {
@@ -401,6 +410,7 @@ const AIProctor = ({
   // ==================== INIT ====================
   useEffect(() => {
     const setup = async () => {
+      isMounted.current = true;
       try {
         setIsInitializing(true);
         setError(null);
@@ -409,15 +419,58 @@ const AIProctor = ({
         liveStreamStartTimeoutRef.current = setTimeout(() => {
           startLiveStream();
         }, 1500);
+        const phoneModelPromise = import('@tensorflow-models/coco-ssd')
+          .then(({ load }) => load())
+          .then((model) => {
+            if (isMounted.current) phoneModelRef.current = model;
+          })
+          .catch((modelError) => {
+            console.error('Mobile phone detection could not start:', modelError);
+            if (isMounted.current) {
+              setPhoneDetectionError(true);
+              toast.error('Mobile phone detection could not start.');
+            }
+          });
         const ok = await initializeMediaPipe();
 
         if (ok) {
           startLoop();
+          await phoneModelPromise;
 
-          // Normal image every 60 seconds
+          const detectPhone = async () => {
+            const video = videoRef.current;
+            if (
+              !phoneModelRef.current ||
+              !video ||
+              video.readyState < 2 ||
+              phoneDetectionInProgressRef.current
+            ) return;
+
+            phoneDetectionInProgressRef.current = true;
+            try {
+              const detections = await phoneModelRef.current.detect(video);
+              const foundPhone = detections.some(
+                (detection) => detection.class === 'cell phone' && detection.score >= 0.55
+              );
+              setPhoneDetected(foundPhone);
+
+              const now = Date.now();
+              if (foundPhone && now - lastPhoneAlertAtRef.current >= 15000) {
+                lastPhoneAlertAtRef.current = now;
+                onViolationRef.current?.('PHONE_DETECTED', 'Mobile phone detected');
+                await sendImageRef.current?.(true, 'PHONE_DETECTED');
+              }
+            } catch (detectionError) {
+              console.error('Mobile phone detection failed:', detectionError);
+            } finally {
+              phoneDetectionInProgressRef.current = false;
+            }
+          };
+
           imageIntervalRef.current = setInterval(() => {
             sendImage(false);
-          }, 60000);
+            detectPhone();
+          }, 3000);
 
           setIsInitializing(false);
           onStatusUpdate?.({ status: 'running' });
@@ -444,6 +497,7 @@ const AIProctor = ({
           landmarkerRef.current.close();
         } catch (e) {}
       }
+      phoneModelRef.current = null;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
@@ -483,8 +537,10 @@ const AIProctor = ({
       style={{
         background: '#1e293b',
         borderRadius: 12,
-        padding: 16,
+        padding: 8,
         color: 'white',
+        boxSizing: 'border-box',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
       }}
     >
       <audio ref={voiceAudioRef} autoPlay style={{ display: 'none' }} />
@@ -498,7 +554,9 @@ const AIProctor = ({
             width: '100%',
             borderRadius: 10,
             background: '#0f172a',
-            minHeight: 220,
+            height: 135,
+            minHeight: 135,
+            objectFit: 'cover',
             transform: 'scaleX(-1)',
           }}
         />
@@ -508,19 +566,19 @@ const AIProctor = ({
         <div
           style={{
             position: 'absolute',
-            top: 10,
-            left: 10,
+            top: 6,
+            left: 6,
             display: 'flex',
-            gap: 8,
+            gap: 4,
             flexWrap: 'wrap',
           }}
         >
           <span
             style={{
               background: cameraActive ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)',
-              padding: '4px 10px',
-              borderRadius: 6,
-              fontSize: 12,
+              padding: '3px 6px',
+              borderRadius: 5,
+              fontSize: 10,
               fontWeight: 600,
             }}
           >
@@ -530,9 +588,9 @@ const AIProctor = ({
           <span
             style={{
               background: faceDetected ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)',
-              padding: '4px 10px',
-              borderRadius: 6,
-              fontSize: 12,
+              padding: '3px 6px',
+              borderRadius: 5,
+              fontSize: 10,
               fontWeight: 600,
             }}
           >
@@ -543,9 +601,9 @@ const AIProctor = ({
             <span
               style={{
                 background: 'rgba(220,38,38,0.95)',
-                padding: '4px 10px',
-                borderRadius: 6,
-                fontSize: 12,
+                padding: '3px 6px',
+                borderRadius: 5,
+                fontSize: 10,
                 fontWeight: 700,
               }}
             >
@@ -555,10 +613,26 @@ const AIProctor = ({
 
           <span
             style={{
+              background: phoneDetectionError
+                ? 'rgba(239,68,68,0.9)'
+                : phoneDetected
+                  ? 'rgba(220,38,38,0.95)'
+                  : 'rgba(34,197,94,0.9)',
+              padding: '3px 6px',
+              borderRadius: 5,
+              fontSize: 10,
+              fontWeight: 600,
+            }}
+          >
+            {phoneDetectionError ? 'Phone check unavailable' : phoneDetected ? 'Phone detected' : 'Phone check ON'}
+          </span>
+
+          <span
+            style={{
               background: liveConnected ? 'rgba(59,130,246,0.9)' : 'rgba(100,116,139,0.9)',
-              padding: '4px 10px',
-              borderRadius: 6,
-              fontSize: 12,
+              padding: '3px 6px',
+              borderRadius: 5,
+              fontSize: 10,
               fontWeight: 600,
             }}
           >
@@ -570,8 +644,8 @@ const AIProctor = ({
         <div
           style={{
             position: 'absolute',
-            bottom: 10,
-            right: 10,
+            bottom: 6,
+            right: 6,
             background: 'rgba(0,0,0,0.6)',
             padding: '2px 8px',
             borderRadius: 4,
@@ -650,10 +724,10 @@ const AIProctor = ({
       {/* Bottom status */}
       <div
         style={{
-          marginTop: 12,
+          marginTop: 6,
           display: 'flex',
           justifyContent: 'space-between',
-          fontSize: 13,
+          fontSize: 10,
           color: '#94a3b8',
         }}
       >

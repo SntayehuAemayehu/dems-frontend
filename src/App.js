@@ -92,9 +92,11 @@ const RedirectToStartExam = () => {
 const AnimatedRoutes = () => {
   const location = useLocation();
   const { isDarkMode, toggleDarkMode } = useDarkMode(); // ← added: gives access to dark mode props
+  const isExamPage = /^\/exams\/[^/]+\/start\/?$/.test(location.pathname);
   return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
+    <>
+      <AnimatePresence mode="wait">
+        <Routes location={location} key={location.pathname}>
         {/* Public Routes with Header */}
         <Route
           path="/"
@@ -242,8 +244,11 @@ const AnimatedRoutes = () => {
         {/* ✅ CATCH-ALL MUST BE THE VERY LAST ROUTE */}
         <Route path="*" element={<Navigate to="/" replace />} />
 
-      </Routes>
-    </AnimatePresence>
+        </Routes>
+      </AnimatePresence>
+      {!isExamPage && <ChatWidget />}
+      {!isExamPage && <AIAssistantWidget />}
+    </>
   );
 };
 
@@ -277,11 +282,7 @@ const AppContent = () => {
         <Router>
          <SessionTimeout> 
           <AnimatedRoutes />
-
-          {/* ============ REAL CHAT WIDGET ============ */}
-          <ChatWidget />
           </SessionTimeout>
-          <AIAssistantWidget />
           <AnimatedBackground dark={isDarkMode} density={60} />
         </Router>
         
