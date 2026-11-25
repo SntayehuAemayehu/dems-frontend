@@ -34,6 +34,7 @@ const LiveClass = () => {
     const [showChat, setShowChat] = useState(false);
     const [participants, setParticipants] = useState([]);
     const [remoteStreams, setRemoteStreams] = useState({});
+    const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [error, setError] = useState('');
 
@@ -56,6 +57,7 @@ const LiveClass = () => {
     const recordingAudioContextRef = useRef(null);
     const recordingAudioDestinationRef = useRef(null);
     const recordedAudioTrackIdsRef = useRef(new Set());
+    const remoteAudioElementsRef = useRef(new Map());
     const sessionRef = useRef(null);
     const connectionAttemptsRef = useRef(0);
     const currentUserId = String(user?.id ?? '');
@@ -68,6 +70,16 @@ const LiveClass = () => {
             return true;
         }
         return false;
+    }, []);
+
+    const enableRemoteAudio = useCallback(async () => {
+        try {
+            await Promise.all([...remoteAudioElementsRef.current.values()].map((element) => element.play()));
+            setAudioPlaybackBlocked(false);
+        } catch (audioError) {
+            console.error('Could not play live class audio:', audioError);
+            toast.error('Class audio could not be started. Check your browser audio settings.');
+        }
     }, []);
 
     const addRecordingAudioStream = useCallback((stream) => {
@@ -790,21 +802,46 @@ const LiveClass = () => {
                     }}
                 />
             ) : (
-                <video
-                    autoPlay
-                    playsInline
-                    style={{ ...styles.video, objectFit: 'cover' }}
-                    ref={(element) => {
-                        if (element) {
-                            videoElementsRef.current.set(tile.id, element);
-                            if (element.srcObject !== tile.stream && tile.stream) {
-                                element.srcObject = tile.stream;
+                <>
+                    <video
+                        autoPlay
+                        playsInline
+                        muted
+                        style={{ ...styles.video, objectFit: 'cover' }}
+                        ref={(element) => {
+                            if (element) {
+                                videoElementsRef.current.set(tile.id, element);
+                                if (element.srcObject !== tile.stream && tile.stream) {
+                                    element.srcObject = tile.stream;
+                                }
+                            } else {
+                                videoElementsRef.current.delete(tile.id);
                             }
-                        } else {
-                            videoElementsRef.current.delete(tile.id);
-                        }
-                    }}
-                />
+                        }}
+                    />
+                    {tile.stream && (
+                        <audio
+                            autoPlay
+                            playsInline
+                            ref={(element) => {
+                                if (element) {
+                                    remoteAudioElementsRef.current.set(tile.id, element);
+                                    if (element.srcObject !== tile.stream) {
+                                        element.srcObject = tile.stream;
+                                    }
+                                    element.play().then(() => {
+                                        setAudioPlaybackBlocked(false);
+                                    }).catch(() => {
+                                        setAudioPlaybackBlocked(true);
+                                    });
+                                } else {
+                                    remoteAudioElementsRef.current.delete(tile.id);
+                                }
+                            }}
+                            style={{ display: 'none' }}
+                        />
+                    )}
+                </>
             )}
             {tile.local && !isScreenSharing && isVideoOff && (
                 <div style={styles.cameraOff}><VideoOff size={28} /><span>Camera off</span></div>
@@ -893,6 +930,11 @@ const LiveClass = () => {
 
             <footer className="live-class-controls" style={styles.controls}>
                 <div className="live-class-control-group" style={styles.controlGroup}>
+                    {audioPlaybackBlocked && (
+                        <button style={styles.controlButton} onClick={enableRemoteAudio}>
+                            Enable class audio
+                        </button>
+                    )}
                     <button style={{ ...styles.controlButton, ...(isMuted ? styles.controlActive : {}) }} onClick={() => toggleTrack('audio')} title={isMuted ? 'Turn microphone on' : 'Mute microphone'}>
                         {isMuted ? <MicOff /> : <Mic />}<span>{isMuted ? 'Unmute' : 'Mute'}</span>
                     </button>
