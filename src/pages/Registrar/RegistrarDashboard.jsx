@@ -1582,8 +1582,8 @@ const RegistrarDashboard = () => {
             setSelectedStudent(null);
             fetchStudents();
           }}
-          onVerify={(studentId, action) => {
-            verifyStudentDocuments(studentId, action);
+          onVerify={(studentId, action, reason) => {
+            verifyStudentDocuments(studentId, action, reason);
           }}
         />
       )}
