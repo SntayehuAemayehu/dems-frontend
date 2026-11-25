@@ -67,6 +67,14 @@ const RegistrarResults = () => {
     ? [...currentDepartment[1].entries()].sort(([yearA], [yearB]) => yearA - yearB)
     : [];
   const currentYear = yearGroups.find(([year]) => year === selectedYear);
+  const courseColumns = currentYear
+    ? [...new Map(
+      [...currentYear[1].values()].flatMap((student) => student.grades.map((grade) => [
+        grade.course_id,
+        { course_id: grade.course_id, course_code: grade.course_code, course_title: grade.course_title },
+      ]))
+    ).values()]
+    : [];
   const eligibleEnrollmentIds = currentYear
     ? [...currentYear[1].values()]
       .flatMap((student) => student.grades)
@@ -209,44 +217,64 @@ const RegistrarResults = () => {
                   <Send size={15} /> {issuingSelected ? 'Generating…' : `Generate selected (${selectedEnrollmentIds.length})`}
                 </button>
               </div>
-              {[...currentYear[1].values()].map((student) => (
-                <div key={student.student_id} style={{ marginBottom: 16, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
-                  <div style={{ padding: 12, background: '#f8fafc', fontWeight: 600, color: '#0f172a' }}>
-                    {student.student_name} <span style={{ color: '#64748b', fontWeight: 400 }}>({student.student_number || 'No student ID'})</span>
-                  </div>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', minWidth: 830, borderCollapse: 'collapse' }}>
-                      <thead><tr style={{ textAlign: 'left', color: '#64748b', fontSize: 12 }}>
-                        {['Select', 'Course', 'Marks', 'Percentage', 'Grade', 'Certificate'].map((heading) => <th key={heading} style={{ padding: '10px 12px' }}>{heading}</th>)}
-                      </tr></thead>
-                      <tbody>{student.grades.map((grade) => (
-                        <tr key={grade.enrollment_id} style={{ borderTop: '1px solid #e2e8f0' }}>
-                          <td style={{ padding: '10px 12px' }}>
-                            <input
-                              type="checkbox"
-                              aria-label={`Select certificate for ${student.student_name} - ${grade.course_title}`}
-                              checked={selectedEnrollmentIds.includes(grade.enrollment_id)}
-                              onChange={() => toggleEnrollment(grade.enrollment_id)}
-                              disabled={grade.certificate_issued || issuingSelected}
-                            />
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: 230 + courseColumns.length * 230, borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: '#64748b', fontSize: 12 }}>
+                      <th style={{ padding: '10px 12px', minWidth: 190 }}>Student</th>
+                      {courseColumns.map((course) => (
+                        <th key={course.course_id} style={{ padding: '10px 12px', minWidth: 210 }}>
+                          <strong>{course.course_code}</strong>
+                          <div style={{ fontWeight: 400 }}>{course.course_title}</div>
+                          <div style={{ fontWeight: 400 }}>Total grade</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...currentYear[1].values()].map((student) => {
+                      const gradesByCourse = new Map(student.grades.map((grade) => [grade.course_id, grade]));
+                      return (
+                        <tr key={student.student_id} style={{ borderTop: '1px solid #e2e8f0' }}>
+                          <td style={{ padding: '10px 12px', color: '#0f172a' }}>
+                            <strong>{student.student_name}</strong>
+                            <div style={{ color: '#64748b', fontWeight: 400 }}>({student.student_number || 'No student ID'})</div>
                           </td>
-                          <td style={{ padding: '10px 12px' }}><strong>{grade.course_code}</strong><div style={{ color: '#64748b', fontSize: 12 }}>{grade.course_title}</div></td>
-                          <td style={{ padding: '10px 12px' }}>{Number(grade.total_marks_obtained || 0).toFixed(1)} / {Number(grade.total_marks_possible || 0).toFixed(1)}</td>
-                          <td style={{ padding: '10px 12px' }}>{Number(grade.percentage || 0).toFixed(1)}%</td>
-                          <td style={{ padding: '10px 12px' }}>{grade.grade || 'NON'}</td>
-                          <td style={{ padding: '10px 12px' }}>
-                            {grade.certificate_issued ? <span style={{ color: '#16a34a' }}>Generated and visible to student</span> : (
-                              <button type="button" onClick={() => generateCertificate(grade)} disabled={issuingEnrollment === grade.enrollment_id || issuingSelected} style={{ ...buttonStyle, padding: '7px 10px', background: '#2563eb', color: '#fff' }}>
-                                <Award size={14} /> {issuingEnrollment === grade.enrollment_id ? 'Generating…' : 'Generate Certificate'}
-                              </button>
-                            )}
-                          </td>
+                          {courseColumns.map((course) => {
+                            const grade = gradesByCourse.get(course.course_id);
+                            return (
+                              <td key={course.course_id} style={{ padding: '10px 12px', verticalAlign: 'top' }}>
+                                {grade ? (
+                                  <>
+                                    <strong>{Number(grade.total_marks_obtained || 0).toFixed(1)} / {Number(grade.total_marks_possible || 0).toFixed(1)}</strong>
+                                    <div style={{ color: '#64748b', fontSize: 12 }}>{Number(grade.percentage || 0).toFixed(1)}% · {grade.grade || 'NON'}</div>
+                                    <div style={{ marginTop: 8 }}>
+                                      {!grade.certificate_issued && (
+                                        <input
+                                          type="checkbox"
+                                          aria-label={`Select certificate for ${student.student_name} - ${grade.course_title}`}
+                                          checked={selectedEnrollmentIds.includes(grade.enrollment_id)}
+                                          onChange={() => toggleEnrollment(grade.enrollment_id)}
+                                          disabled={issuingSelected}
+                                        />
+                                      )}
+                                      {grade.certificate_issued ? <span style={{ color: '#16a34a', fontSize: 12 }}>Certificate generated</span> : (
+                                        <button type="button" onClick={() => generateCertificate(grade)} disabled={issuingEnrollment === grade.enrollment_id || issuingSelected} style={{ ...buttonStyle, marginLeft: 6, padding: '7px 10px', background: '#2563eb', color: '#fff' }}>
+                                          <Award size={14} /> {issuingEnrollment === grade.enrollment_id ? 'Generating…' : 'Generate'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </>
+                                ) : <span style={{ color: '#94a3b8' }}>—</span>}
+                              </td>
+                            );
+                          })}
                         </tr>
-                      ))}</tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </section>

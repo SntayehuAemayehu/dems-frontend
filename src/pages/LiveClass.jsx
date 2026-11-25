@@ -196,6 +196,14 @@ const LiveClass = () => {
         const senderId = String(message.sender_id ?? signal.sender_id ?? '');
         if (!senderId || senderId === currentUserId) return;
 
+        setParticipants((current) => current.some((participant) => participant.user_id === senderId)
+            ? current
+            : [...current, {
+                user: message.sender || 'Participant',
+                role: message.sender_role || (isTeacher ? 'STUDENT' : 'TEACHER'),
+                user_id: senderId
+            }]);
+
         // If it's an offer, create the peer and answer
         if (signal.type === 'offer') {
             const peer = createPeer(senderId, 'Teacher');
@@ -254,7 +262,7 @@ const LiveClass = () => {
                 pendingCandidatesRef.current.set(senderId, pending);
             }
         }
-    }, [createPeer, currentUserId, flushPendingCandidates, sendSocketMessage]);
+    }, [createPeer, currentUserId, flushPendingCandidates, isTeacher, sendSocketMessage]);
        const handleMessage = useCallback((data) => {
         if (['webrtc', 'offer', 'answer', 'ice_candidate'].includes(data.type)) {
             handleSignal(data);
@@ -283,11 +291,12 @@ const LiveClass = () => {
                 ? current
                 : [...current, participant]);
 
-            // ✅ FIX: Student initiates the offer to the Teacher
-            if (!isTeacher && (
-                participant.role === 'TEACHER' ||
-                (participant.role === 'STUDENT' && currentUserId.localeCompare(participant.user_id) < 0)
-            )) {
+            // The teacher offers to students who join an active class. If the
+            // teacher joins after students, those students offer to the teacher.
+            if (
+                (isTeacher && participant.role === 'STUDENT') ||
+                (!isTeacher && participant.role === 'TEACHER')
+            ) {
                 makeOffer(participant);
             }
 

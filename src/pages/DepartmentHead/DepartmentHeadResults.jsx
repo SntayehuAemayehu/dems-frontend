@@ -125,59 +125,85 @@ const DepartmentHeadResults = () => {
         <p style={{ color: '#64748b' }}>Loading submitted results…</p>
       ) : yearGroups.length === 0 ? (
         <div style={{ padding: 24, borderRadius: 10, background: '#fff', color: '#64748b' }}>No teacher-submitted results are available yet.</div>
-      ) : yearGroups.map(([year, students]) => (
-        <div key={year} style={{ marginBottom: 12, border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', overflow: 'hidden' }}>
-          <button type="button" onClick={() => setExpandedYear(expandedYear === year ? null : year)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: 16, border: 0, background: '#f8fafc', textAlign: 'left', color: '#0f172a', cursor: 'pointer', fontWeight: 600 }}>
-            {expandedYear === year ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-            Year {year || 'Unspecified'}
-            <span style={{ marginLeft: 'auto', color: '#64748b', fontWeight: 400 }}>{students.length} students</span>
-          </button>
-          {expandedYear === year && (
-            <div style={{ padding: 16 }}>
-              {students.map((student) => {
-                const canSend = student.grades.some((grade) => !grade.sent_to_registrar && grade.status === 'COMPLETED');
-                return (
-                  <div key={student.student_id} style={{ marginBottom: 18, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 12, background: '#f8fafc', flexWrap: 'wrap' }}>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
-                        <input
-                          type="checkbox"
-                          aria-label={`Select results for ${student.student_name}`}
-                          checked={selectedStudentIds.includes(student.student_id)}
-                          onChange={() => toggleStudent(student.student_id)}
-                          disabled={!canSend || sendingSelected}
-                        />
-                        <strong>{student.student_name} <span style={{ color: '#64748b', fontWeight: 400 }}>({student.student_number || 'No student ID'})</span></strong>
-                      </label>
-                      {canSend ? (
-                        <button type="button" onClick={() => sendStudentResults(student)} disabled={sendingStudent === student.student_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 12px', border: 0, borderRadius: 7, background: '#2563eb', color: '#fff', cursor: 'pointer' }}>
-                          <Send size={15} /> {sendingStudent === student.student_id ? 'Sending…' : 'Send to Registrar'}
-                        </button>
-                      ) : <span style={{ color: '#16a34a', fontSize: 13 }}>Sent to Registrar</span>}
-                    </div>
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
-                        <thead><tr style={{ textAlign: 'left', color: '#64748b', fontSize: 12 }}>
-                          {['Course', 'Marks', 'Percentage', 'Grade', 'Forwarding'].map((heading) => <th key={heading} style={{ padding: '10px 12px' }}>{heading}</th>)}
-                        </tr></thead>
-                        <tbody>{student.grades.map((grade) => (
-                          <tr key={grade.enrollment_id} style={{ borderTop: '1px solid #e2e8f0' }}>
-                            <td style={{ padding: '10px 12px' }}><strong>{grade.course_code}</strong><div style={{ color: '#64748b', fontSize: 12 }}>{grade.course_title}</div></td>
-                            <td style={{ padding: '10px 12px' }}>{Number(grade.marks_obtained || 0).toFixed(1)} / {Number(grade.marks_possible || 0).toFixed(1)}</td>
-                            <td style={{ padding: '10px 12px' }}>{Number(grade.percentage || 0).toFixed(1)}%</td>
-                            <td style={{ padding: '10px 12px' }}>{grade.grade || 'NON'}</td>
-                            <td style={{ padding: '10px 12px', color: grade.sent_to_registrar ? '#16a34a' : '#d97706' }}>{grade.sent_to_registrar ? 'Sent' : 'Awaiting Registrar'}</td>
-                          </tr>
-                        ))}</tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      ))}
+      ) : yearGroups.map(([year, students]) => {
+        const courseColumns = [...new Map(
+          students.flatMap((student) => student.grades.map((grade) => [
+            grade.course_id,
+            { course_id: grade.course_id, course_code: grade.course_code, course_title: grade.course_title },
+          ]))
+        ).values()];
+
+        return (
+          <div key={year} style={{ marginBottom: 12, border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', overflow: 'hidden' }}>
+            <button type="button" onClick={() => setExpandedYear(expandedYear === year ? null : year)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: 16, border: 0, background: '#f8fafc', textAlign: 'left', color: '#0f172a', cursor: 'pointer', fontWeight: 600 }}>
+              {expandedYear === year ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+              Year {year || 'Unspecified'}
+              <span style={{ marginLeft: 'auto', color: '#64748b', fontWeight: 400 }}>{students.length} students</span>
+            </button>
+            {expandedYear === year && (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 430 + courseColumns.length * 190 }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: '#64748b', fontSize: 12, background: '#fff' }}>
+                      <th style={{ padding: '10px 12px', minWidth: 210 }}>Student</th>
+                      {courseColumns.map((course) => (
+                        <th key={course.course_id} style={{ padding: '10px 12px', minWidth: 170 }}>
+                          <strong>{course.course_code}</strong>
+                          <div style={{ fontWeight: 400 }}>{course.course_title}</div>
+                          <div style={{ fontWeight: 400 }}>Total grade</div>
+                        </th>
+                      ))}
+                      <th style={{ padding: '10px 12px', minWidth: 170 }}>Forwarding</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.map((student) => {
+                      const canSend = student.grades.some((grade) => !grade.sent_to_registrar && grade.status === 'COMPLETED');
+                      const gradesByCourse = new Map(student.grades.map((grade) => [grade.course_id, grade]));
+                      return (
+                        <tr key={student.student_id} style={{ borderTop: '1px solid #e2e8f0' }}>
+                          <td style={{ padding: '10px 12px' }}>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
+                              <input
+                                type="checkbox"
+                                aria-label={`Select results for ${student.student_name}`}
+                                checked={selectedStudentIds.includes(student.student_id)}
+                                onChange={() => toggleStudent(student.student_id)}
+                                disabled={!canSend || sendingSelected}
+                              />
+                              <strong>{student.student_name}<span style={{ display: 'block', color: '#64748b', fontWeight: 400 }}>({student.student_number || 'No student ID'})</span></strong>
+                            </label>
+                          </td>
+                          {courseColumns.map((course) => {
+                            const grade = gradesByCourse.get(course.course_id);
+                            return (
+                              <td key={course.course_id} style={{ padding: '10px 12px' }}>
+                                {grade ? (
+                                  <>
+                                    <strong>{Number(grade.marks_obtained || 0).toFixed(1)} / {Number(grade.marks_possible || 0).toFixed(1)}</strong>
+                                    <div style={{ color: '#64748b', fontSize: 12 }}>{Number(grade.percentage || 0).toFixed(1)}% · {grade.grade || 'NON'}</div>
+                                  </>
+                                ) : <span style={{ color: '#94a3b8' }}>—</span>}
+                              </td>
+                            );
+                          })}
+                          <td style={{ padding: '10px 12px' }}>
+                            {canSend ? (
+                              <button type="button" onClick={() => sendStudentResults(student)} disabled={sendingStudent === student.student_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 12px', border: 0, borderRadius: 7, background: '#2563eb', color: '#fff', cursor: 'pointer' }}>
+                                <Send size={15} /> {sendingStudent === student.student_id ? 'Sending…' : 'Send to Registrar'}
+                              </button>
+                            ) : <span style={{ color: '#16a34a', fontSize: 13 }}>Sent to Registrar</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 };
