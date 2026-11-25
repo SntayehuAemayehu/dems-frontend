@@ -311,8 +311,12 @@ const LiveClass = () => {
                 ? current
                 : [...current, participant]);
 
-            // The teacher always initiates the connection to avoid offer collisions.
-            if (isTeacher && participant.role === 'STUDENT') {
+            // The participant who joins second initiates; the backend currently
+            // does not send an existing-participant list to a newly joined teacher.
+            if (
+                (isTeacher && participant.role === 'STUDENT') ||
+                (!isTeacher && participant.role === 'TEACHER')
+            ) {
                 makeOffer(participant);
             }
 
