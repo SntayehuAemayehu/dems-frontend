@@ -39,6 +39,7 @@ const RegistrarDashboard = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [isUsingSampleData, setIsUsingSampleData] = useState(false);
   const [dataSource, setDataSource] = useState('none');
+  const [activeBatchAction, setActiveBatchAction] = useState('');
   
   // Modal states
   const [showVerifyModal, setShowVerifyModal] = useState(false);
@@ -162,6 +163,8 @@ const RegistrarDashboard = () => {
           payment_status: s.payment_status || 'PENDING',
           documents_verified: s.documents_verified || false,
           documents_submitted: s.documents_submitted || false,
+          documents_status: s.documents_status || (s.documents_verified ? 'APPROVED' : 'NOT_SUBMITTED'),
+          documents_rejection_reason: s.documents_rejection_reason || '',
           is_enrolled: s.is_enrolled || false,
           grade_8_certificate: s.grade_8_certificate || null,
           grade_12_certificate: s.grade_12_certificate || null,
@@ -290,8 +293,8 @@ const RegistrarDashboard = () => {
     setStats({
       total: arr.length,
       verified: arr.filter(s => s.documents_verified === true).length,
-      pending: arr.filter(s => !s.documents_verified && s.payment_status !== 'REJECTED').length,
-      rejected: arr.filter(s => s.payment_status === 'REJECTED').length,
+      pending: arr.filter(s => !s.documents_verified && s.documents_status !== 'REJECTED' && s.payment_status !== 'REJECTED').length,
+      rejected: arr.filter(s => s.documents_status === 'REJECTED' || s.payment_status === 'REJECTED').length,
       active: arr.filter(s => s.is_enrolled === true).length,
       documents_submitted: arr.filter(s => s.documents_submitted === true).length,
       ready_for_activation: arr.filter(s => s.documents_verified === true && s.payment_status === 'VERIFIED' && !s.is_enrolled).length,
@@ -475,8 +478,8 @@ const RegistrarDashboard = () => {
     if (status !== 'all') {
       filtered = filtered.filter(s => {
         if (status === 'verified') return s.documents_verified === true;
-        if (status === 'pending') return !s.documents_verified && s.payment_status !== 'REJECTED';
-        if (status === 'rejected') return s.payment_status === 'REJECTED';
+        if (status === 'pending') return !s.documents_verified && s.documents_status !== 'REJECTED' && s.payment_status !== 'REJECTED';
+        if (status === 'rejected') return s.documents_status === 'REJECTED' || s.payment_status === 'REJECTED';
         if (status === 'active') return s.is_enrolled === true;
         if (status === 'documents') return s.documents_submitted === true;
         if (status === 'ready') return s.documents_verified === true && s.payment_status === 'VERIFIED' && !s.is_enrolled;
@@ -491,7 +494,24 @@ const RegistrarDashboard = () => {
 
   // ============ STATUS BADGE ============
   const getStatusBadge = (student) => {
-    if (student.is_enrolled && student.documents_verified) {
+    if (student.documents_status === 'REJECTED' || student.payment_status === 'REJECTED') {
+      return (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '4px 12px',
+          borderRadius: '20px',
+          fontSize: '12px',
+          fontWeight: 600,
+          background: '#fee2e2',
+          color: '#dc2626',
+        }} title={student.documents_rejection_reason || undefined}>
+          <XCircle size={16} />
+          {student.documents_status === 'REJECTED' ? 'Documents Rejected' : 'Rejected'}
+        </span>
+      );
+    } else if (student.is_enrolled && student.documents_verified) {
       return (
         <span style={{
           display: 'inline-flex',
@@ -917,8 +937,39 @@ const RegistrarDashboard = () => {
       
 
       {/* ============ BATCH PROCESSING SECTION ============ */}
-      
-      {/* Batch Student Activation */}
+      <div style={{
+        marginBottom: '16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        flexWrap: 'wrap',
+      }}>
+        <label htmlFor="registrar-batch-action" style={{ fontWeight: 600, color: '#334155' }}>
+          Batch actions
+        </label>
+        <select
+          id="registrar-batch-action"
+          value={activeBatchAction}
+          onChange={(event) => setActiveBatchAction(event.target.value)}
+          style={{
+            minWidth: '280px',
+            padding: '10px 12px',
+            border: '1px solid #cbd5e1',
+            borderRadius: '8px',
+            background: 'white',
+            color: '#0f172a',
+            fontSize: '14px',
+          }}
+        >
+          <option value="">Select a batch action...</option>
+          <option value="activation">Batch Student Activation</option>
+          <option value="id-generation">Batch Student ID Generation</option>
+          <option value="document-verification">Batch Document Verification</option>
+          <option value="document-notification">Batch Notify — Upload Documents</option>
+        </select>
+      </div>
+
+      {activeBatchAction === 'activation' && (
       <div className="batch-3d-wrapper">
       <BatchProcessor
         endpoint="/analytics/batch/activate-students/"
@@ -938,7 +989,9 @@ const RegistrarDashboard = () => {
         bgColor="#eff6ff"
       />
 </div>
+      )}
       {/* Batch ID Generation */}
+      {activeBatchAction === 'id-generation' && (
       <div className="batch-3d-wrapper">
       <BatchProcessor
         endpoint="/analytics/batch/generate-ids/"
@@ -957,7 +1010,9 @@ const RegistrarDashboard = () => {
         bgColor="#f5f3ff"
       />
 </div>
+      )}
       {/* Batch Document Verification */}
+      {activeBatchAction === 'document-verification' && (
       <div className="batch-3d-wrapper">
       <BatchProcessor
         endpoint="/analytics/batch/verify-documents/"
@@ -976,7 +1031,9 @@ const RegistrarDashboard = () => {
         bgColor="#fff7ed"
       />
       </div>
+      )}
 {/* ============ BATCH NOTIFY — UPLOAD DOCUMENTS ============ */}
+{activeBatchAction === 'document-notification' && (
 <div className="batch-3d-wrapper">
 <BatchProcessor
   endpoint="/analytics/batch/send-notifications/"
@@ -1020,6 +1077,7 @@ const RegistrarDashboard = () => {
   }}
 />
 </div>
+)}
 
       {/* SEARCH AND FILTER */}
       <div style={{
@@ -1276,7 +1334,14 @@ const RegistrarDashboard = () => {
                       padding: '12px 16px',
                       fontSize: '14px',
                     }}>
-                      {getStatusBadge(student)}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                        {getStatusBadge(student)}
+                        {student.documents_status === 'REJECTED' && student.documents_rejection_reason && (
+                          <span style={{ fontSize: '12px', color: '#b91c1c' }}>
+                            Reason: {student.documents_rejection_reason}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     <td style={{
@@ -1325,7 +1390,7 @@ const RegistrarDashboard = () => {
                         )}
 
                         {/* 3. VERIFY DOCUMENTS */}
-                        {student.documents_submitted && !student.documents_verified && student.payment_status === 'VERIFIED' && (
+                        {student.documents_submitted && !student.documents_verified && student.documents_status !== 'REJECTED' && student.payment_status === 'VERIFIED' && (
                           <button
                             className="action-btn-3d"
                             onClick={() => {
