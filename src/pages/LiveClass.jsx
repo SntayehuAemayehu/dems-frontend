@@ -108,7 +108,7 @@ const LiveClass = () => {
             return next;
         });
     }, []);
-    const createPeer = useCallback((peerId, peerName) => {
+    const createPeer = useCallback((peerId, peerName, addLocalTracks = true) => {
         const id = String(peerId);
         if (!id || id === currentUserId) return null;
 
@@ -121,8 +121,12 @@ const LiveClass = () => {
         });
 
         // ✅ CRITICAL FIX: Ensure the local tracks (camera/mic) are added IMMEDIATELY
-        if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach((track) => {
+        if (addLocalTracks && localStreamRef.current) {
+            const tracks = [
+                ...localStreamRef.current.getAudioTracks(),
+                ...localStreamRef.current.getVideoTracks()
+            ];
+            tracks.forEach((track) => {
                 peer.addTrack(track, localStreamRef.current);
             });
         }
@@ -206,7 +210,7 @@ const LiveClass = () => {
 
         // If it's an offer, create the peer and answer
         if (signal.type === 'offer') {
-            const peer = createPeer(senderId, 'Teacher');
+            const peer = createPeer(senderId, 'Teacher', false);
             if (!peer) return;
 
             try {
@@ -216,7 +220,11 @@ const LiveClass = () => {
 
                 // 2. Add local tracks (camera/mic) - CRITICAL for PC
                 if (localStreamRef.current) {
-                    localStreamRef.current.getTracks().forEach((track) => {
+                    const tracks = [
+                        ...localStreamRef.current.getAudioTracks(),
+                        ...localStreamRef.current.getVideoTracks()
+                    ];
+                    tracks.forEach((track) => {
                         const senders = peer.getSenders();
                         const hasTrack = senders.some(s => s.track === track);
                         if (!hasTrack) {
@@ -291,12 +299,8 @@ const LiveClass = () => {
                 ? current
                 : [...current, participant]);
 
-            // The teacher offers to students who join an active class. If the
-            // teacher joins after students, those students offer to the teacher.
-            if (
-                (isTeacher && participant.role === 'STUDENT') ||
-                (!isTeacher && participant.role === 'TEACHER')
-            ) {
+            // The teacher always initiates the connection to avoid offer collisions.
+            if (isTeacher && participant.role === 'STUDENT') {
                 makeOffer(participant);
             }
 
