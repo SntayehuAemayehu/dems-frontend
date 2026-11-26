@@ -117,6 +117,13 @@ export const downloadSEBConfig = (examId) => {
     
     return `exam_${examId}.seb`;
 };
+
+export const createSEBLaunchUrl = async (examId) => {
+    const response = await api.post(`/exams/${examId}/seb-launch/`);
+    const fileUrl = new URL(response.data.seb_file_url, API_BASE_URL);
+    fileUrl.protocol = fileUrl.protocol === 'https:' ? 'sebs:' : 'seb:';
+    return fileUrl.href;
+};
 // ============================================================
 // REQUEST INTERCEPTOR - Add token to requests
 // ============================================================

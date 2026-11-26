@@ -1,6 +1,6 @@
 // frontend/src/pages/Student/TakeExam.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
   Camera,
@@ -23,6 +23,7 @@ import { useDarkMode } from '../../context/DarkModeContext';
 const TakeExam = () => {
   const { examId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useSelector((state) => state.auth);
   const { isDarkMode, toggleDarkMode } = useDarkMode();
 
@@ -223,7 +224,9 @@ const TakeExam = () => {
       }
 
       // Only create attempt after successful verification
-      const startRes = await api.post(`/exams/${examId}/start/`);
+      const startRes = await api.post(`/exams/${examId}/start/`, {
+        seb_session_id: location.state?.sebSessionId,
+      });
       const newAttemptId = startRes.data.attempt_id;
 
       setAttemptId(newAttemptId);

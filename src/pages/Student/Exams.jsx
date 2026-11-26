@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { Clock, Calendar, FileText, CheckCircle, Eye, Loader, ArrowLeft, Shield, BookOpen } from 'lucide-react';
 import { fetchExams } from '../../store/slices/examSlice';
-import api, { getAllPages } from '../../api/api';
+import api, { createSEBLaunchUrl, getAllPages } from '../../api/api';
 import toast from 'react-hot-toast';
 
 const Exams = () => {
@@ -63,21 +63,8 @@ const Exams = () => {
         return;
       }
 
-      if (exam.seb_available && exam.seb_file_url) {
-        let fileUrl = exam.seb_file_url;
-        let protocolUrl;
-
-        // Convert URL to SEB protocol
-        if (fileUrl.startsWith('https://')) {
-          protocolUrl = fileUrl.replace('https://', 'sebs://');
-        } else if (fileUrl.startsWith('http://')) {
-          protocolUrl = fileUrl.replace('http://', 'seb://');
-        } else {
-          toast.error('Invalid SEB file URL.');
-          return;
-        }
-
-        // Trigger browser modal for SEB launch
+      if (exam.seb_available) {
+        const protocolUrl = await createSEBLaunchUrl(exam.id);
         window.location.href = protocolUrl;
         toast.success('Launching Safe Exam Browser...', { duration: 4000 });
 

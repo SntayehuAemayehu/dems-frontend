@@ -169,6 +169,13 @@ const authSlice = createSlice({
       state.isLoading = false;
       state.error = 'Session reset. Please login again.';
     },
+    setCredentials: (state, action) => {
+      state.user = action.payload;
+      state.isAuthenticated = true;
+      state.userRole = action.payload.role;
+      state.isLoading = false;
+      state.error = null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -242,5 +249,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, resetAuth, forceLogout } = authSlice.actions;
+export const { clearError, resetAuth, forceLogout, setCredentials } = authSlice.actions;
 export default authSlice.reducer;

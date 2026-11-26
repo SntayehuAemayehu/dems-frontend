@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Award, ChevronDown, ChevronRight, RefreshCw, Send } from 'lucide-react';
+import { ArrowLeft, Award, BookOpen, Building2, ChevronDown, ChevronRight, RefreshCw, Send, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
@@ -81,6 +81,9 @@ const RegistrarResults = () => {
       .filter((grade) => !grade.certificate_issued)
       .map((grade) => grade.enrollment_id)
     : [];
+  const totalStudents = new Set(results.map((result) => result.student_id)).size;
+  const totalCourses = new Set(results.map((result) => result.course_id)).size;
+  const certificatesPending = results.filter((result) => !result.certificate_issued).length;
   const allEligibleSelected = eligibleEnrollmentIds.length > 0
     && eligibleEnrollmentIds.every((id) => selectedEnrollmentIds.includes(id));
 
@@ -135,48 +138,82 @@ const RegistrarResults = () => {
   };
 
   return (
-    <main style={{ maxWidth: 1200, margin: '0 auto', padding: 24 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 22, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ margin: 0, color: '#0f172a' }}>Registrar Results & Certificates</h1>
-          <p style={{ margin: '6px 0 0', color: '#64748b' }}>Review read-only grades by department and year, then issue student certificates.</p>
+    <main className="registrar-results-main" style={{ maxWidth: 1500, margin: '0 auto', padding: 24 }}>
+      <style>{`
+        .registrar-result-row:hover { background: #f8fafc; }
+        .registrar-department-card:hover { transform: translateY(-3px); box-shadow: 0 15px 28px rgba(15,23,42,.1); }
+        @media (max-width: 700px) { .registrar-results-main { padding: 14px !important; } }
+      `}</style>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 22, flexWrap: 'wrap', padding: 28, borderRadius: 22, color: '#fff', background: 'linear-gradient(120deg, #0f172a 0%, #0f766e 52%, #059669 100%)', boxShadow: '0 20px 45px rgba(5,150,105,.18)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ width: 54, height: 54, display: 'grid', placeItems: 'center', borderRadius: 16, background: 'rgba(255,255,255,.16)' }}><Award size={28} /></div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 27 }}>Academic Results</h1>
+            <p style={{ margin: '6px 0 0', color: '#d1fae5' }}>Department courses, student totals, and certificate publishing.</p>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={() => navigate('/registrar/dashboard')} style={{ ...buttonStyle, background: '#f1f5f9', color: '#334155' }}>
+          <button type="button" onClick={() => navigate('/registrar/dashboard')} style={{ ...buttonStyle, border: '1px solid rgba(255,255,255,.3)', background: 'rgba(255,255,255,.13)', color: '#fff' }}>
             <ArrowLeft size={16} /> Dashboard
           </button>
-          <button type="button" onClick={fetchResults} disabled={loading} style={{ ...buttonStyle, background: '#eff6ff', color: '#1d4ed8' }}>
+          <button type="button" onClick={fetchResults} disabled={loading} style={{ ...buttonStyle, border: '1px solid rgba(255,255,255,.3)', background: 'rgba(255,255,255,.13)', color: '#fff' }}>
             <RefreshCw size={16} /> Refresh
           </button>
         </div>
       </header>
 
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(185px, 1fr))', gap: 12, marginBottom: 18 }}>
+        {[
+          { label: 'Departments', value: departmentGroups.length, icon: <Building2 size={19} />, color: '#0f766e' },
+          { label: 'Students with results', value: totalStudents, icon: <Users size={19} />, color: '#2563eb' },
+          { label: 'Courses represented', value: totalCourses, icon: <BookOpen size={19} />, color: '#7c3aed' },
+          { label: 'Certificates to issue', value: certificatesPending, icon: <Award size={19} />, color: '#ea580c' },
+        ].map((metric) => (
+          <div key={metric.label} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', border: '1px solid #e2e8f0', borderRadius: 16, background: '#fff', boxShadow: '0 6px 20px rgba(15,23,42,.04)' }}>
+            <span style={{ width: 42, height: 42, display: 'grid', placeItems: 'center', borderRadius: 13, background: `${metric.color}14`, color: metric.color }}>{metric.icon}</span>
+            <span><strong style={{ display: 'block', fontSize: 21, color: '#0f172a' }}>{metric.value}</strong><small style={{ color: '#64748b' }}>{metric.label}</small></span>
+          </div>
+        ))}
+      </section>
+
       {loading ? <p style={{ color: '#64748b' }}>Loading results…</p> : departmentGroups.length === 0 ? (
-        <section style={{ padding: 24, borderRadius: 10, background: '#fff', color: '#64748b' }}>No department results have been forwarded yet.</section>
+        <section style={{ padding: 36, border: '1px dashed #cbd5e1', borderRadius: 18, background: '#fff', color: '#64748b', textAlign: 'center' }}>
+          <BookOpen size={32} style={{ color: '#94a3b8', marginBottom: 8 }} />
+          <div style={{ color: '#334155', fontWeight: 700 }}>No results forwarded yet</div>
+          <div style={{ marginTop: 4 }}>Department Head submissions will appear here for Registrar review.</div>
+        </section>
       ) : (
-        <section style={{ padding: 20, borderRadius: 12, background: '#fff', boxShadow: '0 1px 3px rgba(15, 23, 42, .1)' }}>
-          <h2 style={{ margin: '0 0 12px', color: '#0f172a' }}>Departments</h2>
+        <section style={{ padding: 20, border: '1px solid #e2e8f0', borderRadius: 18, background: '#fff', boxShadow: '0 8px 26px rgba(15,23,42,.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 13 }}>
+            <div>
+              <h2 style={{ margin: 0, color: '#0f172a' }}>Department results</h2>
+              <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>Choose a department, then a year to review all students and course totals.</p>
+            </div>
+            {selectedDepartment && <span style={{ padding: '6px 10px', borderRadius: 999, color: '#047857', background: '#d1fae5', fontSize: 12, fontWeight: 700 }}>{selectedDepartment}</span>}
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
             {departmentGroups.map(([name, years]) => (
               <button
                 key={name}
                 type="button"
+                className="registrar-department-card"
                 onClick={() => {
                   setSelectedDepartment(name);
                   setSelectedYear(null);
                   setSelectedEnrollmentIds([]);
                 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 9, padding: 13, border: `1px solid ${selectedDepartment === name ? '#2563eb' : '#e2e8f0'}`, borderRadius: 8, background: selectedDepartment === name ? '#eff6ff' : '#fff', textAlign: 'left', cursor: 'pointer' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 9, padding: 14, border: `1px solid ${selectedDepartment === name ? '#059669' : '#e2e8f0'}`, borderRadius: 12, background: selectedDepartment === name ? '#ecfdf5' : '#fff', textAlign: 'left', color: '#0f172a', cursor: 'pointer', transition: 'all .18s ease' }}
               >
-                <ChevronRight size={17} /> <strong>{name}</strong>
-                <span style={{ marginLeft: 'auto', color: '#64748b' }}>{[...years.values()].reduce((total, students) => total + students.size, 0)}</span>
+                <span style={{ width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 10, color: '#047857', background: '#d1fae5' }}><Building2 size={17} /></span>
+                <strong style={{ fontSize: 13 }}>{name}</strong>
+                <span style={{ marginLeft: 'auto', padding: '4px 8px', borderRadius: 999, color: '#475569', background: '#f1f5f9', fontSize: 12 }}>{[...years.values()].reduce((total, students) => total + students.size, 0)}</span>
               </button>
             ))}
           </div>
 
           {selectedDepartment && currentDepartment && (
-            <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid #e2e8f0' }}>
-              <h3 style={{ margin: '0 0 10px', color: '#334155' }}>{selectedDepartment} — Select Year</h3>
+            <div style={{ marginTop: 20, padding: 17, border: '1px solid #dbeafe', borderRadius: 14, background: 'linear-gradient(120deg, #f8fafc, #eff6ff)' }}>
+              <h3 style={{ margin: '0 0 11px', color: '#334155', fontSize: 15 }}>{selectedDepartment} · Select academic year</h3>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {yearGroups.map(([year, students]) => (
                   <button
@@ -186,7 +223,7 @@ const RegistrarResults = () => {
                       setSelectedYear(selectedYear === year ? null : year);
                       setSelectedEnrollmentIds([]);
                     }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 13px', border: `1px solid ${selectedYear === year ? '#2563eb' : '#cbd5e1'}`, borderRadius: 8, background: selectedYear === year ? '#eff6ff' : '#fff', color: '#334155', cursor: 'pointer' }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 14px', border: `1px solid ${selectedYear === year ? '#059669' : '#cbd5e1'}`, borderRadius: 10, background: selectedYear === year ? '#d1fae5' : '#fff', color: selectedYear === year ? '#047857' : '#334155', cursor: 'pointer', boxShadow: selectedYear === year ? '0 5px 12px rgba(5,150,105,.12)' : 'none' }}
                   >
                     {selectedYear === year ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     Year {year || 'Unspecified'} <span style={{ color: '#64748b' }}>({students.size})</span>
@@ -199,7 +236,10 @@ const RegistrarResults = () => {
           {currentYear && (
             <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                <h3 style={{ margin: '0 auto 0 0', color: '#334155' }}>{selectedDepartment} — Year {selectedYear || 'Unspecified'} Student Grades</h3>
+                <div style={{ margin: '0 auto 0 0' }}>
+                  <h3 style={{ margin: 0, color: '#0f172a' }}>Student grades</h3>
+                  <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>{selectedDepartment} · Year {selectedYear || 'Unspecified'} · {courseColumns.length} courses</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setSelectedEnrollmentIds(allEligibleSelected ? [] : eligibleEnrollmentIds)}
@@ -212,21 +252,22 @@ const RegistrarResults = () => {
                   type="button"
                   onClick={generateSelectedCertificates}
                   disabled={!selectedEnrollmentIds.length || issuingSelected}
-                  style={{ ...buttonStyle, background: '#2563eb', color: '#fff', opacity: !selectedEnrollmentIds.length ? 0.55 : 1 }}
+                  style={{ ...buttonStyle, background: 'linear-gradient(110deg, #059669, #0f766e)', color: '#fff', opacity: !selectedEnrollmentIds.length ? 0.55 : 1 }}
                 >
                   <Send size={15} /> {issuingSelected ? 'Generating…' : `Generate selected (${selectedEnrollmentIds.length})`}
                 </button>
               </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', minWidth: 230 + courseColumns.length * 230, borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ textAlign: 'left', color: '#64748b', fontSize: 12 }}>
-                      <th style={{ padding: '10px 12px', minWidth: 190 }}>Student</th>
+              <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 14 }}>
+                <table style={{ width: '100%', minWidth: 390 + courseColumns.length * 230, borderCollapse: 'collapse' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f8fafc' }}>
+                    <tr style={{ textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: '.05em', textTransform: 'uppercase' }}>
+                      <th style={{ padding: '12px 14px', minWidth: 190 }}>Student</th>
+                      <th style={{ padding: '12px 14px', minWidth: 130 }}>Total marks</th>
                       {courseColumns.map((course) => (
-                        <th key={course.course_id} style={{ padding: '10px 12px', minWidth: 210 }}>
-                          <strong>{course.course_code}</strong>
-                          <div style={{ fontWeight: 400 }}>{course.course_title}</div>
-                          <div style={{ fontWeight: 400 }}>Total grade</div>
+                        <th key={course.course_id} style={{ padding: '12px 14px', minWidth: 210 }}>
+                          <strong style={{ color: '#334155' }}>{course.course_code}</strong>
+                          <div style={{ marginTop: 3, fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>{course.course_title}</div>
+                          <div style={{ marginTop: 5, color: '#047857', fontWeight: 600, letterSpacing: 0, textTransform: 'none' }}>Course total</div>
                         </th>
                       ))}
                     </tr>
@@ -234,20 +275,25 @@ const RegistrarResults = () => {
                   <tbody>
                     {[...currentYear[1].values()].map((student) => {
                       const gradesByCourse = new Map(student.grades.map((grade) => [grade.course_id, grade]));
+                      const totalMarksObtained = student.grades.reduce((sum, grade) => sum + Number(grade.total_marks_obtained || 0), 0);
+                      const totalMarksPossible = student.grades.reduce((sum, grade) => sum + Number(grade.total_marks_possible || 0), 0);
                       return (
-                        <tr key={student.student_id} style={{ borderTop: '1px solid #e2e8f0' }}>
-                          <td style={{ padding: '10px 12px', color: '#0f172a' }}>
+                        <tr key={student.student_id} className="registrar-result-row" style={{ borderTop: '1px solid #eef2f7', color: '#0f172a', transition: 'background .15s ease' }}>
+                          <td style={{ padding: '12px 14px', color: '#0f172a' }}>
                             <strong>{student.student_name}</strong>
                             <div style={{ color: '#64748b', fontWeight: 400 }}>({student.student_number || 'No student ID'})</div>
+                          </td>
+                          <td style={{ padding: '12px 14px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            {totalMarksPossible > 0 ? `${totalMarksObtained.toFixed(1)} / ${totalMarksPossible.toFixed(1)}` : '—'}
                           </td>
                           {courseColumns.map((course) => {
                             const grade = gradesByCourse.get(course.course_id);
                             return (
-                              <td key={course.course_id} style={{ padding: '10px 12px', verticalAlign: 'top' }}>
+                              <td key={course.course_id} style={{ padding: '12px 14px', verticalAlign: 'top' }}>
                                 {grade ? (
                                   <>
                                     <strong>{Number(grade.total_marks_obtained || 0).toFixed(1)} / {Number(grade.total_marks_possible || 0).toFixed(1)}</strong>
-                                    <div style={{ color: '#64748b', fontSize: 12 }}>{Number(grade.percentage || 0).toFixed(1)}% · {grade.grade || 'NON'}</div>
+                                    <div style={{ display: 'inline-flex', marginTop: 5, padding: '3px 7px', borderRadius: 999, color: '#047857', background: '#d1fae5', fontSize: 11, fontWeight: 600 }}>{Number(grade.percentage || 0).toFixed(1)}% · {grade.grade || 'NON'}</div>
                                     <div style={{ marginTop: 8 }}>
                                       {!grade.certificate_issued && (
                                         <input

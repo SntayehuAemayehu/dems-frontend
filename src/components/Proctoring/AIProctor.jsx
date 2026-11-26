@@ -59,6 +59,7 @@ const AIProctor = ({
   const [usingMediaPipe, setUsingMediaPipe] = useState(false);
   const [liveConnected, setLiveConnected] = useState(false);
   const [phoneDetected, setPhoneDetected] = useState(false);
+  const [phoneDetectionReady, setPhoneDetectionReady] = useState(false);
   const [phoneDetectionError, setPhoneDetectionError] = useState(false);
 
   // ==================== SEND IMAGE ====================
@@ -277,7 +278,7 @@ const AIProctor = ({
   const initializeMediaPipe = useCallback(async () => {
     try {
       const filesetResolver = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
       );
 
       const landmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
@@ -422,7 +423,13 @@ const AIProctor = ({
         const phoneModelPromise = import('@tensorflow-models/coco-ssd')
           .then(({ load }) => load())
           .then((model) => {
-            if (isMounted.current) phoneModelRef.current = model;
+            if (isMounted.current) {
+              phoneModelRef.current = model;
+              setPhoneDetectionReady(true);
+            } else {
+              model.dispose();
+            }
+            return true;
           })
           .catch((modelError) => {
             console.error('Mobile phone detection could not start:', modelError);
@@ -430,55 +437,57 @@ const AIProctor = ({
               setPhoneDetectionError(true);
               toast.error('Mobile phone detection could not start.');
             }
+            return false;
           });
-        const ok = await initializeMediaPipe();
+        const [phoneModelReady, faceModelReady] = await Promise.all([
+          phoneModelPromise,
+          initializeMediaPipe(),
+        ]);
 
-        if (ok) {
+        if (faceModelReady) {
           startLoop();
-          await phoneModelPromise;
-
-          const detectPhone = async () => {
-            const video = videoRef.current;
-            if (
-              !phoneModelRef.current ||
-              !video ||
-              video.readyState < 2 ||
-              phoneDetectionInProgressRef.current
-            ) return;
-
-            phoneDetectionInProgressRef.current = true;
-            try {
-              const detections = await phoneModelRef.current.detect(video);
-              const foundPhone = detections.some(
-                (detection) => detection.class === 'cell phone' && detection.score >= 0.55
-              );
-              setPhoneDetected(foundPhone);
-
-              const now = Date.now();
-              if (foundPhone && now - lastPhoneAlertAtRef.current >= 15000) {
-                lastPhoneAlertAtRef.current = now;
-                onViolationRef.current?.('PHONE_DETECTED', 'Mobile phone detected');
-                await sendImageRef.current?.(true, 'PHONE_DETECTED');
-              }
-            } catch (detectionError) {
-              console.error('Mobile phone detection failed:', detectionError);
-            } finally {
-              phoneDetectionInProgressRef.current = false;
-            }
-          };
-
-          imageIntervalRef.current = setInterval(() => {
-            sendImage(false);
-            detectPhone();
-          }, 3000);
-
-          setIsInitializing(false);
-          onStatusUpdate?.({ status: 'running' });
-          toast.success('AI Proctor active');
         } else {
-          setError('Failed to load face detection model');
-          setIsInitializing(false);
+          setError('Face detection could not start. Phone detection can still run.');
         }
+
+        const detectPhone = async () => {
+          const video = videoRef.current;
+          if (
+            !phoneModelRef.current ||
+            !video ||
+            video.readyState < 2 ||
+            phoneDetectionInProgressRef.current
+          ) return;
+
+          phoneDetectionInProgressRef.current = true;
+          try {
+            const detections = await phoneModelRef.current.detect(video);
+            const foundPhone = detections.some(
+              (detection) => detection.class === 'cell phone' && detection.score >= 0.55
+            );
+            setPhoneDetected(foundPhone);
+
+            const now = Date.now();
+            if (foundPhone && now - lastPhoneAlertAtRef.current >= 15000) {
+              lastPhoneAlertAtRef.current = now;
+              onViolationRef.current?.('PHONE_DETECTED', 'Mobile phone detected');
+              await sendImageRef.current?.(true, 'PHONE_DETECTED');
+            }
+          } catch (detectionError) {
+            console.error('Mobile phone detection failed:', detectionError);
+          } finally {
+            phoneDetectionInProgressRef.current = false;
+          }
+        };
+
+        imageIntervalRef.current = setInterval(() => {
+          sendImage(false);
+          if (phoneModelReady) detectPhone();
+        }, 3000);
+
+        setIsInitializing(false);
+        onStatusUpdate?.({ status: phoneModelReady ? 'running' : 'degraded' });
+        if (phoneModelReady) toast.success('Phone detection active');
       } catch (err) {
         setError(err.message || 'Camera / AI init failed');
         setIsInitializing(false);
@@ -624,7 +633,11 @@ const AIProctor = ({
               fontWeight: 600,
             }}
           >
-            {phoneDetectionError ? 'Phone check unavailable' : phoneDetected ? 'Phone detected' : 'Phone check ON'}
+            {phoneDetectionError
+              ? 'Phone check unavailable'
+              : phoneDetectionReady
+                ? phoneDetected ? 'Phone detected' : 'Phone check ON'
+                : 'Phone check loading'}
           </span>
 
           <span

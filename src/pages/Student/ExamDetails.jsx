@@ -5,7 +5,7 @@ import {
   Clock, Calendar, FileText, CheckCircle, 
   ArrowLeft, Shield, AlertCircle, Award 
 } from 'lucide-react';
-import api, { downloadSEBConfig } from '../../api/api';
+import api, { createSEBLaunchUrl } from '../../api/api';
 
 const ExamDetails = () => {
   const { examId } = useParams();
@@ -33,25 +33,18 @@ const ExamDetails = () => {
     }
   };
 
-  const handleLaunchSEB = () => {
-    if (!exam?.seb_file_url) {
+  const handleLaunchSEB = async () => {
+    if (!exam?.seb_available) {
       alert("SEB file is not available for this exam.");
       return;
     }
-    
-    let fileUrl = exam.seb_file_url;
-    let protocolUrl;
-    
-    if (fileUrl.startsWith('https://')) {
-      protocolUrl = fileUrl.replace('https://', 'sebs://');
-    } else if (fileUrl.startsWith('http://')) {
-      protocolUrl = fileUrl.replace('http://', 'seb://');
-    } else {
-      alert("Invalid SEB file URL.");
-      return;
+
+    try {
+      window.location.href = await createSEBLaunchUrl(exam.id);
+    } catch (launchError) {
+      console.error('Failed to launch exam with SEB:', launchError);
+      alert(launchError.response?.data?.error || 'Could not launch Safe Exam Browser.');
     }
-    
-    window.location.href = protocolUrl;
   };
 
   if (loading) {
