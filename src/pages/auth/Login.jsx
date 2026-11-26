@@ -3,13 +3,13 @@
 // Background changed to pure white
 // + 3D SCENE + 3D TILT ADDED — EVERY EXISTING LINE KEPT IN ORIGINAL ORDER
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
-import { login } from '../../store/slices/authSlice';
+import { login, loginWithSEBSession } from '../../store/slices/authSlice';
 import api from '../../api/api';
 import AnimatedBackground from '../../components/Motion/AnimatedBackground';
 import Auth3DScene from '../../components/Motion/Auth3DScene';
@@ -41,6 +41,37 @@ const Login = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { isLoading } = useSelector((state) => state.auth);
+  const [sebLoginLoading, setSebLoginLoading] = useState(false);
+  const sebLoginStarted = useRef(false);
+
+  useEffect(() => {
+    const sebReturn = new URLSearchParams(location.search).get('seb_return');
+    const returnMatch = sebReturn?.match(/^\/exams\/(\d+)\/start$/);
+    const launchId = new URLSearchParams(location.hash.slice(1)).get('seb_session');
+    if (!returnMatch || !launchId || sebLoginStarted.current) return;
+
+    sebLoginStarted.current = true;
+    setSebLoginLoading(true);
+    dispatch(loginWithSEBSession({ examId: returnMatch[1], launchId }))
+      .unwrap()
+      .then(() => {
+        toast.success('Signed in. Starting your exam...');
+        navigate(sebReturn, {
+          replace: true,
+          state: { sebSessionId: launchId },
+        });
+      })
+      .catch((error) => {
+        console.error('SEB sign-in failed:', error);
+        window.history.replaceState(
+          window.history.state,
+          '',
+          `${location.pathname}${location.search}`
+        );
+        toast.error(error || 'Could not sign in to this SEB exam. Please reopen it.');
+      })
+      .finally(() => setSebLoginLoading(false));
+  }, [dispatch, location.hash, location.pathname, location.search, navigate]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -499,6 +530,23 @@ const Login = () => {
           </div>
         </div>
       </PageTransition>
+    );
+  }
+
+  if (sebLoginLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#0f172a',
+        color: 'white',
+        fontSize: '18px',
+        fontWeight: 600,
+      }}>
+        Signing you in to Safe Exam Browser...
+      </div>
     );
   }
 

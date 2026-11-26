@@ -27,6 +27,29 @@ export const login = createAsyncThunk(
   }
 );
 
+export const loginWithSEBSession = createAsyncThunk(
+  'auth/loginWithSEBSession',
+  async ({ examId, launchId }, { rejectWithValue }) => {
+    try {
+      const response = await api.post(`/exams/${examId}/seb-login/`, {
+        launch_id: launchId,
+      });
+      const { access, refresh, user } = response.data;
+
+      localStorage.setItem('access_token', access);
+      localStorage.setItem('refresh_token', refresh);
+      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('user_role', user.role);
+
+      return { user, access, refresh };
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.error || error.response?.data?.message || 'SEB sign-in failed'
+      );
+    }
+  }
+);
+
 export const register = createAsyncThunk(
   'auth/register',
   async (userData, { rejectWithValue }) => {
@@ -193,6 +216,21 @@ const authSlice = createSlice({
       .addCase(login.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload || 'Login failed';
+      })
+      .addCase(loginWithSEBSession.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(loginWithSEBSession.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.isAuthenticated = true;
+        state.user = action.payload.user;
+        state.userRole = action.payload.user.role;
+        state.error = null;
+      })
+      .addCase(loginWithSEBSession.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload || 'SEB sign-in failed';
       })
       .addCase(register.pending, (state) => {
         state.isLoading = true;
