@@ -121,7 +121,8 @@ export const downloadSEBConfig = (examId) => {
 export const createSEBLaunchUrl = async (examId) => {
     const response = await api.post(`/exams/${examId}/seb-launch/`);
     const fileUrl = new URL(response.data.seb_file_url, API_BASE_URL);
-    fileUrl.protocol = fileUrl.protocol === 'https:' ? 'sebs:' : 'seb:';
+    const apiUrl = new URL(API_BASE_URL, window.location.origin);
+    fileUrl.protocol = apiUrl.protocol === 'https:' ? 'sebs:' : 'seb:';
     return fileUrl.href;
 };
 

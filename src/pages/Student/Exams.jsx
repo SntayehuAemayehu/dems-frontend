@@ -12,7 +12,8 @@ const Exams = () => {
   const navigate = useNavigate();
   const { exams = [], isLoading = false } = useSelector((state) => state.exams || { exams: [] });
   const [localExams, setLocalExams] = useState([]);
-  const [checkingFace, setCheckingFace] = useState(false);
+  const [isLaunching, setIsLaunching] = useState(false);
+  const [faceEnrolled, setFaceEnrolled] = useState(null);
   const [loadError, setLoadError] = useState('');
 
   // ✅ NEW: View Level (courses | exams)
@@ -21,6 +22,12 @@ const Exams = () => {
 
   useEffect(() => {
     fetchAllExams();
+    api.get('/auth/face-status/')
+      .then(({ data }) => setFaceEnrolled(data?.face_enrolled === true))
+      .catch((error) => {
+        console.error('Could not check face enrollment:', error);
+        setFaceEnrolled(null);
+      });
   }, []);
 
   const fetchAllExams = async () => {
@@ -49,14 +56,10 @@ const Exams = () => {
   // ✅ SEB: Launch SEB directly via protocol
   // ============================================================
   const handleLaunchSEB = async (exam) => {
-    setCheckingFace(true);
+    setIsLaunching(true);
 
     try {
-      // Check face enrollment first
-      const res = await api.get('/auth/face-status/');
-      const isEnrolled = res.data?.face_enrolled === true;
-
-      if (!isEnrolled) {
+      if (faceEnrolled === false) {
         toast.error('Please enroll your face before taking the exam');
         localStorage.setItem('pending_exam_id', exam.id);
         navigate('/enroll-face');
@@ -75,7 +78,7 @@ const Exams = () => {
       console.error('Launch failed:', err);
       toast.error(err.response?.data?.error || err.message || 'Could not launch SEB. Please try again.');
     } finally {
-      setCheckingFace(false);
+      setIsLaunching(false);
     }
   };
 
@@ -241,25 +244,25 @@ const Exams = () => {
                     ) : (
                       <button
                         onClick={(e) => { e.stopPropagation(); handleLaunchSEB(exam); }}
-                        disabled={checkingFace}
+                        disabled={isLaunching}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
                           padding: '8px 16px',
-                          background: checkingFace ? '#94a3b8' : '#2563eb',
+                          background: isLaunching ? '#94a3b8' : '#2563eb',
                           color: 'white',
                           border: 'none',
                           borderRadius: '8px',
                           fontSize: '14px',
                           fontWeight: 500,
-                          cursor: checkingFace ? 'not-allowed' : 'pointer',
+                          cursor: isLaunching ? 'not-allowed' : 'pointer',
                           transition: 'all 0.3s ease'
                         }}
-                        onMouseEnter={(e) => { if (!checkingFace) e.currentTarget.style.background = '#1d4ed8'; }}
-                        onMouseLeave={(e) => { if (!checkingFace) e.currentTarget.style.background = '#2563eb'; }}
+                        onMouseEnter={(e) => { if (!isLaunching) e.currentTarget.style.background = '#1d4ed8'; }}
+                        onMouseLeave={(e) => { if (!isLaunching) e.currentTarget.style.background = '#2563eb'; }}
                       >
-                        {checkingFace ? (
-                          <><Loader size={16} className="spin" style={{ marginRight: '6px' }} /> Checking...</>
+                        {isLaunching ? (
+                          <><Loader size={16} className="spin" style={{ marginRight: '6px' }} /> Preparing SEB...</>
                         ) : (
                           <><Shield size={16} style={{ marginRight: '6px' }} /> Open with SEB</>
                         )}

@@ -12,8 +12,8 @@ export class AudioMonitor {
     this.LOUDNESS_LOUD_MIN = 100;    // shouting/screaming
     this.SPEECH_HZ_MIN = 85;         // human voice low end
     this.SPEECH_HZ_MAX = 300;        // human voice high end
-    this.SUSTAINED_FRAMES = 15;      // ~7.5s of continuous speech
-    this.ALERT_COOLDOWN_MS = 4000;   // min gap between alerts
+    this.SUSTAINED_FRAMES = 4;       // ~2s of sustained voice-like sound
+    this.ALERT_COOLDOWN_MS = 5000;   // min gap between alerts
     this.SAMPLE_INTERVAL_MS = 500;
     this.GRACE_PERIOD_MS = 10000;    // ignore first 10s (mic setup)
 
@@ -84,16 +84,27 @@ export class AudioMonitor {
     try {
       const buffer = new Uint8Array(this.analyser.frequencyBinCount);
       this.analyser.getByteFrequencyData(buffer);
+      const waveform = new Uint8Array(this.analyser.fftSize);
+      this.analyser.getByteTimeDomainData(waveform);
 
       // ---- 1. Loudness (avg of all bins) ----
       let sum = 0;
       for (let i = 0; i < buffer.length; i++) sum += buffer[i];
       const loudness = sum / buffer.length;
 
-      // ---- 2. Dominant frequency (peak bin) ----
+      // ---- 2. Voice-band energy and dominant frequency ----
       let maxBin = 0;
       let maxVal = 0;
+      let totalEnergy = 0;
+      let voiceBandEnergy = 0;
+      let voiceBandBins = 0;
       for (let i = 1; i < buffer.length; i++) {
+        const frequency = (i * this.audioCtx.sampleRate) / this.analyser.fftSize;
+        totalEnergy += buffer[i];
+        if (frequency >= 85 && frequency <= 3400) {
+          voiceBandEnergy += buffer[i];
+          voiceBandBins += 1;
+        }
         if (buffer[i] > maxVal) {
           maxVal = buffer[i];
           maxBin = i;
@@ -101,6 +112,14 @@ export class AudioMonitor {
       }
       const sampleRate = this.audioCtx.sampleRate;
       const hz = (maxBin * sampleRate) / this.analyser.fftSize;
+      const voiceBandAverage = voiceBandBins ? voiceBandEnergy / voiceBandBins : 0;
+      const voiceBandRatio = totalEnergy ? voiceBandEnergy / totalEnergy : 0;
+      let waveformEnergy = 0;
+      for (let i = 0; i < waveform.length; i++) {
+        const sample = (waveform[i] - 128) / 128;
+        waveformEnergy += sample * sample;
+      }
+      const rms = Math.sqrt(waveformEnergy / waveform.length);
 
       // Expose current values
       this.currentLoudness = loudness;
@@ -111,11 +130,11 @@ export class AudioMonitor {
         loudness: Math.round(loudness),
         hz: Math.round(hz),
         peak: maxVal,
-        isSpeech: this._isSpeech(loudness, hz, maxVal),
+        isSpeech: this._isSpeech(voiceBandAverage, voiceBandRatio, rms),
       });
 
       // ---- 3. Detect speech / loud noise ----
-      const isSpeech = this._isSpeech(loudness, hz, maxVal);
+      const isSpeech = this._isSpeech(voiceBandAverage, voiceBandRatio, rms);
       const isLoud = loudness > this.LOUDNESS_LOUD_MIN;
 
       if (isSpeech || isLoud) {
@@ -169,11 +188,8 @@ export class AudioMonitor {
     this._loopTimer = setTimeout(this._loop, this.SAMPLE_INTERVAL_MS);
   };
 
-  _isSpeech(loudness, hz, peak) {
-    // Human voice: sustained energy in 85–300 Hz band
-    if (loudness < this.LOUDNESS_SPEECH_MIN) return false;
-    if (peak < 60) return false; // too weak to be voice
-    return hz >= this.SPEECH_HZ_MIN && hz <= this.SPEECH_HZ_MAX;
+  _isSpeech(voiceBandAverage, voiceBandRatio, rms) {
+    return voiceBandAverage >= 16 && voiceBandRatio >= 0.5 && rms >= 0.012;
   }
 
   /**

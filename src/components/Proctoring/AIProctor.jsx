@@ -14,6 +14,10 @@ const AIProctor = ({
   onAutoSubmit,
   onStatusUpdate,
   onControlMessage,
+  handRaised = false,
+  microphoneStream,
+  audioAlert,
+  onTeacherListeningChange,
 }) => {
   const { user } = useSelector((state) => state.auth || {});
 
@@ -25,18 +29,24 @@ const AIProctor = ({
   const phoneModelRef = useRef(null);
   const mediapipeLoopRef = useRef(null);
   const imageIntervalRef = useRef(null);
+  const phoneDetectionIntervalRef = useRef(null);
   const phoneDetectionInProgressRef = useRef(false);
-  const lastPhoneAlertAtRef = useRef(0);
+  const phoneWasDetectedRef = useRef(false);
   const lastVideoTimeRef = useRef(-1);
   const isMounted = useRef(true);
   const hasDetectedSingleFace = useRef(false);
   const faceLostFramesRef = useRef(0);
-  const lastMultipleFaceTime = useRef(0);
+  const faceLostEventSentRef = useRef(false);
+  const multipleFacesWereDetectedRef = useRef(false);
+  const handRaisedRef = useRef(handRaised);
+  handRaisedRef.current = handRaised;
+  const lastAudioAlertRef = useRef(null);
 
   // WebRTC refs
   const wsRef = useRef(null);
   const pcRef = useRef(null);
   const pendingIceCandidatesRef = useRef([]);
+  const pendingVoiceIceCandidatesRef = useRef([]);
   const createPeerConnectionRef = useRef(null);
   const createOfferRef = useRef(null);
   const liveStreamStartTimeoutRef = useRef(null);
@@ -47,6 +57,7 @@ const AIProctor = ({
   const onViolationRef = useRef(onViolation);
   onViolationRef.current = onViolation;
   const sendImageRef = useRef(null);
+  const startStudentAudioOfferRef = useRef(null);
 
   // ==================== STATE ====================
   const [isInitializing, setIsInitializing] = useState(true);
@@ -64,7 +75,7 @@ const AIProctor = ({
 
   // ==================== SEND IMAGE ====================
   const sendImage = useCallback(
-    async (isWarning = false, reason = '') => {
+    async (isWarning = false, reason = '', eventMetadata = {}) => {
       if (!attemptId || !videoRef.current) return;
 
       try {
@@ -79,20 +90,93 @@ const AIProctor = ({
           exam_id: attemptId,
           image_data: imageData,
           metadata: {
-            face_detected: faceDetected,
-            multiple_faces: multipleFaces,
+            face_detected: eventMetadata.face_detected ?? true,
             face_count: faceCount,
             is_warning: isWarning,
             warning_reason: reason,
+            multiple_faces: false,
+            mobile_detected: false,
+            ...eventMetadata,
           },
         });
       } catch (err) {
-        console.debug('Proctor image send failed:', err.message);
+        if (isWarning) {
+          console.error('Proctor event capture failed:', err);
+          toast.error('The proctoring event could not be saved. Please tell your teacher.');
+        } else {
+          console.debug('Proctor image send failed:', err.message);
+        }
       }
     },
-    [attemptId, faceDetected, multipleFaces, faceCount]
+    [attemptId, faceDetected, faceCount]
   );
   sendImageRef.current = sendImage;
+
+  const reportViolation = useCallback((type, message, metadata = {}) => {
+    onViolationRef.current?.(type, message);
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'proctor_alert',
+        event_type: type,
+        message,
+      }));
+    }
+    if (metadata.capture) {
+      sendImageRef.current?.(true, type, metadata.capture);
+    }
+  }, []);
+
+  const startStudentAudioOffer = useCallback(async (teacherUserId) => {
+    const audioTracks = microphoneStream?.getAudioTracks().filter((track) => track.readyState === 'live');
+    if (!audioTracks?.length || wsRef.current?.readyState !== WebSocket.OPEN) {
+      wsRef.current?.send(JSON.stringify({
+        type: 'audio_listen_unavailable',
+        target_user_id: teacherUserId,
+        sender_id: user?.id,
+      }));
+      onTeacherListeningChange?.(false);
+      return;
+    }
+
+    try {
+      voicePcRef.current?.close();
+      const peer = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ],
+      });
+      voicePcRef.current = peer;
+      pendingVoiceIceCandidatesRef.current = [];
+      audioTracks.forEach((track) => peer.addTrack(track, microphoneStream));
+      peer.onicecandidate = (event) => {
+        if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
+            type: 'voice_ice_candidate',
+            candidate: event.candidate,
+            target_user_id: teacherUserId,
+            sender_id: user?.id,
+          }));
+        }
+      };
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      wsRef.current.send(JSON.stringify({
+        type: 'voice_offer',
+        offer,
+        target_user_id: teacherUserId,
+        sender_id: user?.id,
+      }));
+      onTeacherListeningChange?.(true);
+    } catch (error) {
+      console.error('Could not start teacher-requested student audio:', error);
+      voicePcRef.current?.close();
+      voicePcRef.current = null;
+      onTeacherListeningChange?.(false);
+      toast.error('Could not start live audio for your teacher.');
+    }
+  }, [microphoneStream, onTeacherListeningChange, user?.id]);
+  startStudentAudioOfferRef.current = startStudentAudioOffer;
 
   // ==================== WEBRTC - CONNECT TO TEACHER ====================
   const startLiveStream = useCallback(async () => {
@@ -110,6 +194,11 @@ const AIProctor = ({
         console.log('📡 Exam proctor WebSocket connected');
         setLiveConnected(true);
         createPeerConnectionRef.current?.();
+        wsRef.current.send(JSON.stringify({
+          type: 'hand_state',
+          raised: handRaisedRef.current,
+          sender_id: user?.id,
+        }));
       };
 
       wsRef.current.onmessage = async (event) => {
@@ -118,6 +207,7 @@ const AIProctor = ({
 
           if (data.type === 'voice_offer' && data.offer && data.sender_id) {
             voicePcRef.current?.close();
+            pendingVoiceIceCandidatesRef.current = [];
             const peer = new RTCPeerConnection({
               iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -154,11 +244,38 @@ const AIProctor = ({
           }
 
           if (data.type === 'voice_ice_candidate' && data.candidate && voicePcRef.current) {
-            await voicePcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+            if (voicePcRef.current.remoteDescription) {
+              await voicePcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } else {
+              pendingVoiceIceCandidatesRef.current.push(data.candidate);
+            }
           }
 
-          if (data.type === 'exam_update' || data.type === 'add_time') {
+          if (data.type === 'voice_answer' && data.answer && voicePcRef.current) {
+            await voicePcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+            const pendingCandidates = pendingVoiceIceCandidatesRef.current;
+            pendingVoiceIceCandidatesRef.current = [];
+            await Promise.all(pendingCandidates.map((candidate) =>
+              voicePcRef.current.addIceCandidate(new RTCIceCandidate(candidate))
+            ));
+          }
+
+          if (data.type === 'exam_update' || data.type === 'add_time' ||
+              data.type === 'warning' || data.type === 'force_submit' ||
+              data.type === 'pause_exam' || data.type === 'resume_exam' ||
+              data.type === 'audio_listen_stop') {
             onControlMessageRef.current?.(data);
+          }
+
+          if (data.type === 'audio_listen_request' && data.sender_id) {
+            onControlMessageRef.current?.(data);
+            await startStudentAudioOfferRef.current?.(data.sender_id);
+          }
+
+          if (data.type === 'audio_listen_stop') {
+            voicePcRef.current?.close();
+            voicePcRef.current = null;
+            onTeacherListeningChange?.(false);
           }
 
           if (data.type === 'stream_request') {
@@ -168,7 +285,20 @@ const AIProctor = ({
           if (data.type === 'user_join' && ['TEACHER', 'ADMIN'].includes(data.role)) {
             console.log('Teacher joined, re-sending offer...');
             createPeerConnectionRef.current?.();
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({
+                type: 'hand_state',
+                raised: handRaisedRef.current,
+                sender_id: user?.id,
+              }));
+            }
           };
+
+          if (data.type === 'user_leave' && ['TEACHER', 'ADMIN'].includes(data.role)) {
+            voicePcRef.current?.close();
+            voicePcRef.current = null;
+            onTeacherListeningChange?.(false);
+          }
 
           if (data.type === 'answer' && pcRef.current) {
             await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
@@ -203,7 +333,29 @@ const AIProctor = ({
     } catch (err) {
       console.error('Failed to start live stream:', err);
     }
-  }, [examId]);
+  }, [examId, user?.id, onTeacherListeningChange]);
+
+  useEffect(() => {
+    if (liveConnected && wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'hand_state',
+        raised: handRaised,
+        sender_id: user?.id,
+      }));
+    }
+  }, [handRaised, liveConnected, user?.id]);
+
+  useEffect(() => {
+    const alertId = audioAlert?.timestamp;
+    if (!alertId || lastAudioAlertRef.current === alertId ||
+        wsRef.current?.readyState !== WebSocket.OPEN) return;
+    lastAudioAlertRef.current = alertId;
+    wsRef.current.send(JSON.stringify({
+      type: 'proctor_alert',
+      event_type: audioAlert.type || 'SPEECH_DETECTED',
+      message: audioAlert.message,
+    }));
+  }, [audioAlert, liveConnected]);
 
   const createPeerConnection = useCallback(() => {
     try {
@@ -313,12 +465,13 @@ const AIProctor = ({
         setMultipleFaces(true);
         setFaceDetected(true);
         faceLostFramesRef.current = 0;
+        faceLostEventSentRef.current = false;
 
-        const now = Date.now();
-        if (now - lastMultipleFaceTime.current > 2500) {
-          lastMultipleFaceTime.current = now;
-          onViolation?.('MULTIPLE_FACES', `Multiple faces detected (${count})`);
-          sendImage(true, 'MULTIPLE_FACES');
+        if (!multipleFacesWereDetectedRef.current) {
+          multipleFacesWereDetectedRef.current = true;
+          reportViolation('MULTIPLE_FACES', `Multiple faces detected (${count})`, {
+            capture: { multiple_faces: true, face_count: count },
+          });
         }
         return;
       }
@@ -326,22 +479,27 @@ const AIProctor = ({
       if (count === 0) {
         setFaceDetected(false);
         setMultipleFaces(false);
+        multipleFacesWereDetectedRef.current = false;
         faceLostFramesRef.current += 1;
 
-        if (hasDetectedSingleFace.current && faceLostFramesRef.current > 45) {
+        if (hasDetectedSingleFace.current && !faceLostEventSentRef.current && faceLostFramesRef.current > 45) {
           faceLostFramesRef.current = 0;
-          onViolation?.('FACE_LOST', 'No face detected');
-          sendImage(true, 'FACE_LOST');
+          faceLostEventSentRef.current = true;
+          reportViolation('FACE_LOST', 'No face detected', {
+            capture: { face_detected: false },
+          });
         }
         return;
       }
 
       setFaceDetected(true);
       setMultipleFaces(false);
+      multipleFacesWereDetectedRef.current = false;
+      faceLostEventSentRef.current = false;
       faceLostFramesRef.current = 0;
       hasDetectedSingleFace.current = true;
     },
-    [onViolation, sendImage]
+    [reportViolation]
   );
 
   // ==================== MEDIAPIPE LOOP ====================
@@ -485,11 +643,13 @@ const AIProctor = ({
             );
             setPhoneDetected(foundPhone);
 
-            const now = Date.now();
-            if (foundPhone && now - lastPhoneAlertAtRef.current >= 15000) {
-              lastPhoneAlertAtRef.current = now;
-              onViolationRef.current?.('PHONE_DETECTED', 'Mobile phone detected');
-              await sendImageRef.current?.(true, 'PHONE_DETECTED');
+            if (foundPhone && !phoneWasDetectedRef.current) {
+              phoneWasDetectedRef.current = true;
+              reportViolation('PHONE_DETECTED', 'Mobile phone detected', {
+                capture: { mobile_detected: true },
+              });
+            } else if (!foundPhone) {
+              phoneWasDetectedRef.current = false;
             }
           } catch (detectionError) {
             console.error('Mobile phone detection failed:', detectionError);
@@ -498,10 +658,10 @@ const AIProctor = ({
           }
         };
 
-        imageIntervalRef.current = setInterval(() => {
-          sendImage(false);
-          if (phoneModelReady) detectPhone();
-        }, 3000);
+        imageIntervalRef.current = setInterval(() => sendImage(false), 3000);
+        if (phoneModelReady) {
+          phoneDetectionIntervalRef.current = setInterval(detectPhone, 1000);
+        }
 
         setIsInitializing(false);
         onStatusUpdate?.({ status: phoneModelReady ? 'running' : 'degraded' });
@@ -518,6 +678,7 @@ const AIProctor = ({
       isMounted.current = false;
       if (mediapipeLoopRef.current) cancelAnimationFrame(mediapipeLoopRef.current);
       if (imageIntervalRef.current) clearInterval(imageIntervalRef.current);
+      if (phoneDetectionIntervalRef.current) clearInterval(phoneDetectionIntervalRef.current);
       if (liveStreamStartTimeoutRef.current) clearTimeout(liveStreamStartTimeoutRef.current);
       if (landmarkerRef.current) {
         try {

@@ -26,8 +26,12 @@ const ExamDetails = () => {
       const response = await api.get(`/exams/${examId}/`);
       setExam(response.data);
     } catch (err) {
-      console.error('Failed to fetch exam details:', err);
-      setError('Could not load exam details. It may have been deleted.');
+      if (err.response?.status === 404) {
+        setError('This exam is no longer available on the current server. Return to the exam list and refresh it.');
+      } else {
+        console.error('Failed to fetch exam details:', err);
+        setError('Could not load exam details. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

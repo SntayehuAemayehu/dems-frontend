@@ -11,6 +11,7 @@ import {
   Loader,
   RefreshCw,
   CheckCircle,
+  Hand,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -44,12 +45,24 @@ const TakeExam = () => {
   const timerRef = useRef(null);
 
   // Proctoring counters
-  const [multipleFaceCount, setMultipleFaceCount] = useState(0);
+  const [violationCount, setViolationCount] = useState(0);
   const [isBlurred, setIsBlurred] = useState(false);
+  const [blurReason, setBlurReason] = useState('A phone or additional face was detected.');
+  const [isPaused, setIsPaused] = useState(false);
+  const [isHandRaised, setIsHandRaised] = useState(false);
+  const [teacherListening, setTeacherListening] = useState(false);
+  const [microphoneStream, setMicrophoneStream] = useState(null);
+  const [audioAlert, setAudioAlert] = useState(null);
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const blurTimeoutRef = useRef(null);
   const submissionInProgressRef = useRef(false);
+  const violationCountRef = useRef(0);
+  const attemptIdRef = useRef(attemptId);
+  const answersRef = useRef(answers);
+  const handleSubmitRef = useRef(null);
+  attemptIdRef.current = attemptId;
+  answersRef.current = answers;
 
   // Refs
   const videoRef = useRef(null);
@@ -98,15 +111,25 @@ const TakeExam = () => {
     if (pageState !== 'verified') return undefined;
 
     const monitor = new AudioMonitor((alert) => {
-      toast.warning(alert.message);
+      const studentAlert = {
+        ...alert,
+        message: 'Please remain silent and continue your exam.',
+      };
+      setAudioAlert(studentAlert);
+      toast.warning(studentAlert.message);
     });
-    monitor.start().catch((error) => {
+    let active = true;
+    monitor.start().then(() => {
+      if (active) setMicrophoneStream(monitor.stream);
+    }).catch((error) => {
       console.error('Sound detection could not start:', error);
       toast.error('Sound detection could not start. Allow microphone access to enable it.');
     });
 
     return () => {
+      active = false;
       monitor.stop();
+      setMicrophoneStream(null);
     };
   }, [pageState]);
 
@@ -266,38 +289,29 @@ const TakeExam = () => {
   // ==================== PROCTORING CALLBACKS ====================
   const handleViolation = useCallback(
     (type, message) => {
-      if (type === 'MULTIPLE_FACES') {
-        setMultipleFaceCount((prev) => {
-          const newCount = prev + 1;
+      if (type === 'MULTIPLE_FACES' || type === 'PHONE_DETECTED') {
+        const newCount = violationCountRef.current + 1;
+        violationCountRef.current = newCount;
+        setViolationCount(newCount);
+        setBlurReason(type === 'PHONE_DETECTED'
+          ? 'A phone was detected. Remove it from view.'
+          : 'More than one face was detected. Continue alone.');
+        setIsBlurred(true);
+        if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+        blurTimeoutRef.current = setTimeout(() => setIsBlurred(false), 3000);
+        toast.error(`${message} (${newCount}/3)`);
 
-          // Blur for 5 seconds
-          setIsBlurred(true);
-          if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
-          blurTimeoutRef.current = setTimeout(() => {
-            setIsBlurred(false);
-          }, 5000);
-
-          toast.error(`⚠️ Multiple faces detected (${newCount}/5)`);
-
-          // Auto-submit after 5 times
-          if (newCount >= 5) {
-            toast.error('Too many multiple-face violations. Submitting exam...');
-            handleSubmit('Multiple faces detected 5 times');
-          }
-
-          return newCount;
-        });
+        if (newCount >= 3) {
+          toast.error('Three proctoring detections. Submitting the exam.');
+          handleSubmitRef.current?.(`${type} detected 3 times`);
+        }
       }
 
       if (type === 'FACE_LOST') {
         toast.warning('No face detected. Please stay in front of the camera.');
       }
-
-      if (type === 'PHONE_DETECTED') {
-        toast.warning('A mobile phone was detected. Please remove it from view.');
-      }
     },
-    [attemptId]
+    []
   );
 
   // ==================== TIMER ====================
@@ -335,16 +349,37 @@ const TakeExam = () => {
       setTimeLeft((seconds) => seconds + Number(message.minutes) * 60);
       toast.success(`${message.minutes} minute(s) added to your exam`);
     }
+    if (message.type === 'warning') {
+      toast.error(message.message || 'Your teacher sent an exam warning.');
+    }
+    if (message.type === 'pause_exam') {
+      setIsPaused(true);
+      toast.error(message.message || 'Your exam has been paused by the teacher.');
+    }
+    if (message.type === 'resume_exam') {
+      setIsPaused(false);
+      toast.success(message.message || 'Your exam has been resumed.');
+    }
+    if (message.type === 'force_submit') {
+      handleSubmitRef.current?.(message.message || 'Your teacher ended the exam');
+    }
+    if (message.type === 'audio_listen_request') {
+      setTeacherListening(true);
+    }
+    if (message.type === 'audio_listen_stop') {
+      setTeacherListening(false);
+    }
   }, []);
 
   // ==================== SUBMIT ====================
   const handleSubmit = async (reason = 'User submitted') => {
-    if (!attemptId || submissionInProgressRef.current) return;
+    const currentAttemptId = attemptIdRef.current;
+    if (!currentAttemptId || submissionInProgressRef.current) return;
 
     submissionInProgressRef.current = true;
     setIsSubmitting(true);
     try {
-      await api.post(`/exams/attempt/${attemptId}/submit/`, { answers });
+      await api.post(`/exams/attempt/${currentAttemptId}/submit/`, { answers: answersRef.current });
       toast.success(`Exam submitted (${reason})`);
       stopCamera();
       navigate('/results');
@@ -355,6 +390,7 @@ const TakeExam = () => {
       setIsSubmitting(false);
     }
   };
+  handleSubmitRef.current = handleSubmit;
 
   // ==================== RENDER ====================
 
@@ -565,7 +601,7 @@ const TakeExam = () => {
           overflowY: 'auto',
           filter: isBlurred ? 'blur(12px)' : 'none',
           transition: 'filter 0.3s',
-          pointerEvents: isBlurred ? 'none' : 'auto',
+          pointerEvents: isBlurred || isPaused ? 'none' : 'auto',
         }}
       >
         {/* Header */}
@@ -588,6 +624,24 @@ const TakeExam = () => {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <button
+              type="button"
+              onClick={() => setIsHandRaised((raised) => !raised)}
+              aria-pressed={isHandRaised}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 10px',
+                border: 0,
+                borderRadius: 8,
+                background: isHandRaised ? '#f59e0b' : 'rgba(255,255,255,0.12)',
+                color: 'white',
+                cursor: 'pointer',
+              }}
+            >
+              <Hand size={17} /> {isHandRaised ? 'Lower hand' : 'Raise hand'}
+            </button>
             <button
               type="button"
               onClick={toggleDarkMode}
@@ -773,20 +827,33 @@ const TakeExam = () => {
         zIndex: 40,
         width: 240,
       }}>
-        {multipleFaceCount > 0 && (
+        {violationCount > 0 && (
           <div
             style={{
               marginBottom: 8,
               padding: 8,
-              background: multipleFaceCount >= 4 ? '#7f1d1d' : '#451a03',
+              background: violationCount >= 2 ? '#7f1d1d' : '#451a03',
               borderRadius: 8,
               color: 'white',
               textAlign: 'center',
               fontSize: 12,
             }}
           >
-            Multiple faces: <strong>{multipleFaceCount}/5</strong>
-            {multipleFaceCount >= 4 && <div>Next one will auto-submit</div>}
+            Proctoring detections: <strong>{violationCount}/3</strong>
+            {violationCount >= 2 && <div>Next phone/extra-face detection submits the exam.</div>}
+          </div>
+        )}
+        {teacherListening && (
+          <div style={{
+            marginBottom: 8,
+            padding: 8,
+            background: '#7f1d1d',
+            borderRadius: 8,
+            color: 'white',
+            textAlign: 'center',
+            fontSize: 12,
+          }}>
+            Teacher is listening live. Audio is not recorded.
           </div>
         )}
         <AIProctor
@@ -796,7 +863,14 @@ const TakeExam = () => {
           onViolation={handleViolation}
           onAutoSubmit={(data) => handleSubmit(data.reason || 'Auto submitted by proctor')}
           onControlMessage={handleLiveExamMessage}
+          handRaised={isHandRaised}
+          microphoneStream={microphoneStream}
+          audioAlert={audioAlert}
+          onTeacherListeningChange={setTeacherListening}
         />
+        <p style={{ margin: '6px 2px 0', color: isDarkMode ? '#cbd5e1' : '#475569', fontSize: 10 }}>
+          Microphone audio is analyzed for speech and is not recorded.
+        </p>
       </div>
 
       {showSubmitConfirmation && (
@@ -889,10 +963,30 @@ const TakeExam = () => {
           }}
         >
           <AlertCircle size={64} color="#f87171" />
-          <h2 style={{ fontSize: 28, marginTop: 16 }}>Multiple Faces Detected</h2>
+          <h2 style={{ fontSize: 28, marginTop: 16 }}>Proctoring Warning</h2>
           <p style={{ fontSize: 16, opacity: 0.85 }}>
-            Exam is temporarily blurred. Remove the second person.
+            {blurReason} The exam will return in 3 seconds.
           </p>
+        </div>
+      )}
+      {isPaused && (
+        <div
+          role="alert"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15,23,42,0.92)',
+            zIndex: 60,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+          }}
+        >
+          <AlertCircle size={64} color="#f87171" />
+          <h2 style={{ fontSize: 28, marginTop: 16 }}>Exam paused by your teacher</h2>
+          <p>Wait for your teacher to resume the exam.</p>
         </div>
       )}
     </div>
