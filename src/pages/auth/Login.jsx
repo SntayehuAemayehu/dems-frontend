@@ -3,13 +3,13 @@
 // Background changed to pure white
 // + 3D SCENE + 3D TILT ADDED — EVERY EXISTING LINE KEPT IN ORIGINAL ORDER
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
-import { login, setCredentials } from '../../store/slices/authSlice';
+import { login } from '../../store/slices/authSlice';
 import api from '../../api/api';
 import AnimatedBackground from '../../components/Motion/AnimatedBackground';
 import Auth3DScene from '../../components/Motion/Auth3DScene';
@@ -33,8 +33,6 @@ const Login = () => {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [shake, setShake] = useState(false);
-  const [sebLoginPending, setSebLoginPending] = useState(false);
-  const sebLoginStarted = useRef(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -43,40 +41,6 @@ const Login = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { isLoading } = useSelector((state) => state.auth);
-
-  useEffect(() => {
-    const launchId = new URLSearchParams(location.hash.slice(1)).get('seb_ticket');
-    if (!launchId || sebLoginStarted.current) return;
-
-    sebLoginStarted.current = true;
-    setSebLoginPending(true);
-    window.history.replaceState(null, '', `${location.pathname}${location.search}`);
-
-    const sebReturn = new URLSearchParams(location.search).get('seb_return');
-    const returnToSebExam = /^\/exams\/\d+\/start$/.test(sebReturn || '');
-
-    api.post('/exams/seb-login/', { launch_id: launchId })
-      .then(({ data }) => {
-        if (data.user?.role !== 'STUDENT' || !data.access || !data.refresh) {
-          throw new Error('Could not verify the student SEB session.');
-        }
-
-        localStorage.setItem('access_token', data.access);
-        localStorage.setItem('refresh_token', data.refresh);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        localStorage.setItem('user_role', data.user.role);
-        dispatch(setCredentials(data.user));
-        navigate(returnToSebExam ? sebReturn : '/dashboard', {
-          replace: true,
-          state: returnToSebExam ? { sebSessionId: launchId } : undefined,
-        });
-      })
-      .catch((error) => {
-        console.error('Safe Exam Browser sign-in failed:', error);
-        toast.error(error.response?.data?.error || error.message || 'Could not sign in to Safe Exam Browser.');
-      })
-      .finally(() => setSebLoginPending(false));
-  }, [dispatch, location.hash, location.pathname, location.search, navigate]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -116,9 +80,13 @@ const Login = () => {
         || (requestedPath?.startsWith('/news/') && !requestedPath.startsWith('//'));
       const sebReturn = new URLSearchParams(location.search).get('seb_return');
       const returnToSebExam = role === 'STUDENT' && /^\/exams\/\d+\/start$/.test(sebReturn || '');
+      const sebSessionId = new URLSearchParams(location.hash.slice(1)).get('seb_session');
       navigate(
         returnToSebExam ? sebReturn : returnToNews ? requestedPath : redirectMap[role] || '/dashboard',
-        { replace: true }
+        {
+          replace: true,
+          state: returnToSebExam && sebSessionId ? { sebSessionId } : undefined,
+        }
       );
 
     } catch (error) {
@@ -202,14 +170,6 @@ const Login = () => {
   };
 
   // ============= FORGOT PASSWORD SCREEN =============
-  if (sebLoginPending) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#334155' }}>
-        Completing secure exam sign-in...
-      </div>
-    );
-  }
-
   if (showForgotPassword) {
     return (
       <PageTransition>
