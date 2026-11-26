@@ -102,33 +102,36 @@ export const getMediaUrl = (mediaPath) => {
 };
 
 // ============================================================
-// SAFE EXAM BROWSER — download .seb file
-export const downloadSEBConfig = (examId) => {
-    const apiUrl = new URL(API_BASE_URL, window.location.origin);
-    const downloadUrl = `${apiUrl.origin}/api/exams/${examId}/seb-config/`;
-    
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    // ✅ REMOVED the 'download' attribute. The backend's 'Content-Disposition: attachment' header will force the download.
-    link.target = '_blank'; 
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    return `exam_${examId}.seb`;
-};
-
+// SAFE EXAM BROWSER — launch through the registered OS protocol
 export const createSEBLaunchUrl = async (examId) => {
     const response = await api.post(`/exams/${examId}/seb-launch/`);
     const fileUrl = new URL(response.data.seb_file_url, API_BASE_URL);
     const apiUrl = new URL(API_BASE_URL, window.location.origin);
     fileUrl.protocol = apiUrl.protocol === 'https:' ? 'sebs:' : 'seb:';
-    return fileUrl.href;
+    return {
+        url: fileUrl.href,
+        launchId: response.data.launch_id,
+    };
 };
 
 export const launchExamInSEB = async (examId) => {
-    const sebUrl = await createSEBLaunchUrl(examId);
-    window.location.href = sebUrl;
+    const returnTab = window.open(`${window.location.origin}/seb-return`, '_blank');
+    if (!returnTab) {
+        throw new Error('Allow pop-ups for this site so your results can open after the exam.');
+    }
+    returnTab.opener = null;
+
+    try {
+        const { url: sebUrl, launchId } = await createSEBLaunchUrl(examId);
+        const returnUrl = new URL('/seb-return', window.location.origin);
+        returnUrl.searchParams.set('examId', examId);
+        returnUrl.searchParams.set('launchId', launchId);
+        returnTab.location.replace(sebUrl);
+        window.location.replace(returnUrl.href);
+    } catch (error) {
+        returnTab.close();
+        throw error;
+    }
 };
 // ============================================================
 // REQUEST INTERCEPTOR - Add token to requests

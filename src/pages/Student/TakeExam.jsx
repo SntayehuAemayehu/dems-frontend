@@ -380,9 +380,14 @@ const TakeExam = () => {
     setIsSubmitting(true);
     try {
       await api.post(`/exams/attempt/${currentAttemptId}/submit/`, { answers: answersRef.current });
-      toast.success(`Exam submitted (${reason})`);
       stopCamera();
-      navigate('/results');
+      if (/SEB/i.test(navigator.userAgent)) {
+        toast.success(`Exam submitted (${reason}). Safe Exam Browser is closing.`);
+        window.location.href = 'seb://quit';
+      } else {
+        toast.success(`Exam submitted (${reason})`);
+        navigate('/results');
+      }
     } catch (err) {
       console.error(err);
       toast.error('Failed to submit exam');

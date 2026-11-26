@@ -32,6 +32,7 @@ import Exams from './pages/Student/Exams';
 import TakeExam from './pages/Student/TakeExam';          // ✅ FIXED PATH
 import ExamResults from './pages/Student/ExamResults';
 import ExamDetails from './pages/Student/ExamDetails'; 
+import SEBReturn from './pages/Student/SEBReturn';
 import Payments from './pages/Student/Payments';
 import Profile from './pages/Student/Profile';
 import LiveClasses from './pages/Student/LiveClasses';
@@ -198,6 +199,7 @@ const AnimatedRoutes = () => {
           />
 
           {/* Results & Others */}
+          <Route path="/seb-return" element={<ProtectedRoute roles={['STUDENT']}><SEBReturn /></ProtectedRoute>} />
           <Route path="/results" element={<ProtectedRoute roles={['STUDENT']}><ExamResults /></ProtectedRoute>} />
           <Route path="/payments" element={<ProtectedRoute roles={['STUDENT']}><Payments /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
