@@ -420,8 +420,26 @@ const AIProctor = ({
         liveStreamStartTimeoutRef.current = setTimeout(() => {
           startLiveStream();
         }, 1500);
-        const phoneModelPromise = import('@tensorflow-models/coco-ssd')
-          .then(({ load }) => load())
+        const phoneModelPromise = Promise.all([
+          import('@tensorflow/tfjs'),
+          import('@tensorflow/tfjs-backend-webgl'),
+          import('@tensorflow/tfjs-backend-cpu'),
+          import('@tensorflow-models/coco-ssd'),
+        ])
+          .then(async ([tf, , , { load }]) => {
+            try {
+              if (!(await tf.setBackend('webgl'))) {
+                throw new Error('WebGL backend could not be initialized.');
+              }
+            } catch (webglError) {
+              console.warn('TensorFlow WebGL backend unavailable; using CPU:', webglError);
+              if (!(await tf.setBackend('cpu'))) {
+                throw new Error('TensorFlow CPU backend could not be initialized.');
+              }
+            }
+            await tf.ready();
+            return load({ base: 'lite_mobilenet_v2' });
+          })
           .then((model) => {
             if (isMounted.current) {
               phoneModelRef.current = model;
@@ -435,7 +453,7 @@ const AIProctor = ({
             console.error('Mobile phone detection could not start:', modelError);
             if (isMounted.current) {
               setPhoneDetectionError(true);
-              toast.error('Mobile phone detection could not start.');
+              toast.error(`Mobile phone detection could not start: ${modelError.message || 'model initialization failed'}`);
             }
             return false;
           });
