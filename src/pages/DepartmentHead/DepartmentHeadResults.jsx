@@ -3,6 +3,19 @@ import { Award, BookOpen, CheckCircle, ChevronDown, ChevronRight, RefreshCw, Sen
 import toast from 'react-hot-toast';
 import api from '../../api/api';
 
+const assessmentCategories = [
+  ['quiz', 'Quiz'],
+  ['mid', 'Mid'],
+  ['final', 'Final'],
+  ['assignment', 'Assignment'],
+];
+
+const formatAssessmentMarks = (assessment) => (
+  assessment && Number(assessment.possible) > 0
+    ? `${Number(assessment.obtained || 0).toFixed(1)} / ${Number(assessment.possible).toFixed(1)}`
+    : '—'
+);
+
 const DepartmentHeadResults = () => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -173,16 +186,16 @@ const DepartmentHeadResults = () => {
             </button>
             {expandedYear === year && (
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 590 + courseColumns.length * 190 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 590 + courseColumns.length * 250 }}>
                   <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f8fafc' }}>
                     <tr style={{ textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: '.05em', textTransform: 'uppercase' }}>
                       <th style={{ padding: '12px 14px', minWidth: 210 }}>Student</th>
-                      <th style={{ padding: '12px 14px', minWidth: 135 }}>Total marks</th>
+                      <th style={{ padding: '12px 14px', minWidth: 135 }}>All-course total</th>
                       {courseColumns.map((course) => (
-                        <th key={course.course_id} style={{ padding: '12px 14px', minWidth: 170 }}>
+                        <th key={course.course_id} style={{ padding: '12px 14px', minWidth: 250 }}>
                           <strong style={{ color: '#334155' }}>{course.course_code}</strong>
                           <div style={{ marginTop: 3, fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>{course.course_title}</div>
-                          <div style={{ marginTop: 5, color: '#4338ca', fontWeight: 600, letterSpacing: 0, textTransform: 'none' }}>Course total</div>
+                          <div style={{ marginTop: 5, color: '#4338ca', fontWeight: 600, letterSpacing: 0, textTransform: 'none' }}>Assessment marks and course grade</div>
                         </th>
                       ))}
                       <th style={{ padding: '12px 14px', minWidth: 170 }}>Forwarding</th>
@@ -216,10 +229,28 @@ const DepartmentHeadResults = () => {
                             return (
                               <td key={course.course_id} style={{ padding: '12px 14px' }}>
                                 {grade ? (
-                                  <>
-                                    <strong style={{ color: '#0f172a' }}>{Number(grade.marks_obtained || 0).toFixed(1)} / {Number(grade.marks_possible || 0).toFixed(1)}</strong>
-                                    <div style={{ display: 'inline-flex', marginTop: 5, padding: '3px 7px', borderRadius: 999, color: '#4338ca', background: '#eef2ff', fontSize: 11, fontWeight: 600 }}>{Number(grade.percentage || 0).toFixed(1)}% · {grade.grade || 'NON'}</div>
-                                  </>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '6px 12px', fontSize: 12 }}>
+                                    {assessmentCategories.map(([category, label]) => (
+                                      <div key={category}>
+                                        <span style={{ display: 'block', color: '#64748b', fontSize: 10 }}>{label}</span>
+                                        <strong style={{ color: '#334155', whiteSpace: 'nowrap' }}>
+                                          {formatAssessmentMarks(grade.assessment_grades?.[category])}
+                                        </strong>
+                                      </div>
+                                    ))}
+                                    <div>
+                                      <span style={{ display: 'block', color: '#64748b', fontSize: 10 }}>Total</span>
+                                      <strong style={{ color: '#0f172a', whiteSpace: 'nowrap' }}>
+                                        {Number(grade.marks_obtained || 0).toFixed(1)} / {Number(grade.marks_possible || 0).toFixed(1)}
+                                      </strong>
+                                    </div>
+                                    <div>
+                                      <span style={{ display: 'block', color: '#64748b', fontSize: 10 }}>Grade</span>
+                                      <strong style={{ color: '#4338ca', whiteSpace: 'nowrap' }}>
+                                        {Number(grade.percentage || 0).toFixed(1)}% · {grade.grade || 'NON'}
+                                      </strong>
+                                    </div>
+                                  </div>
                                 ) : <span style={{ color: '#94a3b8' }}>—</span>}
                               </td>
                             );

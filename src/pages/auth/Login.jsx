@@ -47,7 +47,8 @@ const Login = () => {
   useEffect(() => {
     const sebReturn = new URLSearchParams(location.search).get('seb_return');
     const returnMatch = sebReturn?.match(/^\/exams\/(\d+)\/start$/);
-    const launchId = new URLSearchParams(location.hash.slice(1)).get('seb_session');
+    const launchId = new URLSearchParams(location.search).get('seb_session')
+      || new URLSearchParams(location.hash.slice(1)).get('seb_session');
     if (!returnMatch || !launchId || sebLoginStarted.current) return;
 
     sebLoginStarted.current = true;
@@ -111,7 +112,8 @@ const Login = () => {
         || (requestedPath?.startsWith('/news/') && !requestedPath.startsWith('//'));
       const sebReturn = new URLSearchParams(location.search).get('seb_return');
       const returnToSebExam = role === 'STUDENT' && /^\/exams\/\d+\/start$/.test(sebReturn || '');
-      const sebSessionId = new URLSearchParams(location.hash.slice(1)).get('seb_session');
+      const sebSessionId = new URLSearchParams(location.search).get('seb_session')
+        || new URLSearchParams(location.hash.slice(1)).get('seb_session');
       navigate(
         returnToSebExam ? sebReturn : returnToNews ? requestedPath : redirectMap[role] || '/dashboard',
         {

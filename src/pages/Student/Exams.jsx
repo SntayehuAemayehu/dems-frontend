@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { Clock, Calendar, FileText, CheckCircle, Eye, Loader, ArrowLeft, Shield, BookOpen } from 'lucide-react';
 import { fetchExams } from '../../store/slices/examSlice';
-import api, { createSEBLaunchUrl, getAllPages } from '../../api/api';
+import api, { getAllPages, launchExamInSEB } from '../../api/api';
 import toast from 'react-hot-toast';
 
 const Exams = () => {
@@ -50,7 +50,6 @@ const Exams = () => {
   // ============================================================
   const handleLaunchSEB = async (exam) => {
     setCheckingFace(true);
-    const sebWindow = exam.seb_available ? window.open('about:blank', '_blank') : null;
 
     try {
       // Check face enrollment first
@@ -58,7 +57,6 @@ const Exams = () => {
       const isEnrolled = res.data?.face_enrolled === true;
 
       if (!isEnrolled) {
-        sebWindow?.close();
         toast.error('Please enroll your face before taking the exam');
         localStorage.setItem('pending_exam_id', exam.id);
         navigate('/enroll-face');
@@ -66,21 +64,16 @@ const Exams = () => {
       }
 
       if (exam.seb_available) {
-        if (!sebWindow) {
-          throw new Error('Allow pop-ups to launch Safe Exam Browser.');
-        }
-        sebWindow.location.href = await createSEBLaunchUrl(exam.id);
+        await launchExamInSEB(exam.id);
         toast.success('Launching Safe Exam Browser...', { duration: 4000 });
 
       } else {
-        sebWindow?.close();
         // Fallback: non-SEB exam
         navigate(`/exams/${exam.id}/start`);
       }
     } catch (err) {
-      sebWindow?.close();
       console.error('Launch failed:', err);
-      toast.error('Could not launch SEB. Please try again.');
+      toast.error(err.response?.data?.error || err.message || 'Could not launch SEB. Please try again.');
     } finally {
       setCheckingFace(false);
     }

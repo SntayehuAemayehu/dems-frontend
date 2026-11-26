@@ -8,6 +8,12 @@ import { useSelector } from 'react-redux';
 import api, { getAllPages } from '../../api/api';
 import GradeBadge from '../../components/Grade/GradeBadge';
 
+const formatAssessmentMarks = (assessmentGrades, category) => {
+  const assessment = assessmentGrades?.[category];
+  if (!assessment || Number(assessment.possible) <= 0) return '—';
+  return `${Number(assessment.obtained || 0).toFixed(1)} / ${Number(assessment.possible).toFixed(1)}`;
+};
+
 const TeacherResults = () => {
   const { user } = useSelector((state) => state.auth || {});
   const [courses, setCourses] = useState([]);
@@ -154,6 +160,10 @@ const TeacherResults = () => {
       return {
         Student: student.student_name || '',
         'Student ID': student.student_number || '',
+        Quiz: formatAssessmentMarks(student.assessment_grades, 'quiz'),
+        Mid: formatAssessmentMarks(student.assessment_grades, 'mid'),
+        Final: formatAssessmentMarks(student.assessment_grades, 'final'),
+        Assignment: formatAssessmentMarks(student.assessment_grades, 'assignment'),
         'Total Mark': `${Number(student.total_marks_obtained || 0).toFixed(1)} / ${Number(student.total_marks_possible || 0).toFixed(1)}`,
         Percentage: `${Number(student.percentage || 0).toFixed(1)}%`,
         Grade: student.grade_letter || 'NON',
@@ -173,7 +183,7 @@ const TeacherResults = () => {
       const document = new jsPDF({ orientation: 'landscape' });
       autoTable(document, {
         head: [Object.keys(rows[0] || {
-          Student: '', 'Student ID': '', 'Total Mark': '',
+          Student: '', 'Student ID': '', Quiz: '', Mid: '', Final: '', Assignment: '', 'Total Mark': '',
           Percentage: '', Grade: '', Status: '',
         })],
         body: rows.map((row) => Object.values(row)),
@@ -351,22 +361,22 @@ const TeacherResults = () => {
           </div>
 
           <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 16, background: '#fff', boxShadow: '0 8px 24px rgba(15,23,42,.05)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1120 }}>
               <thead style={{ background: '#f8fafc' }}>
                 <tr>
                   <th scope="col" style={{ padding: '13px 15px', textAlign: 'left' }}>
                     <input type="checkbox" aria-label="Select all eligible student results" checked={allVisibleSelected} onChange={toggleSelectAll} disabled={!selectableEnrollmentIds.length || Boolean(submittingResult)} />
                   </th>
-                  {['Student', 'Student ID', 'Total Mark', 'Percentage', 'Grade', 'Department'].map((heading) => (
+                  {['Student', 'Student ID', 'Quiz', 'Mid', 'Final', 'Assignment', 'Total Mark', 'Percentage', 'Grade', 'Submission'].map((heading) => (
                     <th key={heading} scope="col" style={{ padding: '13px 15px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{heading}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loadingGrades ? (
-                  <tr><td colSpan="7" style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Loading grades for {selectedCourse.course_code}…</td></tr>
+                  <tr><td colSpan="11" style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Loading grades for {selectedCourse.course_code}…</td></tr>
                 ) : filteredResults.length === 0 ? (
-                  <tr><td colSpan="7" style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>{search ? 'No matching students.' : 'No student results are available for this course yet.'}</td></tr>
+                  <tr><td colSpan="11" style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>{search ? 'No matching students.' : 'No student results are available for this course yet.'}</td></tr>
                 ) : filteredResults.map((student, index) => (
                   <tr key={`${student.course_id}-${student.student_id}`} className="teacher-result-row" style={{ borderTop: '1px solid #eef2f7', background: index % 2 ? '#fcfdff' : '#fff' }}>
                     <td style={{ padding: '13px 15px' }}>
@@ -380,6 +390,11 @@ const TeacherResults = () => {
                     </td>
                     <td style={{ padding: '13px 15px' }}><strong style={{ color: '#0f172a' }}>{student.student_name}</strong></td>
                     <td style={{ padding: '13px 15px', color: '#64748b' }}>{student.student_number || '—'}</td>
+                    {['quiz', 'mid', 'final', 'assignment'].map((category) => (
+                      <td key={category} style={{ padding: '13px 15px', color: '#334155', whiteSpace: 'nowrap' }}>
+                        {formatAssessmentMarks(student.assessment_grades, category)}
+                      </td>
+                    ))}
                     <td style={{ padding: '13px 15px', fontWeight: 700, whiteSpace: 'nowrap' }}>
                       {Number(student.total_marks_possible) > 0
                         ? `${Number(student.total_marks_obtained || 0).toFixed(1)} / ${Number(student.total_marks_possible).toFixed(1)}`
