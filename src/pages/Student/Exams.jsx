@@ -50,6 +50,7 @@ const Exams = () => {
   // ============================================================
   const handleLaunchSEB = async (exam) => {
     setCheckingFace(true);
+    const sebWindow = exam.seb_available ? window.open('about:blank', '_blank') : null;
 
     try {
       // Check face enrollment first
@@ -57,6 +58,7 @@ const Exams = () => {
       const isEnrolled = res.data?.face_enrolled === true;
 
       if (!isEnrolled) {
+        sebWindow?.close();
         toast.error('Please enroll your face before taking the exam');
         localStorage.setItem('pending_exam_id', exam.id);
         navigate('/enroll-face');
@@ -64,15 +66,19 @@ const Exams = () => {
       }
 
       if (exam.seb_available) {
-        const protocolUrl = await createSEBLaunchUrl(exam.id);
-        window.location.href = protocolUrl;
+        if (!sebWindow) {
+          throw new Error('Allow pop-ups to launch Safe Exam Browser.');
+        }
+        sebWindow.location.href = await createSEBLaunchUrl(exam.id);
         toast.success('Launching Safe Exam Browser...', { duration: 4000 });
 
       } else {
+        sebWindow?.close();
         // Fallback: non-SEB exam
         navigate(`/exams/${exam.id}/start`);
       }
     } catch (err) {
+      sebWindow?.close();
       console.error('Launch failed:', err);
       toast.error('Could not launch SEB. Please try again.');
     } finally {

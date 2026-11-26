@@ -5,7 +5,7 @@ import {
   Clock, Calendar, FileText, CheckCircle, 
   ArrowLeft, Shield, AlertCircle, Award 
 } from 'lucide-react';
-import api, { createSEBLaunchUrl } from '../../api/api';
+import api, { launchExamInSEB } from '../../api/api';
 
 const ExamDetails = () => {
   const { examId } = useParams();
@@ -40,7 +40,7 @@ const ExamDetails = () => {
     }
 
     try {
-      window.location.href = await createSEBLaunchUrl(exam.id);
+      await launchExamInSEB(exam.id);
     } catch (launchError) {
       console.error('Failed to launch exam with SEB:', launchError);
       alert(launchError.response?.data?.error || 'Could not launch Safe Exam Browser.');

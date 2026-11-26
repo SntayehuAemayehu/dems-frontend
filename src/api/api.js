@@ -124,6 +124,19 @@ export const createSEBLaunchUrl = async (examId) => {
     fileUrl.protocol = fileUrl.protocol === 'https:' ? 'sebs:' : 'seb:';
     return fileUrl.href;
 };
+
+export const launchExamInSEB = async (examId, sebWindow = window.open('about:blank', '_blank')) => {
+    if (!sebWindow) {
+        throw new Error('Allow pop-ups to launch Safe Exam Browser.');
+    }
+
+    try {
+        sebWindow.location.href = await createSEBLaunchUrl(examId);
+    } catch (error) {
+        sebWindow.close();
+        throw error;
+    }
+};
 // ============================================================
 // REQUEST INTERCEPTOR - Add token to requests
 // ============================================================
