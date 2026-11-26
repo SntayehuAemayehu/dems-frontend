@@ -1046,6 +1046,105 @@ const DeptDashboard = () => {
           background: #eff6ff;
           color: #3b82f6;
         }
+        /* Sidebar navigation */
+        .sidebar-desktop > div {
+          background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%) !important;
+          border: 1px solid #e8eef7;
+          box-shadow: 0 12px 32px rgba(15, 23, 42, 0.07) !important;
+        }
+        .sidebar-item {
+          min-height: 46px;
+          border-radius: 11px;
+          padding: 11px 13px;
+          color: #64748b;
+          font-weight: 600;
+        }
+        .sidebar-item:hover {
+          background: #eef4ff;
+          color: #1d4ed8;
+          transform: translateX(3px);
+        }
+        .sidebar-item.active {
+          background: linear-gradient(135deg, #2563eb, #6366f1);
+          color: #ffffff;
+          box-shadow: 0 7px 16px rgba(37, 99, 235, 0.22);
+        }
+        .sidebar-item.active span {
+          color: #ffffff !important;
+          opacity: 0.9;
+        }
+
+        /* Modern dashboard statistic cards */
+        .stat-card {
+          position: relative;
+          isolation: isolate;
+          overflow: hidden;
+          min-height: 118px;
+          border: 0 !important;
+          border-radius: 18px !important;
+          padding: 22px !important;
+          color: #ffffff;
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12) !important;
+          transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        .stat-card::before,
+        .stat-card::after {
+          content: "";
+          position: absolute;
+          z-index: -1;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.12);
+          pointer-events: none;
+        }
+        .stat-card::before {
+          width: 150px;
+          height: 150px;
+          right: -48px;
+          top: -68px;
+        }
+        .stat-card::after {
+          width: 90px;
+          height: 90px;
+          right: 38px;
+          bottom: -58px;
+        }
+        .stat-card:hover {
+          transform: translateY(-6px) !important;
+          box-shadow: 0 16px 32px rgba(15, 23, 42, 0.18) !important;
+        }
+        .stat-card-blue { background: linear-gradient(135deg, #2563eb, #06b6d4) !important; }
+        .stat-card-green { background: linear-gradient(135deg, #059669, #10b981) !important; }
+        .stat-card-amber { background: linear-gradient(135deg, #d97706, #f59e0b) !important; }
+        .stat-card-purple { background: linear-gradient(135deg, #7c3aed, #a855f7) !important; }
+        .stat-card > div:first-child {
+          width: 54px !important;
+          height: 54px !important;
+          flex: 0 0 54px;
+          border-radius: 15px !important;
+          background: rgba(255, 255, 255, 0.2) !important;
+          color: #ffffff !important;
+          backdrop-filter: blur(8px);
+        }
+        .stat-card > div:last-child span:first-child {
+          color: #ffffff !important;
+          font-size: 29px !important;
+          letter-spacing: -0.8px;
+        }
+        .stat-card > div:last-child span:last-child {
+          color: rgba(255, 255, 255, 0.88) !important;
+          font-size: 13px !important;
+          font-weight: 600;
+        }
+        @media (max-width: 768px) {
+          .stat-card { min-height: 104px; padding: 16px !important; gap: 11px !important; }
+          .stat-card > div:first-child { width: 44px !important; height: 44px !important; flex-basis: 44px; }
+          .stat-card > div:last-child span:first-child { font-size: 24px !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .stat-card, .sidebar-item { transition: none !important; }
+          .stat-card:hover, .sidebar-item:hover { transform: none !important; }
+        }
+
         .action-menu {
           position: absolute;
           right: 0;
@@ -1105,10 +1204,11 @@ const DeptDashboard = () => {
         {mobileMenuOpen && (
           <div style={{
             marginTop: '8px',
-            background: 'white',
-            borderRadius: '12px',
+            background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)',
+            border: '1px solid #e8eef7',
+            borderRadius: '14px',
             padding: '8px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            boxShadow: '0 12px 28px rgba(15, 23, 42, 0.10)',
           }}>
             <button className={`sidebar-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => { setActiveTab('overview'); setMobileMenuOpen(false); }}>
               <LayoutDashboard size={20} /> Overview
@@ -1250,7 +1350,8 @@ const DeptDashboard = () => {
             </button>
           </div>
 
-          {/* STATS CARDS - CLICKABLE */}
+          {/* STATS CARDS - SHOW ONLY ON THE OVERVIEW TAB */}
+          {activeTab === 'overview' && (
           <div className="stats-grid" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(4, 1fr)',
@@ -1258,6 +1359,7 @@ const DeptDashboard = () => {
             marginBottom: '24px',
           }}>
             <div
+              className="stat-card stat-card-blue"
               onClick={() => setActiveTab('students')}
               style={{
                 background: 'white',
@@ -1284,6 +1386,7 @@ const DeptDashboard = () => {
             </div>
 
             <div
+              className="stat-card stat-card-green"
               onClick={() => setActiveTab('courses')}
               style={{
                 background: 'white',
@@ -1310,6 +1413,7 @@ const DeptDashboard = () => {
             </div>
 
             <div
+              className="stat-card stat-card-amber"
               onClick={() => setActiveTab('courses')}
               style={{
                 background: 'white',
@@ -1336,6 +1440,7 @@ const DeptDashboard = () => {
             </div>
 
             <div
+              className="stat-card stat-card-purple"
               onClick={() => setActiveTab('students')}
               style={{
                 background: 'white',
@@ -1361,58 +1466,16 @@ const DeptDashboard = () => {
               </div>
             </div>
           </div>
+          )}
 
-          {/* TABS */}
+          {/* CONTENT PANEL - NAVIGATION IS IN THE SIDEBAR */}
           <div style={{
             background: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
+            borderRadius: '16px',
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)',
             overflow: 'hidden',
             marginBottom: '24px',
           }}>
-            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', overflowX: 'auto' }} className="tabs-header">
-              {[
-                { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-                { id: 'students', label: `Students (${stats.totalStudents})`, icon: Users, badge: stats.pendingStudents },
-                { id: 'teachers', label: `Teachers (${filteredTeachers.length})`, icon: UserCheck },                { id: 'courses', label: `Courses (${stats.totalCourses})`, icon: BookOpen, badge: stats.pendingCourses },
-                { id: 'exams', label: `Exams (${stats.totalExams})`, icon: FileText },
-                { id: 'enrollments', label: `Enrollments (${stats.totalEnrollments})`, icon: ClipboardList },
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  style={{
-                    padding: '14px 24px',
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    color: activeTab === tab.id ? '#3b82f6' : '#64748b',
-                    cursor: 'pointer',
-                    borderBottom: activeTab === tab.id ? '2px solid #3b82f6' : '2px solid transparent',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <tab.icon size={16} />
-                  {tab.label}
-                  {tab.badge > 0 && (
-                    <span style={{
-                      marginLeft: '4px',
-                      background: '#f59e0b',
-                      color: 'white',
-                      fontSize: '10px',
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                    }}>
-                      {tab.badge} pending
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
 
             {/* ==================== OVERVIEW TAB ==================== */}
             {activeTab === 'overview' && (

@@ -1,5 +1,6 @@
+
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Award, BookOpen, Building2, ChevronDown, ChevronRight, RefreshCw, Send, Users } from 'lucide-react';
+import { ArrowLeft, Award, BookOpen, Building2, ChevronDown, ChevronRight, RefreshCw, Send, Users, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../api/api';
@@ -142,8 +143,73 @@ const RegistrarResults = () => {
       <style>{`
         .registrar-result-row:hover { background: #f8fafc; }
         .registrar-department-card:hover { transform: translateY(-3px); box-shadow: 0 15px 28px rgba(15,23,42,.1); }
-        @media (max-width: 700px) { .registrar-results-main { padding: 14px !important; } }
+
+        .registrar-modal-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          background: rgba(15, 23, 42, .65);
+          backdrop-filter: blur(5px);
+        }
+
+        .registrar-modal {
+          width: 100%;
+          max-width: 1400px;
+          max-height: 92vh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          border-radius: 18px;
+          background: #fff;
+          box-shadow: 0 25px 70px rgba(0,0,0,.25);
+          animation: registrarModalIn .2s ease-out;
+        }
+
+        .registrar-modal-body {
+          overflow: auto;
+          padding: 20px;
+        }
+
+        .registrar-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 20px 24px;
+          color: #fff;
+          background: linear-gradient(120deg, #0f172a 0%, #0f766e 65%, #059669 100%);
+        }
+
+        .registrar-modal-close {
+          width: 38px;
+          height: 38px;
+          display: grid;
+          place-items: center;
+          border: 1px solid rgba(255,255,255,.3);
+          border-radius: 10px;
+          background: rgba(255,255,255,.13);
+          color: #fff;
+          cursor: pointer;
+        }
+
+        @keyframes registrarModalIn {
+          from { opacity: 0; transform: translateY(12px) scale(.99); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @media (max-width: 700px) {
+          .registrar-results-main { padding: 14px !important; }
+          .registrar-modal-overlay { padding: 8px; }
+          .registrar-modal { max-height: 96vh; }
+          .registrar-modal-body { padding: 12px; }
+          .registrar-modal-header { padding: 15px; }
+        }
       `}</style>
+
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 22, flexWrap: 'wrap', padding: 28, borderRadius: 22, color: '#fff', background: 'linear-gradient(120deg, #0f172a 0%, #0f766e 52%, #059669 100%)', boxShadow: '0 20px 45px rgba(5,150,105,.18)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ width: 54, height: 54, display: 'grid', placeItems: 'center', borderRadius: 16, background: 'rgba(255,255,255,.16)' }}><Award size={28} /></div>
@@ -191,6 +257,7 @@ const RegistrarResults = () => {
             </div>
             {selectedDepartment && <span style={{ padding: '6px 10px', borderRadius: 999, color: '#047857', background: '#d1fae5', fontSize: 12, fontWeight: 700 }}>{selectedDepartment}</span>}
           </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
             {departmentGroups.map(([name, years]) => (
               <button
@@ -220,25 +287,65 @@ const RegistrarResults = () => {
                     key={year}
                     type="button"
                     onClick={() => {
-                      setSelectedYear(selectedYear === year ? null : year);
+                      setSelectedYear(year);
                       setSelectedEnrollmentIds([]);
                     }}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 14px', border: `1px solid ${selectedYear === year ? '#059669' : '#cbd5e1'}`, borderRadius: 10, background: selectedYear === year ? '#d1fae5' : '#fff', color: selectedYear === year ? '#047857' : '#334155', cursor: 'pointer', boxShadow: selectedYear === year ? '0 5px 12px rgba(5,150,105,.12)' : 'none' }}
                   >
-                    {selectedYear === year ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    <ChevronRight size={16} />
                     Year {year || 'Unspecified'} <span style={{ color: '#64748b' }}>({students.size})</span>
                   </button>
                 ))}
               </div>
             </div>
           )}
+        </section>
+      )}
 
-          {currentYear && (
-            <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid #e2e8f0' }}>
+      {currentYear && (
+        <div
+          className="registrar-modal-overlay"
+          onClick={() => {
+            setSelectedYear(null);
+            setSelectedEnrollmentIds([]);
+          }}
+        >
+          <section
+            className="registrar-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="registrar-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="registrar-modal-header">
+              <div>
+                <h2 id="registrar-modal-title" style={{ margin: 0, fontSize: 21 }}>
+                  Student Grades
+                </h2>
+                <p style={{ margin: '5px 0 0', color: '#d1fae5', fontSize: 13 }}>
+                  {selectedDepartment} · Year {selectedYear || 'Unspecified'} · {courseColumns.length} courses
+                </p>
+              </div>
+              <button
+                type="button"
+                className="registrar-modal-close"
+                aria-label="Close results"
+                onClick={() => {
+                  setSelectedYear(null);
+                  setSelectedEnrollmentIds([]);
+                }}
+              >
+                <X size={20} />
+              </button>
+            </header>
+
+            <div className="registrar-modal-body">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
                 <div style={{ margin: '0 auto 0 0' }}>
                   <h3 style={{ margin: 0, color: '#0f172a' }}>Student grades</h3>
-                  <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>{selectedDepartment} · Year {selectedYear || 'Unspecified'} · {courseColumns.length} courses</p>
+                  <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>
+                    {selectedDepartment} · Year {selectedYear || 'Unspecified'} · {courseColumns.length} courses
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -257,6 +364,7 @@ const RegistrarResults = () => {
                   <Send size={15} /> {issuingSelected ? 'Generating…' : `Generate selected (${selectedEnrollmentIds.length})`}
                 </button>
               </div>
+
               <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 14 }}>
                 <table style={{ width: '100%', minWidth: 390 + courseColumns.length * 230, borderCollapse: 'collapse' }}>
                   <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f8fafc' }}>
@@ -322,8 +430,8 @@ const RegistrarResults = () => {
                 </table>
               </div>
             </div>
-          )}
-        </section>
+          </section>
+        </div>
       )}
     </main>
   );

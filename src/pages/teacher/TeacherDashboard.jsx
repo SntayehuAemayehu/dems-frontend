@@ -565,6 +565,93 @@ const TeacherDashboard = () => {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .spinning { animation: spin 1s linear infinite; }
+
+        /* Colorful animated statistics cards - visual changes only */
+        .stats-grid > div {
+          position: relative;
+          isolation: isolate;
+          overflow: hidden;
+          border: 0 !important;
+          border-radius: 18px !important;
+          color: #fff !important;
+          box-shadow: 0 12px 28px rgba(15, 23, 42, 0.13) !important;
+          transition: transform 280ms ease, box-shadow 280ms ease;
+          animation: statCardFloat 5s ease-in-out infinite;
+        }
+        .stats-grid > div:nth-child(1) {
+          background: linear-gradient(135deg, #2563eb, #06b6d4) !important;
+          animation-delay: 0s;
+        }
+        .stats-grid > div:nth-child(2) {
+          background: linear-gradient(135deg, #7c3aed, #c026d3) !important;
+          animation-delay: .15s;
+        }
+        .stats-grid > div:nth-child(3) {
+          background: linear-gradient(135deg, #d97706, #f97316) !important;
+          animation-delay: .3s;
+        }
+        .stats-grid > div:nth-child(4) {
+          background: linear-gradient(135deg, #059669, #14b8a6) !important;
+          animation-delay: .45s;
+        }
+        .stats-grid > div:nth-child(5) {
+          background: linear-gradient(135deg, #0f766e, #22c55e) !important;
+          animation-delay: .6s;
+        }
+        .stats-grid > div:nth-child(6) {
+          background: linear-gradient(135deg, #be185d, #8b5cf6) !important;
+          animation-delay: .75s;
+        }
+        .stats-grid > div::before {
+          content: '';
+          position: absolute;
+          width: 150px;
+          height: 150px;
+          right: -55px;
+          top: -75px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, .13);
+          z-index: -1;
+          transition: transform 450ms ease;
+        }
+        .stats-grid > div::after {
+          content: '';
+          position: absolute;
+          width: 95px;
+          height: 95px;
+          right: 35px;
+          bottom: -65px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, .09);
+          z-index: -1;
+        }
+        .stats-grid > div:hover {
+          transform: translateY(-8px) scale(1.025);
+          box-shadow: 0 20px 38px rgba(15, 23, 42, .2) !important;
+        }
+        .stats-grid > div:hover::before {
+          transform: scale(1.35);
+        }
+        .stats-grid > div > div:first-child {
+          flex: 0 0 48px;
+          background: rgba(255, 255, 255, .2) !important;
+          color: #fff !important;
+          border: 1px solid rgba(255, 255, 255, .25);
+          backdrop-filter: blur(8px);
+        }
+        .stats-grid > div span {
+          color: #fff !important;
+          position: relative;
+          z-index: 1;
+        }
+        @keyframes statCardFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .stats-grid > div { animation: none !important; transition: none !important; }
+          .stats-grid > div:hover { transform: none; }
+        }
         .status-badge {
           display: inline-flex;
           padding: 4px 12px;
