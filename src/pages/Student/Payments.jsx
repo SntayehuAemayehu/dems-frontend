@@ -113,17 +113,17 @@ useEffect(() => {
             transaction_id: chapaRef,
             method: 'chapa'
           });
-          
-          if (response.data.success) {
+
+           if (response.data.success) {
             toast.success('✅ Chapa Payment Verified!');
-            setCurrentStep(4); // Jump to the final "Review & Submit" step
-            setSelectedMethodDetails({ id: 'chapa', name: 'Chapa', color: '#7c3aed' });
-            setFormData(prev => ({ ...prev, transaction_id: chapaRef, amount: response.data.amount }));
-            
+            setShowUploadModal(false);
+
             // Refresh history and balance
             dispatch(fetchPayments());
             dispatch(fetchBalance());
-          } else {
+          } else {         
+          
+ 
             toast.error(response.data.message || 'Payment pending or failed');
           }
         } catch (error) {
@@ -1648,11 +1648,13 @@ const renderBankSelection = () => {
                             } else {
                               toast.error(response.data.error || 'Failed to initialize Chapa');
                             }
-                          } catch (error) {
-                            toast.error('Failed to connect to Chapa');
-                          } finally {
-                            setUploading(false);
-                          }
+} catch (error) {
+  console.error('Chapa init error:', error.response?.status, error.response?.data);
+  const d = error.response?.data;
+  toast.error(d?.message || d?.error || d?.detail ||
+    (error.request ? 'Cannot reach the server' : 'Chapa request failed'));
+}
+                            
                         } else {
                           // ✅ For Bank, Telebirr, etc., just go to the next step
                           setCurrentStep(1);
