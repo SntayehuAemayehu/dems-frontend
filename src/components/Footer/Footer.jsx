@@ -46,6 +46,7 @@ const Footer = () => {
     { name: 'Available Courses', path: '/courses', icon: <BookOutlined /> },
     { name: 'About University', path: '/about', icon: <ReadOutlined /> },
     { name: 'Help & Support', path: '/support', icon: <QuestionCircleOutlined /> },
+    { name: 'Campus Location', path: '/contact', icon: <EnvironmentOutlined /> },
   ];
 
   const studentLinks = [
@@ -374,10 +375,17 @@ const Footer = () => {
 
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', color: colors.text, fontSize: '14px' }}>
                   <EnvironmentOutlined style={{ color: colors.accent, fontSize: '18px', marginTop: '2px' }} />
-                  <span style={{ lineHeight: 1.6 }}>
-                    Mekdela Amba University, <br />
-                    Amhara Region, Ethiopia
-                  </span>
+<Link
+  to="/contact"
+  style={{ color: colors.text, textDecoration: 'none', lineHeight: 1.6 }}
+  className="dems-footer-link"
+  >
+  Mekdela Amba University, <br />
+  Tulu Awuliya, South Wollo, <br />
+  Amhara Region, Ethiopia <br />
+  <span style={{ color: colors.accent, fontWeight: 600 }}>View on map →</span>
+   </Link>
+
                 </div>
               </div>
             </div>

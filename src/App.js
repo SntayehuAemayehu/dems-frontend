@@ -83,6 +83,7 @@ import AnimatedBackground from './components/Motion/AnimatedBackground';
 import { AnimatePresence } from 'motion/react';
 import { useLocation } from 'react-router-dom';
 import AIAssistantWidget from './components/AIAssistantWidget';
+import ContactPage from './pages/ContactPage';
 // ✅ Small helper component for the redirect (needed because examId is not in scope)
 const RedirectToStartExam = () => {
   const { examId } = useParams();
@@ -120,6 +121,12 @@ const AnimatedRoutes = () => {
           path="/terms-and-policy"
           element={<><Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} /><TermsPolicyPage /></>}
         />
+     <Route
+     path="/contact"
+     element={<><Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} /><ContactPage /></>}
+    />
+
+
         <Route
           path="/login"
           element={

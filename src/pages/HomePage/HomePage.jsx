@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
     Button,
     Card,
@@ -894,6 +894,37 @@ const HomePage = () => {
                     )}
                 </div>
             </section>
+{/* FIND US */}
+<section style={{ padding: '60px 24px', background: colors.background }}>
+    <div style={containerStyle}>
+        <RevealOnScroll>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+                <Tag color="blue">OUR LOCATION</Tag>
+                <Title level={2} style={{ marginTop: 14, color: colors.text, fontSize: 'clamp(1.5rem, 4vw, 2.25rem)' }}>
+                    Find Us
+                </Title>
+                <Paragraph style={{ color: colors.muted, fontSize: 16, marginBottom: 0 }}>
+                    Mekdela Amba University main campus, Tulu Awuliya.
+                </Paragraph>
+            </div>
+            <iframe
+                title="Mekdela Amba University main campus"
+                src={`https://maps.google.com/maps?q=${encodeURIComponent('10.9854535,39.2631819')}&z=15&output=embed`}
+                width="100%"
+                height="380"
+                style={{ border: 0, borderRadius: 16 }}
+                loading="lazy"
+            />
+            <p style={{ marginTop: 12, textAlign: 'center' }}>
+                <Link to="/contact" style={{ color: colors.primary, fontWeight: 700 }}>
+                    See both campuses →
+                </Link>
+            </p>
+        </RevealOnScroll>
+    </div>
+</section>
+
+
 
             <Footer />
         </div>
