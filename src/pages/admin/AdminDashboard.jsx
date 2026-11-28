@@ -26,6 +26,8 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Save, X, Upload, FileText,
   Download, Printer,CheckSquare,Square,
   Timer, Lock, Unlock, Pencil, EyeOff, Newspaper,Send,Check
@@ -1565,6 +1567,7 @@ const handleBatchGenerateSchedules = async () => {
         /* Desktop Dynamic Layout */
         @media (min-width: 769px) {
           .sidebar { transform: translateX(0); }
+          .sidebar-collapse-toggle { display: flex; }
           .content { 
             /* 👇 This line tells the content to move left/right with the sidebar */
             margin-left: ${isSidebarExpanded ? '280px' : '80px'}; 
@@ -1596,8 +1599,8 @@ const handleBatchGenerateSchedules = async () => {
 
         /* Hide/Show text smoothly */
         .sidebar-text {
-          opacity: \${isSidebarExpanded ? '1' : '0'};
-          display: \${isSidebarExpanded ? 'block' : 'none'};
+          opacity: ${isSidebarExpanded ? '1' : '0'};
+          display: ${isSidebarExpanded ? 'block' : 'none'};
           white-space: nowrap;
           transition: opacity 0.3s ease;
         }
@@ -1646,7 +1649,7 @@ const handleBatchGenerateSchedules = async () => {
           border-bottom: 1px solid #1e293b;
           display: flex;
           align-items: center;
-          justify-content: \${isSidebarExpanded ? 'space-between' : 'center'};
+          justify-content: ${isSidebarExpanded ? 'space-between' : 'center'};
           transition: all 0.3s ease;
         }
         .sidebar-logo h1 {
@@ -1690,6 +1693,10 @@ const handleBatchGenerateSchedules = async () => {
           cursor: pointer;
           box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
+
+        .sidebar-collapse-toggle {
+          display: none;
+        }
         
         /* Mobile Overlay */
         .overlay {
@@ -1725,14 +1732,14 @@ const handleBatchGenerateSchedules = async () => {
 
       {/* Sidebar */}
       <div className={`sidebar ${mobileMenuOpen ? 'sidebar-open' : ''}`}>
-        <div className="sidebar-logo" style={{ justifyContent: isSidebarExpanded ? 'space-between' : 'center', padding: '20px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <GraduationCap 
-              size={32} 
+        <div className="sidebar-logo" style={{ justifyContent: isSidebarExpanded ? 'space-between' : 'center', padding: isSidebarExpanded ? '20px 16px' : '12px 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isSidebarExpanded ? '12px' : '4px' }}>
+            <GraduationCap
+              size={isSidebarExpanded ? 32 : 24}
               style={{ 
                 color: '#60a5fa', 
                 flexShrink: 0,
-                filter: 'drop-shadow(0 0 8px rgba(96, 165, 250, 0.4))' // 👈 Adds a professional glow
+                filter: 'drop-shadow(0 0 8px rgba(96, 165, 250, 0.4))'
               }} 
             />
             {isSidebarExpanded && (
@@ -1740,17 +1747,21 @@ const handleBatchGenerateSchedules = async () => {
             )}
           </div>
           
-          <button 
-            onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
+          <button
+            type="button"
+            className="sidebar-collapse-toggle"
+            aria-label={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-expanded={isSidebarExpanded}
+            title={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            onClick={() => setIsSidebarExpanded((expanded) => !expanded)}
             style={{ 
               background: '#1e293b', border: 'none', color: '#94a3b8', cursor: 'pointer',
-              display: window.innerWidth > 768 ? 'flex' : 'none', 
               alignItems: 'center', justifyContent: 'center', padding: '6px', borderRadius: '8px', transition: 'all 0.2s'
             }}
             onMouseEnter={(e) => e.currentTarget.style.color = 'white'}
             onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
           >
-            <Menu size={18} />
+            {isSidebarExpanded ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
           </button>
         </div>
         {/* Welcome Text */}
