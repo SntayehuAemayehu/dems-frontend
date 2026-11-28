@@ -1567,7 +1567,6 @@ const handleBatchGenerateSchedules = async () => {
         /* Desktop Dynamic Layout */
         @media (min-width: 769px) {
           .sidebar { transform: translateX(0); }
-          .sidebar-collapse-toggle { display: flex; }
           .content { 
             /* 👇 This line tells the content to move left/right with the sidebar */
             margin-left: ${isSidebarExpanded ? '280px' : '80px'}; 
@@ -1696,6 +1695,9 @@ const handleBatchGenerateSchedules = async () => {
 
         .sidebar-collapse-toggle {
           display: none;
+        }
+        @media (min-width: 769px) {
+          .sidebar-collapse-toggle { display: flex; }
         }
         
         /* Mobile Overlay */

@@ -404,7 +404,7 @@ const MainLayout = () => {
           boxShadow: shadow,
           position: 'sticky',
           top: 0,
-          zIndex: 9998,
+          zIndex: ['/admin/dashboard', '/admin/proctoring-review'].includes(location.pathname) ? 999 : 9998,
           borderBottom: `1px solid ${headerBorder}`,
           transition: 'all 0.3s ease',
         }}>
